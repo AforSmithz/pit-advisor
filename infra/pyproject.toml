@@ -1,0 +1,19 @@
+[project]
+name = "pitadvisor-infra"
+version = "0.1.0"
+description = "CDK app for pit-advisor"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "aws-cdk-lib>=2.170,<3",
+    "constructs>=10.4,<11",
+    "cdk-nag>=2.35",
+    "aws-cdk-cli>=2.1000",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

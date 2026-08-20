@@ -1,0 +1,11 @@
+{
+  "app": "python app.py",
+  "output": "cdk.out",
+  "context": {
+    "env": "dev",
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/core:target-partitions": ["aws"],
+    "@aws-cdk/aws-iam:minimizePolicies": true,
+    "@aws-cdk/aws-s3:createDefaultLoggingPolicy": true
+  }
+}
