@@ -1,0 +1,222 @@
+# Pit Advisor
+
+Pit Advisor is a race-weekend research tool for Formula 1. It replaces the scattered ritual
+of checking five sites before a Grand Prix with one dashboard: recent driver form normalized
+against teammates, the gap between a car's Saturday pace and its Sunday pace, how well a team
+historically fits a circuit of this type, the weather scenarios for each session, reliability
+risk, and a finishing-position forecast with intervals. An agent sits on top of the same data
+and answers questions about it, including questions about the regulations, with citations.
+
+It is also the reason the repository exists. It is a working example of the parts of a data
+platform that usually get skipped in a portfolio project: source contracts, quality gates,
+quarantine, replayable raw data, lineage, time-forward backtesting, calibration, and
+deterministic evaluation of an LLM agent. The whole thing runs serverless on AWS inside a
+twenty dollar per month budget, which is a design constraint rather than an afterthought.
+
+## What exists today
+
+This is early. The repository currently holds the foundations and nothing else: the Python
+package skeleton with typed configuration and the shared key and provenance types, a `pitadv`
+CLI with a `doctor` command that checks the environment, a CDK application, a pre-commit
+setup, and a CI workflow that lints, type checks, tests and synthesizes the infrastructure.
+Nothing is deployed yet, so the architecture below describes what is being built against
+rather than working software. The sections on running the code and on cost describe only what
+is real.
+
+## The honesty constraint
+
+Formula 1 is a low-sample, high-variance sport: twenty-four races a year, twenty cars, and a
+regulation reset every few seasons that invalidates much of the history. A model built on that
+can look impressive on a chart and be worthless out of sample, which is the failure mode of
+most hobby forecasting projects.
+
+So the forecast is only allowed to claim value if it beats a deliberately dumb baseline out of
+sample. Three are used: grid position alone, championship standings alone, and last race's
+result. The comparison runs on a time-forward holdout of at least sixty races, scored with
+multiclass log loss and Brier, with bootstrap intervals resampled at the race level rather than
+the driver level, because drivers within a race are correlated and resampling them individually
+gives intervals that are far too tight. The calibration page is the dashboard's landing route,
+not a tab behind the predictions. If the model does not beat the baselines, the dashboard says
+so and the forecast tool is removed from the agent. That is a successful outcome, not a failed
+one.
+
+Two rules follow. The frontend computes nothing: every number rendered traces back to a backend
+artifact that passed the quality gate, because a metric calculated in TypeScript is a metric
+nobody tested. And the language model never produces a figure: every number in an agent answer
+comes verbatim from a tool result, and if no tool has the answer, the answer is that we do not
+have it.
+
+## Architecture
+
+```
+EventBridge Scheduler
+  |
+  +-- Lambda  jolpica-ingest      results, quali, laps, pitstops, schedules
+  +-- Lambda  weather-ingest      Open-Meteo forecast per upcoming session
+  +-- Lambda  docs-ingest         FIA PDFs into the knowledge base
+  |
+  +-- Step Functions  weekend-pipeline
+        |
+        +-- Fargate  fastf1-session-ingest    heavy deps, S3-backed cache
+        +-- Lambda   quality-gate             contracts, freshness, row counts
+        +-- Fargate  dbt build                silver and gold, Iceberg MERGE
+        +-- Lambda   race-sim                 Monte Carlo, writes forecasts
+        +-- Lambda   emit-views               gold into versioned view JSON
+
+S3 (one bucket, prefix separated)
+  raw/  bronze/  silver/  gold/  views/  quarantine/  docs/  cache/
+
+Glue Data Catalog        table metadata
+Athena                   SQL, byte-scan capped workgroup
+DynamoDB                 request ledger, run state
+Bedrock                  Knowledge Base on S3 Vectors, agent runtime, Guardrails
+CloudFront + S3          static Next.js dashboard reading views/*.json
+CloudWatch + Budgets     logs, alarms, the spend ceiling
+```
+
+The data flow is a medallion lake. Every upstream response lands in `raw/` verbatim, with its
+request metadata, before anything parses it, so every layer above is rebuildable from `raw/`
+alone and a parser bug is a replay rather than a refetch. Bronze is that payload parsed and
+typed into Parquet with the schema version stamped on it. Silver is conformed Iceberg tables
+with surrogate keys and slowly changing dimensions where identity moves, which it does often:
+drivers get swapped mid-season, reserve drivers appear, teams get renamed. Gold is a handful
+of marts, one per metric family, and those marts are recomputed rather than appended because
+race results get amended days later by penalties and disqualifications.
+
+The dashboard never touches Athena. A Lambda emits versioned JSON view artifacts into `views/`,
+CloudFront serves the static Next.js export, and the browser reads JSON, which bounds query cost
+and leaves no origin server to run or pay for.
+
+On failure the pipeline quarantines rather than corrupts. A row that fails its contract goes to
+`quarantine/` with the reason attached, the load continues, and the count by reason is published
+on the pipeline health page beside source freshness and remaining API quota. A data product that
+hides its own staleness is lying about itself. Upstream, the Jolpica cap of roughly two hundred
+requests an hour is enforced by a DynamoDB token bucket and a persisted request ledger rather
+than by hoping the schedule stays polite. The ledger matters more than it looks: a Step Functions
+retry re-enters the same Lambda, and without consulting the ledger first the hour's quota is
+spent twice.
+
+## Data sources
+
+Results, standings, qualifying, grids, laps, pit stops and schedules come from
+[Jolpica-F1](https://github.com/jolpica/jolpica-f1), the community successor to Ergast, which
+stopped receiving data in early 2025. It keeps an Ergast-compatible response shape, which is
+why the bronze schemas look conventional. Its practical limit is the request cap.
+
+Session timing, per-lap times, stints and compounds, weather and track status come from
+[FastF1](https://github.com/theOehrly/Fast-F1). It is the only free route to lap-level detail.
+It is also slow on a cold cache and heavy in dependencies, which is why it runs as a Fargate
+task with an S3-backed cache rather than as a Lambda. FastF1 output stays in a private account
+and is not republished; no timing data is committed to this repository.
+
+Weather comes from [Open-Meteo](https://open-meteo.com/), free and keyless, using circuit
+coordinates from Jolpica, snapshotted at fetch time so a past prediction can be replayed against
+what was actually known then. The regulations corpus is FIA published documents, versioned by
+season and cited by title and date wherever the agent quotes them.
+
+Nothing paywalled, nothing behind anti-bot protection, and no undocumented internal endpoints
+are used. One file of reference data, `data/reference/circuits.yml`, is hand maintained, because
+no API publishes downforce level or pit-lane time loss. Hand-authored reference data is fine;
+hand-authored measurements are not, so every numeric field in it is either a published constant
+or regenerated from our own history by script.
+
+## Trade-offs worth arguing about
+
+The transform layer is dbt on Athena with Iceberg tables, not Glue with PySpark. The dataset
+is on the order of a gigabyte across a few dozen models. Spark would spend most of its runtime
+starting up, and dbt brings tests, documentation and lineage without any of them being written
+by hand. The cost is that the SQL is portable but the adapter and table format are not free to
+swap later.
+
+The vector store behind the Bedrock Knowledge Base is S3 Vectors rather than OpenSearch
+Serverless. This is the decision the console actively steers you away from, and it is not
+close: OpenSearch Serverless bills a capacity floor whether or not anything queries it, which
+would consume the entire project budget in about a month and leave nothing for compute or
+tokens. The corpus is a few thousand chunks and the latency penalty is invisible to a user
+waiting a second or two for an answer.
+
+Credentials are short-term only. The project's IAM user has no access key at all; local
+credentials come from `aws login`, which issues session credentials that rotate every fifteen
+minutes. CI holds no AWS credentials of any kind, because at this stage it only lints, types,
+tests and synthesizes, none of which needs an account. The GitHub OIDC role gets created in
+the phase where CI first has something to deploy, rather than existing as a standing trust
+relationship to a repository that is not deploying anything yet.
+
+The agent gets typed tools rather than open text-to-SQL for the common questions, with a
+single guarded SQL escape hatch for the long tail. The guard parses with sqlglot, allows
+SELECT only against an allowlist of gold views, forces a LIMIT, runs under a read-only role,
+and executes in an Athena workgroup with a per-query byte-scan cap. Athena bills by bytes
+scanned, so an unpartitioned table plus a generated join is the single most plausible way this
+budget dies.
+
+Some of this is deliberately over-engineered for the data volume. A medallion lake and a dbt
+project for two hundred megabytes is more machinery than the problem needs, which is the point:
+the parts being practised are the ones that only matter at scale. What is not accepted is
+over-engineering that costs money, so NAT gateways, always-on services, managed Airflow and
+real-time inference endpoints are excluded by construction.
+
+## Running it locally
+
+Requires Python 3.12 and [uv](https://docs.astral.sh/uv/). `just` is optional but is how the
+AWS commands stay pinned to the right profile.
+
+```bash
+uv sync
+uv run pre-commit install
+
+uv run pytest
+uv run ruff check . && uv run ruff format --check .
+uv run pyright src/pitadvisor
+uv run pitadv --help
+```
+
+The infrastructure is a separate uv project so that the CDK toolchain does not leak into the
+application environment. The CDK CLI is installed as a Python dependency, so there is no npm
+step and nothing to install globally.
+
+```bash
+uv sync --directory infra
+uv run --directory infra cdk synth
+```
+
+Synthesis needs no AWS credentials. Anything that talks to the account does, and every such
+command names its profile explicitly rather than inheriting one from the shell:
+
+```bash
+aws login --profile pitadvisor
+uv run pitadv doctor
+```
+
+## Cost
+
+There is no cost table yet, because nothing has been deployed. It gets filled in from Cost
+Explorer at the end of each phase, scoped to the `project=pit-advisor` tag that every resource
+carries, and it reports measured spend by service rather than estimates. `just cost` prints the
+current month.
+
+The design targets under six dollars a month of infrastructure against a hard ceiling of one
+hundred dollars of credits for the life of the project, with a Budgets alarm at twenty dollars a
+month. The only line item that can plausibly break that is Bedrock token spend, which is why the
+default model is the cheapest one that passes the eval thresholds, prompt caching is on for the
+system prompt and tool schemas, and the full eval suite runs on release tags rather than on every
+push.
+
+## Limitations
+
+The forecast is a probability distribution over finishing positions and nothing more. It is
+not betting advice, it does not size stakes, and the agent refuses questions framed that way.
+
+Teammate normalization, which is the core instrument for separating driver from car, assumes
+both cars are the same. Mid-season upgrades, damage and different engine modes break that
+assumption, so affected sessions are flagged rather than quietly averaged in.
+
+Clean-air pace is a fitted quantity with exclusions, not a measurement. Laps behind traffic,
+under safety car, deleted for track limits, or in and out of the pits are all removed before
+the fit. The count of laps dropped per reason is published as a diagnostic, because silently
+discarding most of the field's laps produces a very clean model of almost nothing.
+
+Historical coverage is limited by what FastF1 exposes, which is roughly 2018 onward for
+lap-level detail, and regulation changes in 2022 and 2026 mean older data describes cars that no
+longer exist, so time decay does most of the work of forgetting. None of that timing data is
+redistributed here: the repository contains code, infrastructure, tests, and small result
+artifacts only.
