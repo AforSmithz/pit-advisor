@@ -1,0 +1,39 @@
+# only the readme ships
+*.md
+!/README.md
+
+# working notes, kept locally
+docs/
+.claude/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# node
+node_modules/
+web/.next/
+web/out/
+web/public/data/
+
+# infra
+cdk.out/
+.env
+.env.*
+!.env.example
+
+# data. nothing but the hand-maintained reference files
+data/*
+!data/reference/
+data/reference/*
+!data/reference/circuits.yml
+fastf1_cache/
+
+.DS_Store
+
+graphify-out/

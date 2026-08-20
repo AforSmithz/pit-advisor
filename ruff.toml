@@ -1,0 +1,16 @@
+line-length = 100
+target-version = "py312"
+extend-exclude = ["cdk.out", "web"]
+
+[lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ANN", "PT", "TID"]
+ignore = ["ANN401"]
+
+[lint.per-file-ignores]
+"**/tests/*" = ["ANN"]
+
+[lint.isort]
+known-first-party = ["pitadvisor"]
+
+[format]
+quote-style = "double"
