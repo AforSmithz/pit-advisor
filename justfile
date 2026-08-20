@@ -1,0 +1,54 @@
+export AWS_PROFILE := "pitadvisor"
+export AWS_REGION := "ap-southeast-1"
+
+account := "352445792687"
+
+default:
+    @just --list
+
+login:
+    aws login --profile {{AWS_PROFILE}}
+
+whoami:
+    aws sts get-caller-identity --profile {{AWS_PROFILE}}
+
+# spend so far this month, project tag only
+cost:
+    aws ce get-cost-and-usage \
+      --time-period Start=$(date -v1d +%Y-%m-%d),End=$(date -v+1d +%Y-%m-%d) \
+      --granularity MONTHLY --metrics UnblendedCost \
+      --filter '{"And":[{"Tags":{"Key":"project","Values":["pit-advisor"]}},{"Not":{"Dimensions":{"Key":"RECORD_TYPE","Values":["Credit","Refund"]}}}]}' \
+      --group-by Type=DIMENSION,Key=SERVICE \
+      --profile {{AWS_PROFILE}} --region us-east-1
+
+synth:
+    uv run --directory infra cdk synth
+
+diff:
+    uv run --directory infra cdk diff
+
+# budgets are useless without a subscriber, so the address is required to deploy
+deploy stack email:
+    uv run --directory infra cdk deploy {{stack}} -c alertEmail={{email}} --require-approval broadening
+
+doctor:
+    uv run pitadv doctor
+
+fmt:
+    uv run ruff format .
+    uv run ruff check . --fix
+
+test:
+    uv run pytest
+
+check:
+    uv run ruff check .
+    uv run ruff format --check .
+    uv run pyright src/pitadvisor
+    uv run pytest
+
+infra-check:
+    uv run --directory infra pytest
+    uv run --directory infra cdk synth --quiet
+
+check-all: check infra-check
