@@ -1,11 +1,17 @@
 from typing import Any
 
-from aws_cdk import CfnOutput, Stack, Tags
+from aws_cdk import Acknowledgment, CfnOutput, Stack, Tags, Validations
 from aws_cdk import aws_budgets as budgets
+from aws_cdk import aws_iam as iam
 from constructs import Construct
 
 PROJECT_LIMIT_USD = 20
 ACCOUNT_LIMIT_USD = 40
+
+COST_EXPLORER_WILDCARD = (
+    "Cost Explorer has no resource-level permissions, so every ce: action is Resource '*' or "
+    "nothing at all. Limited to three actions on one IAM user."
+)
 
 
 def _notifications(
@@ -70,6 +76,25 @@ class ObservabilityStack(Stack):
                 budget_limit=budgets.CfnBudget.SpendProperty(amount=ACCOUNT_LIMIT_USD, unit="USD"),
             ),
             notifications_with_subscribers=notifications,
+        )
+
+        dev_user = iam.User.from_user_name(
+            self,
+            "DevUser",
+            self.node.try_get_context("devUserName") or "pitadvisor-dev",
+        )
+        dev_user.add_to_principal_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "ce:GetCostAndUsage",
+                    "ce:ListCostAllocationTags",
+                    "ce:UpdateCostAllocationTagsStatus",
+                ],
+                resources=["*"],
+            )
+        )
+        Validations.of(dev_user).acknowledge(
+            Acknowledgment(id="AwsSolutions-IAM5[Resource::*]", reason=COST_EXPLORER_WILDCARD)
         )
 
         CfnOutput(self, "ProjectBudgetName", value=project_budget_name)

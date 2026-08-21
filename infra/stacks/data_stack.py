@@ -16,11 +16,20 @@ from aws_cdk import (
     aws_glue as glue,
 )
 from aws_cdk import (
+    aws_iam as iam,
+)
+from aws_cdk import (
     aws_s3 as s3,
 )
 from constructs import Construct
 
 SCAN_CAP_BYTES = 1024**3
+
+OBJECT_WILDCARD = (
+    "Read access covers the whole bucket by design. This is a lake: keys are generated per "
+    "source, season, event and session, so a prefix allowlist would need rewriting on every "
+    "schema change. The grant is still scoped to these two buckets and to read actions."
+)
 
 NO_ACCESS_LOGS = (
     "Server access logging is deliberately off. This is a single-user analytics account with no "
@@ -121,6 +130,52 @@ class DataStack(Stack):
                         encryption_option="SSE_S3"
                     ),
                 ),
+            ),
+        )
+
+        dev_user = iam.User.from_user_name(
+            self,
+            "DevUser",
+            self.node.try_get_context("devUserName") or "pitadvisor-dev",
+        )
+        dev_user.add_to_principal_policy(
+            iam.PolicyStatement(
+                actions=["s3:ListBucket", "s3:GetBucketLocation"],
+                resources=[self.bucket.bucket_arn, self.results_bucket.bucket_arn],
+            )
+        )
+        dev_user.add_to_principal_policy(
+            iam.PolicyStatement(
+                actions=["s3:GetObject"],
+                resources=[self.bucket.arn_for_objects("*")],
+            )
+        )
+        dev_user.add_to_principal_policy(
+            iam.PolicyStatement(
+                actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+                resources=[self.results_bucket.arn_for_objects("*")],
+            )
+        )
+        dev_user.add_to_principal_policy(
+            iam.PolicyStatement(
+                actions=["athena:GetWorkGroup", "athena:StartQueryExecution"],
+                resources=[
+                    self.format_arn(
+                        service="athena",
+                        resource="workgroup",
+                        resource_name=self.workgroup_name,
+                    )
+                ],
+            )
+        )
+        Validations.of(dev_user).acknowledge(
+            Acknowledgment(
+                id="AwsSolutions-IAM5[Resource::<DataBucketE3889A50.Arn>/*]",
+                reason=OBJECT_WILDCARD,
+            ),
+            Acknowledgment(
+                id="AwsSolutions-IAM5[Resource::<AthenaResultsBucket879938FA.Arn>/*]",
+                reason=OBJECT_WILDCARD,
             ),
         )
 
