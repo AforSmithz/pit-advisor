@@ -12,7 +12,11 @@ aws_env = cdk.Environment(account=ACCOUNT, region=REGION)
 
 DataStack(app, f"pitadvisor-data-{env_name}", env_name=env_name, env=aws_env)
 ObservabilityStack(
-    app, f"pitadvisor-observability-{env_name}", alert_email=alert_email, env=aws_env
+    app,
+    f"pitadvisor-observability-{env_name}",
+    env_name=env_name,
+    alert_email=alert_email,
+    env=aws_env,
 )
 
 cdk.Tags.of(app).add("project", "pit-advisor")

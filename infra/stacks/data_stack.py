@@ -138,37 +138,39 @@ class DataStack(Stack):
             "DevUser",
             self.node.try_get_context("devUserName") or "pitadvisor-dev",
         )
-        dev_user.add_to_principal_policy(
-            iam.PolicyStatement(
-                actions=["s3:ListBucket", "s3:GetBucketLocation"],
-                resources=[self.bucket.bucket_arn, self.results_bucket.bucket_arn],
-            )
+        # the policy is named per stack: two stacks attaching an unnamed policy to the same user
+        # generate the same physical name and the second deploy fails
+        dev_access = iam.Policy(
+            self,
+            "DevAccess",
+            policy_name=f"pitadvisor-lake-access-{env_name}",
+            users=[dev_user],
+            statements=[
+                iam.PolicyStatement(
+                    actions=["s3:ListBucket", "s3:GetBucketLocation"],
+                    resources=[self.bucket.bucket_arn, self.results_bucket.bucket_arn],
+                ),
+                iam.PolicyStatement(
+                    actions=["s3:GetObject"],
+                    resources=[self.bucket.arn_for_objects("*")],
+                ),
+                iam.PolicyStatement(
+                    actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+                    resources=[self.results_bucket.arn_for_objects("*")],
+                ),
+                iam.PolicyStatement(
+                    actions=["athena:GetWorkGroup", "athena:StartQueryExecution"],
+                    resources=[
+                        self.format_arn(
+                            service="athena",
+                            resource="workgroup",
+                            resource_name=self.workgroup_name,
+                        )
+                    ],
+                ),
+            ],
         )
-        dev_user.add_to_principal_policy(
-            iam.PolicyStatement(
-                actions=["s3:GetObject"],
-                resources=[self.bucket.arn_for_objects("*")],
-            )
-        )
-        dev_user.add_to_principal_policy(
-            iam.PolicyStatement(
-                actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-                resources=[self.results_bucket.arn_for_objects("*")],
-            )
-        )
-        dev_user.add_to_principal_policy(
-            iam.PolicyStatement(
-                actions=["athena:GetWorkGroup", "athena:StartQueryExecution"],
-                resources=[
-                    self.format_arn(
-                        service="athena",
-                        resource="workgroup",
-                        resource_name=self.workgroup_name,
-                    )
-                ],
-            )
-        )
-        Validations.of(dev_user).acknowledge(
+        Validations.of(dev_access).acknowledge(
             Acknowledgment(
                 id="AwsSolutions-IAM5[Resource::<DataBucketE3889A50.Arn>/*]",
                 reason=OBJECT_WILDCARD,

@@ -40,6 +40,7 @@ class ObservabilityStack(Stack):
         scope: Construct,
         construct_id: str,
         *,
+        env_name: str,
         alert_email: str | None = None,
         **kwargs: Any,
     ) -> None:
@@ -83,17 +84,23 @@ class ObservabilityStack(Stack):
             "DevUser",
             self.node.try_get_context("devUserName") or "pitadvisor-dev",
         )
-        dev_user.add_to_principal_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "ce:GetCostAndUsage",
-                    "ce:ListCostAllocationTags",
-                    "ce:UpdateCostAllocationTagsStatus",
-                ],
-                resources=["*"],
-            )
+        dev_access = iam.Policy(
+            self,
+            "DevAccess",
+            policy_name=f"pitadvisor-cost-access-{env_name}",
+            users=[dev_user],
+            statements=[
+                iam.PolicyStatement(
+                    actions=[
+                        "ce:GetCostAndUsage",
+                        "ce:ListCostAllocationTags",
+                        "ce:UpdateCostAllocationTagsStatus",
+                    ],
+                    resources=["*"],
+                )
+            ],
         )
-        Validations.of(dev_user).acknowledge(
+        Validations.of(dev_access).acknowledge(
             Acknowledgment(id="AwsSolutions-IAM5[Resource::*]", reason=COST_EXPLORER_WILDCARD)
         )
 

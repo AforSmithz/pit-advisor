@@ -22,7 +22,7 @@ def build(alert_email: str | None = None) -> tuple[cdk.App, DataStack, Observabi
     aws_env = cdk.Environment(account=ACCOUNT, region=REGION)
     data = DataStack(app, DATA_STACK, env_name=ENV_NAME, env=aws_env)
     observability = ObservabilityStack(
-        app, OBSERVABILITY_STACK, alert_email=alert_email, env=aws_env
+        app, OBSERVABILITY_STACK, env_name=ENV_NAME, alert_email=alert_email, env=aws_env
     )
     cdk.Tags.of(app).add("project", "pit-advisor")
     cdk.Tags.of(app).add("env", ENV_NAME)
@@ -230,3 +230,16 @@ def test_dev_user_gets_cost_explorer_reads(observability_template: Template) -> 
         "ce:UpdateCostAllocationTagsStatus",
     }
     assert statements[0]["Resource"] == "*"
+
+
+def test_dev_policies_are_named_per_stack(
+    data_template: Template, observability_template: Template
+) -> None:
+    names = [
+        next(iter(t.find_resources("AWS::IAM::Policy").values()))["Properties"]["PolicyName"]
+        for t in (data_template, observability_template)
+    ]
+    # an unnamed policy on the same user generates the same physical name in both stacks and
+    # the second deploy fails with "already managed by another stack"
+    assert len(set(names)) == 2
+    assert all(ENV_NAME in name for name in names)
