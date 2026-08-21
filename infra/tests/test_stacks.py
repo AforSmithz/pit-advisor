@@ -179,3 +179,54 @@ def test_data_resources_are_tagged(data_template: Template) -> None:
             "env": ENV_NAME,
             "component": "data",
         }
+
+
+def dev_policy(template: Template) -> Resource:
+    policies = template.find_resources(
+        "AWS::IAM::Policy",
+        {"Properties": {"Users": ["pitadvisor-dev"]}},
+    )
+    assert len(policies) == 1, sorted(policies)
+    return policies.popitem()[1]["Properties"]["PolicyDocument"]["Statement"]
+
+
+def actions_of(statement: Resource) -> list[str]:
+    action = statement["Action"]
+    return [action] if isinstance(action, str) else list(action)
+
+
+def test_dev_user_reads_the_lake_and_the_workgroup(data_template: Template) -> None:
+    actions = {action for s in dev_policy(data_template) for action in actions_of(s)}
+    assert actions == {
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "athena:GetWorkGroup",
+        "athena:StartQueryExecution",
+    }
+    assert not any(str(action).endswith("*") for action in actions)
+
+
+def test_dev_user_cannot_write_the_data_bucket(data_template: Template) -> None:
+    writes = [
+        s
+        for s in dev_policy(data_template)
+        if {"s3:PutObject", "s3:DeleteObject"} & set(s["Action"])
+    ]
+    assert len(writes) == 1
+    target = str(writes[0]["Resource"])
+    assert "AthenaResultsBucket" in target
+    assert "DataBucket" not in target
+
+
+def test_dev_user_gets_cost_explorer_reads(observability_template: Template) -> None:
+    statements = dev_policy(observability_template)
+    assert len(statements) == 1
+    assert set(statements[0]["Action"]) == {
+        "ce:GetCostAndUsage",
+        "ce:ListCostAllocationTags",
+        "ce:UpdateCostAllocationTagsStatus",
+    }
+    assert statements[0]["Resource"] == "*"
