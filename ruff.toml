@@ -7,7 +7,8 @@ select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ANN", "PT", "TID"]
 ignore = ["ANN401"]
 
 [lint.per-file-ignores]
-"**/tests/*" = ["ANN"]
+# the boto3 fakes have to mirror its PascalCase kwargs
+"**/tests/*" = ["ANN", "N803"]
 
 [lint.isort]
 known-first-party = ["pitadvisor"]
