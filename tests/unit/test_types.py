@@ -5,11 +5,15 @@ from pydantic import ValidationError
 
 from pitadvisor.types import (
     EventKey,
+    IngestOutcome,
     Layer,
     Provenance,
     SessionKey,
     SessionKind,
     Source,
+    bronze_key,
+    quarantine_key,
+    raw_filename,
     raw_key,
 )
 
@@ -176,3 +180,39 @@ def test_raw_key_uses_source_value():
     assert raw_key(Source.OPEN_METEO, key, "forecast.json").startswith(
         "raw/source=open_meteo/season=2024/"
     )
+
+
+def test_raw_filename_carries_the_fetch_time_to_the_millisecond():
+    stamp = datetime(2024, 5, 5, 12, 30, 15, 123456, tzinfo=UTC)
+    assert raw_filename("results", stamp) == "results-20240505T123015123Z.json"
+
+
+def test_raw_filename_takes_another_suffix():
+    stamp = datetime(2024, 5, 5, tzinfo=UTC)
+    assert raw_filename("laps", stamp, "parquet").endswith(".parquet")
+
+
+def test_bronze_key_for_an_event():
+    key = EventKey(season=2024, round=5)
+    assert bronze_key("results", key) == "bronze/table=results/season=2024/round=05/results.parquet"
+
+
+def test_bronze_key_for_a_session():
+    key = SessionKey(season=2024, round=5, session=SessionKind.SPRINT)
+    assert "session=sprint/session_laps.parquet" in bronze_key("session_laps", key)
+
+
+def test_quarantine_key_names_the_run():
+    key = EventKey(season=2024, round=5)
+    assert (
+        quarantine_key("laps", key, "run-1")
+        == "quarantine/table=laps/season=2024/round=05/run=run-1.jsonl"
+    )
+
+
+def test_ingest_outcome_defaults_to_nothing_done():
+    outcome = IngestOutcome(source=Source.JOLPICA, table="laps", season=2024, round=5)
+    assert outcome.rows == 0
+    assert outcome.raw_objects == []
+    assert outcome.bronze_objects == []
+    assert outcome.skipped is None

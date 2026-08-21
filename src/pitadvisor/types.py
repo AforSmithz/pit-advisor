@@ -75,3 +75,49 @@ def raw_key(source: Source, key: SessionKey | EventKey, filename: str) -> str:
         parts.append(f"session={key.session}")
     parts.append(filename)
     return "/".join(parts)
+
+
+def raw_filename(name: str, fetched_at: datetime, suffix: str = "json") -> str:
+    # milliseconds, because a retry inside the same second is a normal thing to happen
+    stamp = fetched_at.strftime("%Y%m%dT%H%M%S%f")[:-3]
+    return f"{name}-{stamp}Z.{suffix}"
+
+
+def bronze_key(table: str, key: SessionKey | EventKey, filename: str | None = None) -> str:
+    parts: list[str] = [
+        Layer.BRONZE,
+        f"table={table}",
+        f"season={key.season}",
+        f"round={key.round:02d}",
+    ]
+    if isinstance(key, SessionKey):
+        parts.append(f"session={key.session}")
+    parts.append(filename or f"{table}.parquet")
+    return "/".join(parts)
+
+
+def quarantine_key(table: str, key: SessionKey | EventKey, run_id: str) -> str:
+    parts: list[str] = [
+        Layer.QUARANTINE,
+        f"table={table}",
+        f"season={key.season}",
+        f"round={key.round:02d}",
+    ]
+    if isinstance(key, SessionKey):
+        parts.append(f"session={key.session}")
+    parts.append(f"run={run_id}.jsonl")
+    return "/".join(parts)
+
+
+class IngestOutcome(BaseModel, frozen=True):
+    source: Source
+    table: str
+    season: int
+    round: int
+    rows: int = 0
+    quarantined: int = 0
+    raw_objects: list[str] = Field(default_factory=list)
+    bronze_objects: list[str] = Field(default_factory=list)
+    requests: int = 0
+    not_modified: bool = False
+    skipped: str | None = None

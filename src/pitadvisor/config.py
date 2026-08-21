@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 import boto3.session
 from pydantic import model_validator
@@ -19,6 +20,8 @@ class Settings(BaseSettings):
     athena_workgroup: str = "pitadvisor"
     budget_name: str = "pit-advisor-monthly"
     max_scanned_bytes: int = 1024**3
+    ledger_table: str = ""
+    fastf1_cache: Path = Path("fastf1_cache")
 
     @model_validator(mode="after")
     def _derive_names(self) -> "Settings":
@@ -26,6 +29,8 @@ class Settings(BaseSettings):
             self.data_bucket = f"pit-advisor-data-{self.env}-{self.account_id}"
         if not self.glue_database:
             self.glue_database = f"pitadvisor_{self.env}"
+        if not self.ledger_table:
+            self.ledger_table = f"pitadvisor-ingest-{self.env}"
         return self
 
     @property
