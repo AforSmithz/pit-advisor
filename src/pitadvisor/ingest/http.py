@@ -51,6 +51,24 @@ def _headers(entry: LedgerEntry | None) -> dict[str, str]:
     return headers
 
 
+class Unconditional:
+    """Hides the stored etag so the next fetch cannot come back 304.
+
+    A ledger entry is written as soon as a request is spent, but landing the body in raw/ can
+    still fail after that. The ledger then promises a cached copy that does not exist, and every
+    later request answers 304 forever. Refetching through this wrapper is how that heals.
+    """
+
+    def __init__(self, inner: Ledger) -> None:
+        self.inner = inner
+
+    def lookup(self, url: str) -> LedgerEntry | None:
+        return None
+
+    def record(self, entry: LedgerEntry) -> None:
+        self.inner.record(entry)
+
+
 def fetch(
     url: str,
     ledger: Ledger,

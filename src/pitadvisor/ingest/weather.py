@@ -103,7 +103,7 @@ class WeatherClient:
             cached = self.raw.latest(Source.OPEN_METEO, key, name)
             if cached is not None:
                 return json.loads(cached[0]), None, True
-            response = self.fetch(url, _Unconditional(self.ledger), self.limiter)
+            response = self.fetch(url, http.Unconditional(self.ledger), self.limiter)
         uri = self.raw.land(
             key,
             name,
@@ -118,18 +118,6 @@ class WeatherClient:
             ),
         )
         return json.loads(response.body), uri, False
-
-
-class _Unconditional:
-    # a 304 with nothing in raw/ means the cache lied, so the retry has to forget the etag
-    def __init__(self, inner: Ledger) -> None:
-        self.inner = inner
-
-    def lookup(self, url: str) -> None:
-        return None
-
-    def record(self, entry: Any) -> None:
-        self.inner.record(entry)
 
 
 def ingest_event(

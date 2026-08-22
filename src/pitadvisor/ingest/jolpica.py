@@ -216,9 +216,11 @@ class JolpicaClient:
         response = self.fetch(url, self.ledger, self.limiter)
         if response.not_modified:
             cached = self.raw.latest(Source.JOLPICA, raw_target, name)
-            if cached is None:
+            if cached is not None:
+                return json.loads(cached[0]), None, True
+            response = self.fetch(url, http.Unconditional(self.ledger), self.limiter)
+            if response.not_modified:
                 raise RawMissingError(name)
-            return json.loads(cached[0]), None, True
         uri = self.raw.land(
             raw_target,
             name,

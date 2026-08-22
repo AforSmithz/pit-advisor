@@ -127,7 +127,19 @@ def test_a_304_reads_the_cached_payload_back(store, raw, ledger, fetch_factory):
     assert outcomes[0].raw_objects == []
 
 
-def test_a_304_with_nothing_in_raw_is_an_error(store, raw, ledger, fetch_factory):
+def test_a_304_with_nothing_in_raw_refetches(store, raw, ledger, fetch_factory):
+    class OnceStale(fetch_factory):
+        def __call__(self, url, ledger, limiter=None, **kwargs):
+            self.status = 200 if self.calls else 304
+            return super().__call__(url, ledger, limiter, **kwargs)
+
+    stale = OnceStale(status=304)
+    outcomes = ingest_event(client(raw, ledger, stale), store, KEY, ["results"])
+    assert outcomes[0].rows == 3
+    assert len(stale.calls) == 2
+
+
+def test_a_second_304_on_the_refetch_is_an_error(store, raw, ledger, fetch_factory):
     with pytest.raises(RawMissingError):
         ingest_event(client(raw, ledger, fetch_factory(status=304)), store, KEY, ["results"])
 

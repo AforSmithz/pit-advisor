@@ -4,7 +4,7 @@ from io import BytesIO
 
 import pytest
 
-from pitadvisor.ingest.http import USER_AGENT, FetchError, fetch
+from pitadvisor.ingest.http import USER_AGENT, FetchError, Unconditional, fetch
 from pitadvisor.ingest.ratelimit import LedgerEntry, RateLimiter
 
 
@@ -120,3 +120,16 @@ def test_the_limiter_is_asked_before_every_attempt(ledger, bucket):
     limiter = Counting(bucket, sleep=lambda _: None, jitter=lambda: 0.0)
     fetch("https://api.jolpi.ca/x", ledger, limiter, opener=Opener(http_error(500), FakeResponse()))
     assert taken == [1, 1]
+
+
+def test_unconditional_hides_the_stored_etag(ledger):
+    ledger.entries["https://api.jolpi.ca/x"] = LedgerEntry(
+        url="https://api.jolpi.ca/x",
+        fetched_at=datetime.now(UTC),
+        status=200,
+        etag='"v1"',
+    )
+    opener = Opener(FakeResponse())
+    fetch("https://api.jolpi.ca/x", Unconditional(ledger), opener=opener)
+    assert opener.requests[0].get_header("If-none-match") is None
+    assert ledger.recorded[-1].status == 200
