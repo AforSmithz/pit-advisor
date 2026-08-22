@@ -202,6 +202,53 @@ class DataStack(Stack):
             ),
         )
 
+        # the pipeline's role lives in the transform stack, but the grant has to be written
+        # where the bucket is, so it is a managed policy that stack attaches by name
+        self.pipeline_policy_name = f"pitadvisor-pipeline-lake-{env_name}"
+        pipeline_access = iam.ManagedPolicy(
+            self,
+            "PipelineLakeAccess",
+            managed_policy_name=self.pipeline_policy_name,
+            description="what the weekend pipeline may read and write in the lake",
+            statements=[
+                iam.PolicyStatement(
+                    actions=["s3:ListBucket", "s3:GetBucketLocation"],
+                    resources=[self.bucket.bucket_arn, self.results_bucket.bucket_arn],
+                ),
+                iam.PolicyStatement(
+                    actions=["s3:GetObject"],
+                    resources=[self.bucket.arn_for_objects("*")],
+                ),
+                iam.PolicyStatement(
+                    actions=["s3:PutObject", "s3:DeleteObject"],
+                    resources=[
+                        self.bucket.arn_for_objects(f"{prefix}/*")
+                        for prefix in ("raw", "bronze", "silver", "gold", "quarantine", "views")
+                    ],
+                ),
+                iam.PolicyStatement(
+                    actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+                    resources=[self.results_bucket.arn_for_objects("*")],
+                ),
+            ],
+        )
+        Validations.of(pipeline_access).acknowledge(
+            Acknowledgment(
+                id="AwsSolutions-IAM5[Resource::<DataBucketE3889A50.Arn>/*]", reason=OBJECT_WILDCARD
+            ),
+            Acknowledgment(
+                id="AwsSolutions-IAM5[Resource::<AthenaResultsBucket879938FA.Arn>/*]",
+                reason=OBJECT_WILDCARD,
+            ),
+            *(
+                Acknowledgment(
+                    id=f"AwsSolutions-IAM5[Resource::<DataBucketE3889A50.Arn>/{prefix}/*]",
+                    reason=WRITE_PREFIXES,
+                )
+                for prefix in ("raw", "bronze", "silver", "gold", "quarantine", "views")
+            ),
+        )
+
         CfnOutput(self, "DataBucketName", value=self.bucket.bucket_name)
         CfnOutput(self, "AthenaResultsBucketName", value=self.results_bucket.bucket_name)
         CfnOutput(self, "GlueDatabaseName", value=self.database_name)
