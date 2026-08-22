@@ -1,0 +1,24 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: Parsed and typed source payloads. One parquet partition per table and event.
+    schema: "{{ env_var('PITADV_GLUE_DATABASE', 'pitadvisor_dev') }}"
+    meta:
+      # duckdb only: the athena target resolves these to the glue tables of the same name
+      external_location: "read_parquet('{{ env_var('PITADV_LOCAL_LAKE', 'data/local') }}/bronze/table={name}/**/*.parquet', union_by_name = true, hive_partitioning = false)"
+    tables:
+      - name: races
+        description: One row per event, with the circuit and the scheduled start.
+      - name: results
+        description: Race classification. Amended after penalties, so it arrives more than once.
+      - name: qualifying
+        description: Q1/Q2/Q3 times per driver.
+      - name: laps
+        description: Jolpica per-lap times and positions.
+      - name: pitstops
+        description: One row per stop, with the duration where Jolpica published one.
+      - name: weather
+        description: Open-Meteo forecast and archive readings around each event.
+      - name: session_laps
+        description: FastF1 lap telemetry per session, including tyre, stint and track status.

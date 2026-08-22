@@ -1,0 +1,36 @@
+name: pitadvisor
+version: "0.1.0"
+config-version: 2
+profile: pitadvisor
+
+flags:
+  send_anonymous_usage_stats: false
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+quoting:
+  database: false
+  schema: false
+  identifier: false
+
+vars:
+  # fastf1 laps are ingested per session and the local lake usually has none of them
+  session_laps: false
+
+models:
+  pitadvisor:
+    +materialized: table
+    silver:
+      +tags: ["silver"]
+      +table_type: iceberg
+      +format: parquet
+      +s3_data_dir: "{{ env_var('PITADV_SILVER_DIR', 's3://pit-advisor-data-dev-352445792687/silver/') }}"
+    gold:
+      +tags: ["gold"]
+      +table_type: iceberg
+      +format: parquet
+      +s3_data_dir: "{{ env_var('PITADV_GOLD_DIR', 's3://pit-advisor-data-dev-352445792687/gold/') }}"

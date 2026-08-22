@@ -1,0 +1,19 @@
+pitadvisor:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      path: "{{ env_var('PITADV_DUCKDB', 'data/local/pitadvisor.duckdb') }}"
+      schema: main
+      threads: 4
+
+    athena:
+      type: athena
+      s3_staging_dir: "{{ env_var('PITADV_ATHENA_STAGING', 's3://pit-advisor-athena-results-dev-352445792687/athena/') }}"
+      s3_data_dir: "{{ env_var('PITADV_SILVER_DIR', 's3://pit-advisor-data-dev-352445792687/silver/') }}"
+      region_name: "{{ env_var('PITADV_AWS_REGION', 'ap-southeast-1') }}"
+      database: awsdatacatalog
+      schema: "{{ env_var('PITADV_GLUE_DATABASE', 'pitadvisor_dev') }}"
+      work_group: "{{ env_var('PITADV_ATHENA_WORKGROUP', 'pitadvisor') }}"
+      aws_profile_name: "{{ env_var('PITADV_AWS_PROFILE', 'pitadvisor') }}"
+      threads: 4
