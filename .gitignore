@@ -37,3 +37,10 @@ fastf1_cache/
 .DS_Store
 
 graphify-out/
+
+# dbt
+.user.yml
+transform/target/
+transform/logs/
+transform/dbt_packages/
+logs/
