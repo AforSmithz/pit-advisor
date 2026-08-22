@@ -47,6 +47,16 @@ STATE_MACHINE_WILDCARD = (
     "watches the task it started. Both are scoped to that task definition."
 )
 
+ECR_TOKEN = (
+    "ecr:GetAuthorizationToken takes no resource. The token it returns is only useful with the "
+    "repository actions in the next statement, which name one repository."
+)
+
+EXECUTION_WILDCARD = (
+    "An execution arn carries the execution's own name, which is generated per start, so the "
+    "grant cannot be enumerated. Scoped to this one state machine."
+)
+
 NO_FLOW_LOGS = (
     "VPC flow logs are off. The only thing in this VPC is a short-lived Fargate task with a "
     "public IP talking to S3, Glue and two public APIs, and flow logs would cost more per month "
@@ -329,6 +339,62 @@ class TransformStack(Stack):
                     f"{self.region}:{self.account}:task/pitadvisor-{env_name}/*]"
                 ),
                 reason=STATE_MACHINE_WILDCARD,
+            ),
+        )
+
+        dev_user = iam.User.from_user_name(
+            self,
+            "DevUser",
+            self.node.try_get_context("devUserName") or "pitadvisor-dev",
+        )
+        image_push = iam.ManagedPolicy(
+            self,
+            "DevManagedAccess",
+            managed_policy_name=f"pitadvisor-image-push-{env_name}",
+            description="lets a laptop build and push the pipeline image",
+            users=[dev_user],
+            statements=[
+                # the token call is account wide by definition, it names no repository
+                iam.PolicyStatement(actions=["ecr:GetAuthorizationToken"], resources=["*"]),
+                iam.PolicyStatement(
+                    actions=[
+                        "ecr:BatchCheckLayerAvailability",
+                        "ecr:InitiateLayerUpload",
+                        "ecr:UploadLayerPart",
+                        "ecr:CompleteLayerUpload",
+                        "ecr:PutImage",
+                        "ecr:BatchGetImage",
+                        "ecr:GetDownloadUrlForLayer",
+                        "ecr:DescribeImages",
+                        "ecr:DescribeRepositories",
+                        "ecr:ListImages",
+                    ],
+                    resources=[self.repository.repository_arn],
+                ),
+                iam.PolicyStatement(
+                    actions=[
+                        "states:StartExecution",
+                        "states:DescribeExecution",
+                        "states:GetExecutionHistory",
+                        "states:ListExecutions",
+                        "states:DescribeStateMachine",
+                    ],
+                    resources=[
+                        self.state_machine.state_machine_arn,
+                        f"arn:aws:states:{self.region}:{self.account}:execution:"
+                        f"pitadvisor-weekend-{env_name}:*",
+                    ],
+                ),
+            ],
+        )
+        Validations.of(image_push).acknowledge(
+            Acknowledgment(id="AwsSolutions-IAM5[Resource::*]", reason=ECR_TOKEN),
+            Acknowledgment(
+                id=(
+                    "AwsSolutions-IAM5[Resource::arn:aws:states:"
+                    f"{self.region}:{self.account}:execution:pitadvisor-weekend-{env_name}:*]"
+                ),
+                reason=EXECUTION_WILDCARD,
             ),
         )
 

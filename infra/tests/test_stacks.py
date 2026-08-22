@@ -408,6 +408,19 @@ def test_the_pipeline_gets_the_lake_policy_from_the_data_stack(
     )
 
 
+def test_a_laptop_can_push_the_image_and_start_the_pipeline(transform_template: Template) -> None:
+    _, policy = only(
+        transform_template,
+        "AWS::IAM::ManagedPolicy",
+        ManagedPolicyName=f"pitadvisor-image-push-{ENV_NAME}",
+    )
+    statements = policy["Properties"]["PolicyDocument"]["Statement"]
+    actions = {action for s in statements for action in actions_of(s)}
+    assert {"ecr:PutImage", "states:StartExecution"} <= actions
+    unscoped = [s for s in statements if s["Resource"] == "*"]
+    assert [actions_of(s) for s in unscoped] == [["ecr:GetAuthorizationToken"]]
+
+
 def test_the_image_repository_keeps_five_tags(transform_template: Template) -> None:
     _, repository = only(transform_template, "AWS::ECR::Repository")
     assert '"countNumber":5' in repository["Properties"]["LifecyclePolicy"]["LifecyclePolicyText"]
