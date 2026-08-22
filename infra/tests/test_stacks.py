@@ -3,12 +3,13 @@ from typing import Any
 import aws_cdk as cdk
 import pytest
 from aws_cdk.assertions import Match, Template
-from stacks import DataStack, ObservabilityStack
+from stacks import DataStack, IngestStack, ObservabilityStack
 
 ACCOUNT = "123456789012"
 REGION = "ap-southeast-1"
 ENV_NAME = "test"
 DATA_STACK = f"pitadvisor-data-{ENV_NAME}"
+INGEST_STACK = f"pitadvisor-ingest-{ENV_NAME}"
 OBSERVABILITY_STACK = f"pitadvisor-observability-{ENV_NAME}"
 DATA_BUCKET = f"pit-advisor-data-{ENV_NAME}-{ACCOUNT}"
 RESULTS_BUCKET = f"pit-advisor-athena-results-{ENV_NAME}-{ACCOUNT}"
@@ -17,16 +18,19 @@ ALERT_EMAIL = "alerts@example.com"
 Resource = dict[str, Any]
 
 
-def build(alert_email: str | None = None) -> tuple[cdk.App, DataStack, ObservabilityStack]:
+def build(
+    alert_email: str | None = None,
+) -> tuple[cdk.App, DataStack, IngestStack, ObservabilityStack]:
     app = cdk.App(context={"env": ENV_NAME})
     aws_env = cdk.Environment(account=ACCOUNT, region=REGION)
     data = DataStack(app, DATA_STACK, env_name=ENV_NAME, env=aws_env)
+    ingest = IngestStack(app, INGEST_STACK, env_name=ENV_NAME, env=aws_env)
     observability = ObservabilityStack(
         app, OBSERVABILITY_STACK, env_name=ENV_NAME, alert_email=alert_email, env=aws_env
     )
     cdk.Tags.of(app).add("project", "pit-advisor")
     cdk.Tags.of(app).add("env", ENV_NAME)
-    return app, data, observability
+    return app, data, ingest, observability
 
 
 def only(template: Template, kind: str, **props: Any) -> tuple[str, Resource]:
@@ -37,13 +41,19 @@ def only(template: Template, kind: str, **props: Any) -> tuple[str, Resource]:
 
 @pytest.fixture
 def data_template() -> Template:
-    _, data, _ = build()
+    _, data, _, _ = build()
     return Template.from_stack(data)
 
 
 @pytest.fixture
+def ingest_template() -> Template:
+    _, _, ingest, _ = build()
+    return Template.from_stack(ingest)
+
+
+@pytest.fixture
 def observability_template() -> Template:
-    _, _, observability = build()
+    _, _, _, observability = build()
     return Template.from_stack(observability)
 
 
@@ -137,7 +147,7 @@ def test_account_budget_watches_the_shared_credits(observability_template: Templ
 
 @pytest.mark.parametrize("email", [None, ALERT_EMAIL])
 def test_budget_alerts_follow_the_alert_email_context(email: str | None) -> None:
-    _, _, observability = build(email)
+    _, _, _, observability = build(email)
     found = Template.from_stack(observability).find_resources("AWS::Budgets::Budget")
     assert len(found) == 2
     for budget in found.values():
@@ -155,7 +165,7 @@ def test_budget_alerts_follow_the_alert_email_context(email: str | None) -> None
 
 
 def test_stacks_are_tagged() -> None:
-    app, _, _ = build()
+    app, _, _, _ = build()
     assembly = app.synth()
     # budgets are not taggable, so the stack tag is the only place the observability tags land
     assert assembly.get_stack_by_name(DATA_STACK).tags == {
@@ -209,16 +219,19 @@ def test_dev_user_reads_the_lake_and_the_workgroup(data_template: Template) -> N
     assert not any(str(action).endswith("*") for action in actions)
 
 
-def test_dev_user_cannot_write_the_data_bucket(data_template: Template) -> None:
+def test_dev_user_writes_only_the_landing_prefixes(data_template: Template) -> None:
     writes = [
         s
         for s in dev_policy(data_template)
         if {"s3:PutObject", "s3:DeleteObject"} & set(s["Action"])
     ]
-    assert len(writes) == 1
-    target = str(writes[0]["Resource"])
-    assert "AthenaResultsBucket" in target
-    assert "DataBucket" not in target
+    lake = [s for s in writes if "AthenaResultsBucket" not in str(s["Resource"])]
+    assert len(lake) == 1
+    target = str(lake[0]["Resource"])
+    for prefix in ("raw/*", "bronze/*", "quarantine/*", "views/*"):
+        assert prefix in target
+    assert "gold/" not in target
+    assert "docs/" not in target
 
 
 def test_dev_user_gets_cost_explorer_reads(observability_template: Template) -> None:
@@ -243,3 +256,55 @@ def test_dev_policies_are_named_per_stack(
     # the second deploy fails with "already managed by another stack"
     assert len(set(names)) == 2
     assert all(ENV_NAME in name for name in names)
+
+
+def test_ledger_table_is_on_demand_with_a_ttl(ingest_template: Template) -> None:
+    _, table = only(
+        ingest_template,
+        "AWS::DynamoDB::GlobalTable",
+        TableName=f"pitadvisor-ingest-{ENV_NAME}",
+    )
+    properties = table["Properties"]
+    assert properties["BillingMode"] == "PAY_PER_REQUEST"
+    assert properties["KeySchema"] == [{"AttributeName": "pk", "KeyType": "HASH"}]
+    assert properties["TimeToLiveSpecification"] == {
+        "AttributeName": "expires_at",
+        "Enabled": True,
+    }
+
+
+def test_ledger_table_is_encrypted(ingest_template: Template) -> None:
+    _, table = only(
+        ingest_template,
+        "AWS::DynamoDB::GlobalTable",
+        TableName=f"pitadvisor-ingest-{ENV_NAME}",
+    )
+    replica = table["Properties"]["Replicas"][0]
+    assert table["Properties"]["SSESpecification"] == {"SSEEnabled": True, "SSEType": "KMS"}
+    # the ledger is a cache, raw/ is the record, so no point in time recovery is paid for
+    assert "PointInTimeRecoverySpecification" not in replica
+
+
+def test_dev_user_gets_item_level_access_to_the_ledger(ingest_template: Template) -> None:
+    statements = dev_policy(ingest_template)
+    assert len(statements) == 1
+    actions = set(actions_of(statements[0]))
+    assert actions == {
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:DescribeTable",
+    }
+    assert not any(action.endswith("*") for action in actions)
+    assert "Scan" not in str(actions)
+
+
+def test_ingest_stack_is_tagged() -> None:
+    app, _, _, _ = build()
+    assert app.synth().get_stack_by_name(INGEST_STACK).tags == {
+        "project": "pit-advisor",
+        "env": ENV_NAME,
+        "component": "ingest",
+    }

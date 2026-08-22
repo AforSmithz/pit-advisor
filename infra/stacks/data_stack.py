@@ -25,6 +25,13 @@ from constructs import Construct
 
 SCAN_CAP_BYTES = 1024**3
 
+WRITE_PREFIXES = (
+    "Write access is granted per prefix rather than per object. Keys inside raw/, bronze/, "
+    "quarantine/ and views/ are generated from source, season, event and session, so an "
+    "object-level list would be rewritten on every partition change. gold/ and docs/ are "
+    "deliberately not writable from a laptop."
+)
+
 OBJECT_WILDCARD = (
     "Read access covers the whole bucket by design. This is a lake: keys are generated per "
     "source, season, event and session, so a prefix allowlist would need rewriting on every "
@@ -159,6 +166,13 @@ class DataStack(Stack):
                     resources=[self.results_bucket.arn_for_objects("*")],
                 ),
                 iam.PolicyStatement(
+                    actions=["s3:PutObject", "s3:DeleteObject"],
+                    resources=[
+                        self.bucket.arn_for_objects(f"{prefix}/*")
+                        for prefix in ("raw", "bronze", "quarantine", "views")
+                    ],
+                ),
+                iam.PolicyStatement(
                     actions=["athena:GetWorkGroup", "athena:StartQueryExecution"],
                     resources=[
                         self.format_arn(
@@ -178,6 +192,13 @@ class DataStack(Stack):
             Acknowledgment(
                 id="AwsSolutions-IAM5[Resource::<AthenaResultsBucket879938FA.Arn>/*]",
                 reason=OBJECT_WILDCARD,
+            ),
+            *(
+                Acknowledgment(
+                    id=f"AwsSolutions-IAM5[Resource::<DataBucketE3889A50.Arn>/{prefix}/*]",
+                    reason=WRITE_PREFIXES,
+                )
+                for prefix in ("raw", "bronze", "quarantine", "views")
             ),
         )
 

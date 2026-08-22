@@ -1,6 +1,6 @@
 import aws_cdk as cdk
 from cdk_nag import AwsSolutionsChecks
-from stacks import DataStack, ObservabilityStack
+from stacks import DataStack, IngestStack, ObservabilityStack
 
 ACCOUNT = "352445792687"
 REGION = "ap-southeast-1"
@@ -11,6 +11,7 @@ alert_email: str | None = app.node.try_get_context("alertEmail")
 aws_env = cdk.Environment(account=ACCOUNT, region=REGION)
 
 DataStack(app, f"pitadvisor-data-{env_name}", env_name=env_name, env=aws_env)
+IngestStack(app, f"pitadvisor-ingest-{env_name}", env_name=env_name, env=aws_env)
 ObservabilityStack(
     app,
     f"pitadvisor-observability-{env_name}",
