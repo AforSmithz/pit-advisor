@@ -1,0 +1,130 @@
+version: 2
+
+models:
+  - name: silver_events
+    description: One row per race weekend, keyed by a surrogate event id.
+    columns:
+      - name: event_id
+        tests: [unique, not_null]
+      - name: season
+        tests: [not_null]
+      - name: round
+        tests: [not_null]
+      - name: circuit_id
+        tests: [not_null]
+      - name: race_date
+        tests: [not_null]
+
+  - name: silver_drivers
+    description: Driver identity. Names are resolved at the edge, joins use the surrogate key.
+    columns:
+      - name: driver_key
+        tests: [unique, not_null]
+      - name: driver_id
+        tests: [unique, not_null]
+
+  - name: silver_constructors
+    description: Constructor identity. A rename upstream lands here as a new constructor_id.
+    columns:
+      - name: constructor_key
+        tests: [unique, not_null]
+      - name: constructor_id
+        tests: [unique, not_null]
+
+  - name: silver_results
+    description: Race classification, one row per driver-event after amendments are collapsed.
+    columns:
+      - name: result_id
+        tests: [unique, not_null]
+      - name: event_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_events')
+                field: event_id
+      - name: driver_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('silver_drivers')
+                field: driver_key
+      - name: constructor_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('silver_constructors')
+                field: constructor_key
+      - name: status_class
+        tests:
+          - accepted_values:
+              arguments:
+                values: [finished, retired, disqualified, did_not_start]
+      - name: points
+        tests: [not_null]
+
+  - name: silver_qualifying
+    description: Qualifying times per driver, with the segment they reached.
+    columns:
+      - name: qualifying_id
+        tests: [unique, not_null]
+      - name: event_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('silver_events')
+                field: event_id
+      - name: segments_reached
+        tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3]
+                quote: false
+
+  - name: silver_pit_stops
+    description: One row per stop. Jolpica publishes the odd stop without a duration.
+    columns:
+      - name: pit_stop_id
+        tests: [unique, not_null]
+      - name: event_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('silver_events')
+                field: event_id
+      - name: stop
+        tests: [not_null]
+
+  - name: silver_laps
+    description: Jolpica per-lap times and running order.
+    columns:
+      - name: lap_id
+        tests: [unique, not_null]
+      - name: event_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('silver_events')
+                field: event_id
+      - name: time_millis
+        tests: [not_null]
+
+  - name: silver_weather
+    description: Forecast and archive readings. The same hour can appear as both.
+    columns:
+      - name: observation_id
+        tests: [unique, not_null]
+      - name: event_id
+        tests: [not_null]
+
+  - name: silver_session_laps
+    description: FastF1 laps with the track status string decoded into flags.
+    columns:
+      - name: session_lap_id
+        tests: [unique, not_null]
+      - name: session
+        tests:
+          - accepted_values:
+              arguments:
+                values:
+                  [fp1, fp2, fp3, sprint_qualifying, sprint_shootout, sprint, qualifying, race]
