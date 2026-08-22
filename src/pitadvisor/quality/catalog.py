@@ -24,7 +24,7 @@ HIVE_TYPES: dict[type, str] = {
     date: "date",
 }
 
-SERDE = "org.apache.hadoop.hive.serde2.parquet.MapredParquetSerDe"
+SERDE = "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
 INPUT_FORMAT = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
 OUTPUT_FORMAT = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"
 
@@ -130,17 +130,21 @@ def _existing(glue: Any, database: str, table: str) -> dict[str, Any] | None:
 
 def _drifted(current: dict[str, Any], wanted: dict[str, Any]) -> str:
     listed: list[str] = []
-    columns_now = current.get("StorageDescriptor", {}).get("Columns", [])
-    if columns_now != wanted["StorageDescriptor"]["Columns"]:
+    storage: dict[str, Any] = current.get("StorageDescriptor", {})
+    target: dict[str, Any] = wanted["StorageDescriptor"]
+    if storage.get("Columns", []) != target["Columns"]:
         listed.append("columns")
     if current.get("PartitionKeys", []) != wanted["PartitionKeys"]:
         listed.append("partition keys")
-    if (
-        current.get("StorageDescriptor", {}).get("Location")
-        != wanted["StorageDescriptor"]["Location"]
-    ):
+    if storage.get("Location") != target["Location"]:
         listed.append("location")
-    parameters = current.get("Parameters", {})
+    serde: dict[str, Any] = storage.get("SerdeInfo", {})
+    reader = (storage.get("InputFormat"), storage.get("OutputFormat"))
+    if serde.get("SerializationLibrary") != target["SerdeInfo"][
+        "SerializationLibrary"
+    ] or reader != (target["InputFormat"], target["OutputFormat"]):
+        listed.append("serde")
+    parameters: dict[str, Any] = current.get("Parameters", {})
     if any(parameters.get(key) != value for key, value in wanted["Parameters"].items()):
         listed.append("projection")
     return ", ".join(listed)

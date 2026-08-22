@@ -94,3 +94,18 @@ def test_check_mode_writes_nothing():
     glue = FakeGlue()
     catalog.sync(glue, "db", "bucket", apply=False)
     assert not glue.created
+
+
+def test_a_changed_serde_is_drift():
+    glue = FakeGlue()
+    catalog.sync(glue, "db", "bucket")
+    glue.tables["races"]["StorageDescriptor"]["SerdeInfo"]["SerializationLibrary"] = "hive.Old"
+    actions = {action.table: action for action in catalog.sync(glue, "db", "bucket")}
+    assert actions["races"].action == "update"
+    assert "serde" in actions["races"].detail
+
+
+def test_the_parquet_serde_is_one_athena_actually_has():
+    definition = catalog.table_input("races", TABLES["races"], "bucket")
+    serde = definition["StorageDescriptor"]["SerdeInfo"]["SerializationLibrary"]
+    assert serde == "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
