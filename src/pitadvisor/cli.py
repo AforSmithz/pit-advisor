@@ -30,7 +30,7 @@ from pitadvisor.ingest.raw_store import LocalObjectStore, ObjectStore, RawStore,
 from pitadvisor.ingest.weather import Circuit, WeatherClient, event_circuits
 from pitadvisor.ingest.weather import ingest_event as weather_ingest_event
 from pitadvisor.outputs.view_contracts import emit, pipeline_view
-from pitadvisor.quality import checks
+from pitadvisor.quality import catalog, checks, lineage
 from pitadvisor.types import EventKey, IngestOutcome, Layer, SessionKey, SessionKind, Source
 
 app = typer.Typer(
@@ -384,3 +384,39 @@ def emit_views(
     quota = [bucket_for(name).state() for name in HOURLY_CAPS]
     view = pipeline_view(report, _run_id(), quota)
     typer.echo(emit(store, view))
+
+
+@app.command(name="catalog-sync", help="Point the Glue catalog at the bronze tables.")
+def catalog_sync(
+    check: Annotated[
+        bool, typer.Option("--check", help="Report drift without writing to Glue.")
+    ] = False,
+) -> None:
+    settings = get_settings()
+    glue = _client(boto_session(settings), "glue", settings.aws_region)
+    actions = catalog.sync(glue, settings.glue_database, settings.data_bucket, apply=not check)
+    for action in actions:
+        suffix = f"  {action.detail}" if action.detail else ""
+        typer.echo(f"{action.action:<9} {action.table}{suffix}")
+    drifted = [action for action in actions if action.action != "unchanged"]
+    if check and drifted:
+        raise typer.Exit(1)
+
+
+@app.command(name="lineage", help="Trace every gold model back to the raw it was built from.")
+def lineage_command(
+    check: Annotated[
+        bool, typer.Option("--check", help="Exit non-zero on a broken trace.")
+    ] = False,
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+    manifest: Annotated[Path, typer.Option(help="dbt manifest to read.")] = lineage.MANIFEST,
+) -> None:
+    store, _, _ = _runtime(local, get_settings())
+    traces = lineage.trace(store, lineage.load(manifest))
+    for item in traces:
+        typer.echo(f"{'ok  ' if item.ok else 'FAIL'}  {item.model:<24} {item.detail}")
+    if not traces:
+        typer.echo("no gold models in the manifest")
+        raise typer.Exit(1)
+    if check and not all(item.ok for item in traces):
+        raise typer.Exit(1)

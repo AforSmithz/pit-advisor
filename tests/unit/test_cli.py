@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 
 from pitadvisor import cli
 from pitadvisor.config import Settings
+from pitadvisor.quality import catalog
 
 REGION = "ap-southeast-1"
 
@@ -454,3 +455,61 @@ def test_emit_views_rejects_an_unknown_view(lake, offline):
     result = CliRunner().invoke(cli.app, ["emit-views", "--views", "weekend", "--local"])
     assert result.exit_code != 0
     assert "no emitter yet" in result.stderr
+
+
+def manifest_at(path, sources=("results", "races")):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "nodes": {
+                    "model.pitadvisor.gold_race_results": {
+                        "resource_type": "model",
+                        "name": "gold_race_results",
+                        "tags": ["gold"],
+                        "depends_on": {
+                            "nodes": [f"source.pitadvisor.bronze.{name}" for name in sources]
+                        },
+                    }
+                },
+                "sources": {f"source.pitadvisor.bronze.{name}": {"name": name} for name in sources},
+            }
+        )
+    )
+    return path
+
+
+def test_lineage_traces_gold_back_to_raw(lake, offline, tmp_path):
+    runner = CliRunner()
+    runner.invoke(
+        cli.app, ["ingest", "--source", "jolpica", "--season", "2024", "--round", "5", "--local"]
+    )
+    manifest = manifest_at(tmp_path / "transform" / "target" / "manifest.json")
+    result = runner.invoke(cli.app, ["lineage", "--check", "--local", "--manifest", str(manifest)])
+    assert result.exit_code == 0, result.stdout
+    assert "gold_race_results" in result.stdout
+
+
+def test_lineage_fails_when_a_source_never_landed(lake, offline, tmp_path):
+    manifest = manifest_at(tmp_path / "transform" / "target" / "manifest.json")
+    result = CliRunner().invoke(
+        cli.app, ["lineage", "--check", "--local", "--manifest", str(manifest)]
+    )
+    assert result.exit_code == 1
+    assert "nothing in raw/" in result.stdout
+
+
+def test_catalog_sync_creates_the_bronze_tables(aws, settings):
+    for _ in range(len(catalog.TABLES)):
+        aws.stub("glue").add_client_error("get_table", "EntityNotFoundException")
+        aws.stub("glue").add_response("create_table", {}, None)
+    result = CliRunner().invoke(cli.app, ["catalog-sync"])
+    assert result.exit_code == 0, result.stdout
+    assert "create    results" in result.stdout
+
+
+def test_catalog_sync_check_reports_drift_without_writing(aws, settings):
+    for _ in range(7):
+        aws.stub("glue").add_client_error("get_table", "EntityNotFoundException")
+    result = CliRunner().invoke(cli.app, ["catalog-sync", "--check"])
+    assert result.exit_code == 1
