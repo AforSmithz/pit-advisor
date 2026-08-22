@@ -179,3 +179,37 @@ def test_bronze_is_rebuildable_from_the_raw_copy(store):
         )
     )
     assert [row["lap_time_millis"] for row in rebuilt] == list(bronze["lap_time_millis"])
+
+
+def test_the_cache_round_trips_through_the_lake(store, tmp_path):
+    from pitadvisor.ingest.fastf1_session import pull_cache, push_cache
+
+    warm = tmp_path / "warm"
+    (warm / "2024" / "race").mkdir(parents=True)
+    (warm / "2024" / "race" / "laps.ff1pkl").write_bytes(b"cached")
+    assert push_cache(store, warm) == 1
+    assert push_cache(store, warm) == 0  # nothing changed, nothing re-uploaded
+
+    cold = tmp_path / "cold"
+    assert pull_cache(store, cold) == 1
+    assert (cold / "2024" / "race" / "laps.ff1pkl").read_bytes() == b"cached"
+    assert pull_cache(store, cold) == 0
+
+
+def test_a_session_ingest_can_skip_the_cache_entirely(store, tmp_path):
+    ingest_session(
+        store, KEY, cache_dir=tmp_path / "cache", run_id="run-1", loader=lambda *_: Laps([lap()])
+    )
+    assert not list(store.list("cache/"))
+
+
+def test_a_synced_ingest_leaves_the_cache_in_the_lake(store, tmp_path):
+    cache = tmp_path / "cache"
+
+    def loader(*_):
+        (cache / "2024").mkdir(parents=True, exist_ok=True)
+        (cache / "2024" / "session.ff1pkl").write_bytes(b"warm")
+        return Laps([lap()])
+
+    ingest_session(store, KEY, cache_dir=cache, run_id="run-1", loader=loader, sync_cache=True)
+    assert [item.key for item in store.list("cache/")] == ["cache/fastf1/2024/session.ff1pkl"]

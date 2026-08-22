@@ -6,7 +6,9 @@ from typing import Any, cast
 
 from pitadvisor.ingest.raw_store import ObjectStore, RawStore, write_bronze, write_quarantine
 from pitadvisor.quality import contracts
-from pitadvisor.types import IngestOutcome, Provenance, SessionKey, SessionKind, Source
+from pitadvisor.types import IngestOutcome, Layer, Provenance, SessionKey, SessionKind, Source
+
+CACHE_PREFIX = f"{Layer.CACHE}/fastf1/"
 
 IDENTIFIERS: dict[SessionKind, str] = {
     SessionKind.FP1: "FP1",
@@ -162,16 +164,51 @@ def _int_or_none(value: Any) -> int | None:
     return int(value)
 
 
+def pull_cache(store: ObjectStore, cache_dir: Path) -> int:
+    """The fargate task starts with an empty disk and a cold fastf1 cache costs hours."""
+    pulled = 0
+    for item in store.list(CACHE_PREFIX):
+        target = cache_dir / item.key[len(CACHE_PREFIX) :]
+        if target.is_file() and target.stat().st_size == item.size:
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(store.get(item.key))
+        pulled += 1
+    return pulled
+
+
+def push_cache(store: ObjectStore, cache_dir: Path) -> int:
+    if not cache_dir.is_dir():
+        return 0
+    known = {item.key: item.size for item in store.list(CACHE_PREFIX)}
+    pushed = 0
+    for path in sorted(cache_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        key = CACHE_PREFIX + path.relative_to(cache_dir).as_posix()
+        if known.get(key) == path.stat().st_size:
+            continue
+        store.put(key, path.read_bytes())
+        pushed += 1
+    return pushed
+
+
 def ingest_session(
     store: ObjectStore,
     key: SessionKey,
     cache_dir: Path,
     run_id: str = "local",
     loader: Callable[[int, int, SessionKind, Path], Any] = load_laps,
+    sync_cache: bool = False,
 ) -> IngestOutcome:
     fetched_at = datetime.now(UTC)
     stamp = {"run_id": run_id, "ingested_at": fetched_at}
+    if sync_cache:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        pull_cache(store, cache_dir)
     payload = serialize(loader(key.season, key.round, key.session, cache_dir))
+    if sync_cache:
+        push_cache(store, cache_dir)
     landed = RawStore(store).land(
         key,
         "session_laps",

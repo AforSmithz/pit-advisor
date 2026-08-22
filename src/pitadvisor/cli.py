@@ -281,7 +281,7 @@ def ingest(
         if round_ is None or session is None:
             raise typer.BadParameter("fastf1 needs both --round and --session")
         key = SessionKey(season=season, round=round_, session=session)
-        outcomes = [ingest_session(store, key, settings.fastf1_cache, run_id)]
+        outcomes = [ingest_session(store, key, settings.fastf1_cache, run_id, sync_cache=not local)]
     else:
         raise typer.BadParameter(f"{source} has no ingest path yet")
     _render_outcomes(outcomes)
