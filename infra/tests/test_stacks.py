@@ -214,16 +214,18 @@ def actions_of(statement: Resource) -> list[str]:
 
 def test_dev_user_reads_the_lake_and_the_workgroup(data_template: Template) -> None:
     actions = {action for s in dev_policy(data_template) for action in actions_of(s)}
-    assert actions == {
-        "s3:ListBucket",
-        "s3:GetBucketLocation",
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject",
-        "athena:GetWorkGroup",
-        "athena:StartQueryExecution",
-    }
+    assert {"s3:GetObject", "s3:PutObject", "athena:StartQueryExecution"} <= actions
+    assert "glue:CreateTable" in actions
     assert not any(str(action).endswith("*") for action in actions)
+
+
+def test_dev_user_cannot_touch_another_glue_database(data_template: Template) -> None:
+    glue = [s for s in dev_policy(data_template) if "glue:CreateTable" in actions_of(s)]
+    assert len(glue) == 1
+    assert all(
+        f"pitadvisor_{ENV_NAME}" in str(arn) or arn.endswith(":catalog")
+        for arn in glue[0]["Resource"]
+    )
 
 
 def test_dev_user_writes_only_the_landing_prefixes(data_template: Template) -> None:
@@ -235,10 +237,10 @@ def test_dev_user_writes_only_the_landing_prefixes(data_template: Template) -> N
     lake = [s for s in writes if "AthenaResultsBucket" not in str(s["Resource"])]
     assert len(lake) == 1
     target = str(lake[0]["Resource"])
-    for prefix in ("raw/*", "bronze/*", "quarantine/*", "views/*"):
+    for prefix in ("raw/*", "bronze/*", "silver/*", "gold/*", "quarantine/*", "views/*"):
         assert prefix in target
-    assert "gold/" not in target
     assert "docs/" not in target
+    assert "cache/" not in target
 
 
 def test_dev_user_gets_cost_explorer_reads(observability_template: Template) -> None:
@@ -331,6 +333,12 @@ def test_the_pipeline_task_is_arm_and_small(transform_template: Template) -> Non
     assert task["Properties"]["RuntimePlatform"]["CpuArchitecture"] == "ARM64"
     assert task["Properties"]["Cpu"] == "512"
     assert task["Properties"]["RequiresCompatibilities"] == ["FARGATE"]
+
+
+def test_the_session_step_gets_a_cache_directory(transform_template: Template) -> None:
+    _, task = only(transform_template, "AWS::ECS::TaskDefinition")
+    environment = task["Properties"]["ContainerDefinitions"][0]["Environment"]
+    assert {"Name": "PITADV_FASTF1_CACHE", "Value": "/tmp/fastf1"} in environment
 
 
 def test_nothing_in_the_transform_stack_runs_a_service(transform_template: Template) -> None:

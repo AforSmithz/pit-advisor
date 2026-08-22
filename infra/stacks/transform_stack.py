@@ -241,6 +241,8 @@ class TransformStack(Stack):
                 "PITADV_GLUE_DATABASE": database_name,
                 "PITADV_ATHENA_WORKGROUP": workgroup_name,
                 "PITADV_LEDGER_TABLE": ledger_table,
+                # ephemeral disk, the lake keeps the warm copy under cache/fastf1/
+                "PITADV_FASTF1_CACHE": "/tmp/fastf1",
                 "PITADV_AWS_REGION": self.region,
                 # the container has a task role, there is no profile to resolve
                 "PITADV_AWS_PROFILE": "",

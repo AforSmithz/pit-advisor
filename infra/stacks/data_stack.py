@@ -25,11 +25,20 @@ from constructs import Construct
 
 SCAN_CAP_BYTES = 1024**3
 
+# what a laptop may write. dbt on the athena target needs silver and gold too
+LAPTOP_PREFIXES = ("raw", "bronze", "silver", "gold", "quarantine", "views")
+
 WRITE_PREFIXES = (
-    "Write access is granted per prefix rather than per object. Keys inside raw/, bronze/, "
-    "quarantine/ and views/ are generated from source, season, event and session, so an "
-    "object-level list would be rewritten on every partition change. gold/ and docs/ are "
-    "deliberately not writable from a laptop."
+    "Write access is granted per prefix rather than per object. Keys inside the lake are "
+    "generated from source, season, event and session, or by dbt, so an object-level list "
+    "would be rewritten on every partition change. docs/ and cache/ stay unwritable from a "
+    "laptop: they belong to the knowledge base and to the session ingest."
+)
+
+CATALOG_WILDCARD = (
+    "dbt creates and drops silver and gold tables on every build and catalog-sync rewrites the "
+    "bronze tables from the contracts, so the table grant cannot be enumerated. Scoped to the "
+    "pitadvisor database."
 )
 
 OBJECT_WILDCARD = (
@@ -168,12 +177,40 @@ class DataStack(Stack):
                 iam.PolicyStatement(
                     actions=["s3:PutObject", "s3:DeleteObject"],
                     resources=[
-                        self.bucket.arn_for_objects(f"{prefix}/*")
-                        for prefix in ("raw", "bronze", "quarantine", "views")
+                        self.bucket.arn_for_objects(f"{prefix}/*") for prefix in LAPTOP_PREFIXES
                     ],
                 ),
                 iam.PolicyStatement(
-                    actions=["athena:GetWorkGroup", "athena:StartQueryExecution"],
+                    actions=[
+                        "glue:GetDatabase",
+                        "glue:GetDatabases",
+                        "glue:GetTable",
+                        "glue:GetTables",
+                        "glue:GetPartition",
+                        "glue:GetPartitions",
+                        "glue:BatchGetPartition",
+                        "glue:CreateTable",
+                        "glue:UpdateTable",
+                        "glue:DeleteTable",
+                        "glue:BatchCreatePartition",
+                        "glue:BatchDeletePartition",
+                    ],
+                    # literal partition: an acknowledgment id cannot hold what ${AWS::Partition}
+                    # renders to
+                    resources=[
+                        f"arn:aws:glue:{self.region}:{self.account}:catalog",
+                        f"arn:aws:glue:{self.region}:{self.account}:database/{self.database_name}",
+                        f"arn:aws:glue:{self.region}:{self.account}:table/{self.database_name}/*",
+                    ],
+                ),
+                iam.PolicyStatement(
+                    actions=[
+                        "athena:GetWorkGroup",
+                        "athena:StartQueryExecution",
+                        "athena:GetQueryExecution",
+                        "athena:GetQueryResults",
+                        "athena:StopQueryExecution",
+                    ],
                     resources=[
                         self.format_arn(
                             service="athena",
@@ -198,7 +235,14 @@ class DataStack(Stack):
                     id=f"AwsSolutions-IAM5[Resource::<DataBucketE3889A50.Arn>/{prefix}/*]",
                     reason=WRITE_PREFIXES,
                 )
-                for prefix in ("raw", "bronze", "quarantine", "views")
+                for prefix in LAPTOP_PREFIXES
+            ),
+            Acknowledgment(
+                id=(
+                    "AwsSolutions-IAM5[Resource::arn:aws:glue:"
+                    f"{self.region}:{self.account}:table/{self.database_name}/*]"
+                ),
+                reason=CATALOG_WILDCARD,
             ),
         )
 
