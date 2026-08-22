@@ -3,7 +3,7 @@ from typing import Any
 import aws_cdk as cdk
 import pytest
 from aws_cdk.assertions import Match, Template
-from stacks import DataStack, IngestStack, ObservabilityStack
+from stacks import DataStack, IngestStack, ObservabilityStack, TransformStack
 
 ACCOUNT = "123456789012"
 REGION = "ap-southeast-1"
@@ -11,6 +11,7 @@ ENV_NAME = "test"
 DATA_STACK = f"pitadvisor-data-{ENV_NAME}"
 INGEST_STACK = f"pitadvisor-ingest-{ENV_NAME}"
 OBSERVABILITY_STACK = f"pitadvisor-observability-{ENV_NAME}"
+TRANSFORM_STACK = f"pitadvisor-transform-{ENV_NAME}"
 DATA_BUCKET = f"pit-advisor-data-{ENV_NAME}-{ACCOUNT}"
 RESULTS_BUCKET = f"pit-advisor-athena-results-{ENV_NAME}-{ACCOUNT}"
 ALERT_EMAIL = "alerts@example.com"
@@ -20,7 +21,7 @@ Resource = dict[str, Any]
 
 def build(
     alert_email: str | None = None,
-) -> tuple[cdk.App, DataStack, IngestStack, ObservabilityStack]:
+) -> tuple[cdk.App, DataStack, IngestStack, ObservabilityStack, TransformStack]:
     app = cdk.App(context={"env": ENV_NAME})
     aws_env = cdk.Environment(account=ACCOUNT, region=REGION)
     data = DataStack(app, DATA_STACK, env_name=ENV_NAME, env=aws_env)
@@ -30,7 +31,8 @@ def build(
     )
     cdk.Tags.of(app).add("project", "pit-advisor")
     cdk.Tags.of(app).add("env", ENV_NAME)
-    return app, data, ingest, observability
+    transform = TransformStack(app, TRANSFORM_STACK, env_name=ENV_NAME, env=aws_env)
+    return app, data, ingest, observability, transform
 
 
 def only(template: Template, kind: str, **props: Any) -> tuple[str, Resource]:
@@ -41,19 +43,24 @@ def only(template: Template, kind: str, **props: Any) -> tuple[str, Resource]:
 
 @pytest.fixture
 def data_template() -> Template:
-    _, data, _, _ = build()
+    data = build()[1]
     return Template.from_stack(data)
 
 
 @pytest.fixture
 def ingest_template() -> Template:
-    _, _, ingest, _ = build()
+    ingest = build()[2]
     return Template.from_stack(ingest)
 
 
 @pytest.fixture
+def transform_template() -> Template:
+    return Template.from_stack(build()[4])
+
+
+@pytest.fixture
 def observability_template() -> Template:
-    _, _, _, observability = build()
+    observability = build()[3]
     return Template.from_stack(observability)
 
 
@@ -147,7 +154,7 @@ def test_account_budget_watches_the_shared_credits(observability_template: Templ
 
 @pytest.mark.parametrize("email", [None, ALERT_EMAIL])
 def test_budget_alerts_follow_the_alert_email_context(email: str | None) -> None:
-    _, _, _, observability = build(email)
+    observability = build(email)[3]
     found = Template.from_stack(observability).find_resources("AWS::Budgets::Budget")
     assert len(found) == 2
     for budget in found.values():
@@ -165,7 +172,7 @@ def test_budget_alerts_follow_the_alert_email_context(email: str | None) -> None
 
 
 def test_stacks_are_tagged() -> None:
-    app, _, _, _ = build()
+    app = build()[0]
     assembly = app.synth()
     # budgets are not taggable, so the stack tag is the only place the observability tags land
     assert assembly.get_stack_by_name(DATA_STACK).tags == {
@@ -302,9 +309,91 @@ def test_dev_user_gets_item_level_access_to_the_ledger(ingest_template: Template
 
 
 def test_ingest_stack_is_tagged() -> None:
-    app, _, _, _ = build()
+    app = build()[0]
     assert app.synth().get_stack_by_name(INGEST_STACK).tags == {
         "project": "pit-advisor",
         "env": ENV_NAME,
         "component": "ingest",
     }
+
+
+def test_the_pipeline_vpc_has_no_nat_gateway(transform_template: Template) -> None:
+    assert transform_template.find_resources("AWS::EC2::NatGateway") == {}
+    subnets = transform_template.find_resources("AWS::EC2::Subnet")
+    assert subnets
+    assert all(
+        subnet["Properties"].get("MapPublicIpOnLaunch") is True for subnet in subnets.values()
+    )
+
+
+def test_the_pipeline_task_is_arm_and_small(transform_template: Template) -> None:
+    _, task = only(transform_template, "AWS::ECS::TaskDefinition")
+    assert task["Properties"]["RuntimePlatform"]["CpuArchitecture"] == "ARM64"
+    assert task["Properties"]["Cpu"] == "512"
+    assert task["Properties"]["RequiresCompatibilities"] == ["FARGATE"]
+
+
+def test_nothing_in_the_transform_stack_runs_a_service(transform_template: Template) -> None:
+    assert transform_template.find_resources("AWS::ECS::Service") == {}
+
+
+def test_every_log_group_expires(transform_template: Template) -> None:
+    groups = transform_template.find_resources("AWS::Logs::LogGroup")
+    assert len(groups) == 2
+    assert all(group["Properties"].get("RetentionInDays") for group in groups.values())
+
+
+def test_the_pipeline_builds_bronze_then_silver_then_views(transform_template: Template) -> None:
+    _, machine = only(transform_template, "AWS::StepFunctions::StateMachine")
+    definition = str(machine["Properties"]["DefinitionString"])
+    for step in ("IngestJolpica", "QualityGate", "SyncCatalog", "DbtBuild", "CheckLineage"):
+        assert step in definition
+    assert definition.index("QualityGate") < definition.index("DbtBuild")
+    assert "dbt build --project-dir transform --target athena" in definition
+
+
+def test_a_failed_quality_gate_stops_the_pipeline(transform_template: Template) -> None:
+    _, machine = only(transform_template, "AWS::StepFunctions::StateMachine")
+    definition = str(machine["Properties"]["DefinitionString"])
+    assert "QuarantineHalt" in definition
+    assert "QualityGateFailed" in definition
+
+
+def test_the_pipeline_role_cannot_reach_another_task(transform_template: Template) -> None:
+    statements = [
+        statement
+        for policy in transform_template.find_resources("AWS::IAM::Policy").values()
+        for statement in policy["Properties"]["PolicyDocument"]["Statement"]
+        if "ecs:RunTask" in actions_of(statement)
+    ]
+    assert len(statements) == 1
+    assert (
+        statements[0]["Resource"]
+        == f"arn:aws:ecs:{REGION}:{ACCOUNT}:task-definition/pitadvisor-pipeline-{ENV_NAME}:*"
+    )
+
+
+def test_the_schedule_is_off_until_it_is_asked_for(transform_template: Template) -> None:
+    _, rule = only(transform_template, "AWS::Events::Rule", ScheduleExpression=Match.any_value())
+    assert rule["Properties"]["State"] == "DISABLED"
+
+
+def test_the_pipeline_gets_the_lake_policy_from_the_data_stack(
+    data_template: Template, transform_template: Template
+) -> None:
+    _, policy = only(data_template, "AWS::IAM::ManagedPolicy")
+    assert policy["Properties"]["ManagedPolicyName"] == f"pitadvisor-pipeline-lake-{ENV_NAME}"
+    _, role = only(
+        transform_template,
+        "AWS::IAM::Role",
+        Description="what the ingest, dbt and view steps are allowed to touch",
+    )
+    assert str(role["Properties"]["ManagedPolicyArns"]).count(
+        f"pitadvisor-pipeline-lake-{ENV_NAME}"
+    )
+
+
+def test_the_image_repository_keeps_five_tags(transform_template: Template) -> None:
+    _, repository = only(transform_template, "AWS::ECR::Repository")
+    assert '"countNumber":5' in repository["Properties"]["LifecyclePolicy"]["LifecyclePolicyText"]
+    assert repository["Properties"]["ImageScanningConfiguration"]["ScanOnPush"] is True
