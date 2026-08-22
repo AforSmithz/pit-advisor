@@ -1,0 +1,52 @@
+{
+  "MRData": {
+    "limit": "100",
+    "offset": "0",
+    "total": "1",
+    "RaceTable": {
+      "season": "2024",
+      "Races": [
+        {
+          "season": "2024",
+          "round": "5",
+          "raceName": "Synthetic Grand Prix",
+          "Circuit": {
+            "circuitId": "synthetica",
+            "circuitName": "Synthetica Ring",
+            "Location": {
+              "lat": "1.2914",
+              "long": "103.8640",
+              "locality": "Testville",
+              "country": "Nowhere"
+            }
+          },
+          "date": "2024-05-05",
+          "time": "13:00:00Z",
+          "PitStops": [
+            {
+              "driverId": "verstappen",
+              "lap": "18",
+              "stop": "1",
+              "time": "14:00:30",
+              "duration": "20.315"
+            },
+            {
+              "driverId": "norris",
+              "lap": "19",
+              "stop": "1",
+              "time": "14:01:30",
+              "duration": "21.315"
+            },
+            {
+              "driverId": "leclerc",
+              "lap": "20",
+              "stop": "1",
+              "time": "14:02:30",
+              "duration": "22.315"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

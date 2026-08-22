@@ -1,0 +1,29 @@
+{
+  "MRData": {
+    "limit": "100",
+    "offset": "0",
+    "total": "1",
+    "RaceTable": {
+      "season": "2024",
+      "Races": [
+        {
+          "season": "2024",
+          "round": "5",
+          "raceName": "Synthetic Grand Prix",
+          "Circuit": {
+            "circuitId": "synthetica",
+            "circuitName": "Synthetica Ring",
+            "Location": {
+              "lat": "1.2914",
+              "long": "103.8640",
+              "locality": "Testville",
+              "country": "Nowhere"
+            }
+          },
+          "date": "2024-05-05",
+          "time": "13:00:00Z"
+        }
+      ]
+    }
+  }
+}
