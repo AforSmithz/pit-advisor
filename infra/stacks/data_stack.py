@@ -154,12 +154,13 @@ class DataStack(Stack):
             "DevUser",
             self.node.try_get_context("devUserName") or "pitadvisor-dev",
         )
-        # the policy is named per stack: two stacks attaching an unnamed policy to the same user
-        # generate the same physical name and the second deploy fails
-        dev_access = iam.Policy(
+        # managed, not inline: a user's inline policies share a 2048 byte budget and three
+        # stacks attach to this one. the name is per stack, because two stacks attaching an
+        # unnamed policy to the same user generate the same physical name
+        dev_access = iam.ManagedPolicy(
             self,
-            "DevAccess",
-            policy_name=f"pitadvisor-lake-access-{env_name}",
+            "DevManagedAccess",
+            managed_policy_name=f"pitadvisor-lake-access-{env_name}",
             users=[dev_user],
             statements=[
                 iam.PolicyStatement(

@@ -84,10 +84,10 @@ class ObservabilityStack(Stack):
             "DevUser",
             self.node.try_get_context("devUserName") or "pitadvisor-dev",
         )
-        dev_access = iam.Policy(
+        dev_access = iam.ManagedPolicy(
             self,
-            "DevAccess",
-            policy_name=f"pitadvisor-cost-access-{env_name}",
+            "DevManagedAccess",
+            managed_policy_name=f"pitadvisor-cost-access-{env_name}",
             users=[dev_user],
             statements=[
                 iam.PolicyStatement(

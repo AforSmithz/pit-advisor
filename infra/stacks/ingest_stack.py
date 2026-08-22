@@ -56,10 +56,10 @@ class IngestStack(Stack):
             "DevUser",
             self.node.try_get_context("devUserName") or "pitadvisor-dev",
         )
-        iam.Policy(
+        iam.ManagedPolicy(
             self,
-            "DevAccess",
-            policy_name=f"pitadvisor-ingest-access-{env_name}",
+            "DevManagedAccess",
+            managed_policy_name=f"pitadvisor-ingest-access-{env_name}",
             users=[dev_user],
             statements=[
                 iam.PolicyStatement(

@@ -200,7 +200,7 @@ def test_data_resources_are_tagged(data_template: Template) -> None:
 
 def dev_policy(template: Template) -> Resource:
     policies = template.find_resources(
-        "AWS::IAM::Policy",
+        "AWS::IAM::ManagedPolicy",
         {"Properties": {"Users": ["pitadvisor-dev"]}},
     )
     assert len(policies) == 1, sorted(policies)
@@ -258,8 +258,11 @@ def test_dev_policies_are_named_per_stack(
     data_template: Template, observability_template: Template
 ) -> None:
     names = [
-        next(iter(t.find_resources("AWS::IAM::Policy").values()))["Properties"]["PolicyName"]
-        for t in (data_template, observability_template)
+        policy["Properties"]["ManagedPolicyName"]
+        for template in (data_template, observability_template)
+        for policy in template.find_resources(
+            "AWS::IAM::ManagedPolicy", {"Properties": {"Users": ["pitadvisor-dev"]}}
+        ).values()
     ]
     # an unnamed policy on the same user generates the same physical name in both stacks and
     # the second deploy fails with "already managed by another stack"
@@ -389,7 +392,11 @@ def test_the_schedule_is_off_until_it_is_asked_for(transform_template: Template)
 def test_the_pipeline_gets_the_lake_policy_from_the_data_stack(
     data_template: Template, transform_template: Template
 ) -> None:
-    _, policy = only(data_template, "AWS::IAM::ManagedPolicy")
+    _, policy = only(
+        data_template,
+        "AWS::IAM::ManagedPolicy",
+        ManagedPolicyName=f"pitadvisor-pipeline-lake-{ENV_NAME}",
+    )
     assert policy["Properties"]["ManagedPolicyName"] == f"pitadvisor-pipeline-lake-{ENV_NAME}"
     _, role = only(
         transform_template,
