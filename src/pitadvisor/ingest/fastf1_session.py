@@ -1,11 +1,12 @@
+import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from pitadvisor.ingest.raw_store import ObjectStore, write_bronze, write_quarantine
+from pitadvisor.ingest.raw_store import ObjectStore, RawStore, write_bronze, write_quarantine
 from pitadvisor.quality import contracts
-from pitadvisor.types import IngestOutcome, SessionKey, SessionKind, Source
+from pitadvisor.types import IngestOutcome, Provenance, SessionKey, SessionKind, Source
 
 IDENTIFIERS: dict[SessionKind, str] = {
     SessionKind.FP1: "FP1",
@@ -90,13 +91,37 @@ def load_laps(season: int, round_: int, session: SessionKind, cache_dir: Path) -
     return loaded.laps
 
 
-def to_records(laps: Any, key: SessionKey, stamp: dict[str, Any]) -> list[dict[str, Any]]:
+def _jsonable(value: Any) -> Any:
+    if value is None or value != value:  # NaT and NaN both fail this
+        return None
+    if hasattr(value, "total_seconds"):
+        return millis(value)
+    if hasattr(value, "isoformat"):
+        return cast(str, value.isoformat())
+    if isinstance(value, bool | int | float | str):
+        return value
+    scalar = getattr(value, "item", None)  # numpy types come out of pandas everywhere
+    return _jsonable(scalar()) if scalar is not None else str(value)
+
+
+def serialize(laps: Any) -> list[dict[str, Any]]:
+    """The raw copy: every column fastf1 gave us, only made JSON-safe."""
+    rows = cast(list[dict[str, Any]], laps.to_dict("records"))
+    return [{str(name): _jsonable(value) for name, value in row.items()} for row in rows]
+
+
+def session_url(key: SessionKey) -> str:
+    return f"fastf1://{key.season}/{key.round:02d}/{key.session}"
+
+
+def to_records(
+    payload: list[dict[str, Any]], key: SessionKey, stamp: dict[str, Any]
+) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     seen: dict[tuple[str, int], int] = {}
-    for lap in cast(list[dict[str, Any]], laps.to_dict("records")):
-        stint = lap.get("Stint")
+    for lap in payload:
         driver = str(lap.get("Driver") or "")
-        stint_number = _int_or_none(stint)
+        stint_number = _int_or_none(lap.get("Stint"))
         lap_in_stint = None
         if stint_number is not None:
             marker = (driver, stint_number)
@@ -111,10 +136,10 @@ def to_records(laps: Any, key: SessionKey, stamp: dict[str, Any]) -> list[dict[s
                 "driver_code": driver,
                 "driver_number": lap.get("DriverNumber"),
                 "lap": lap.get("LapNumber"),
-                "lap_time_millis": millis(lap.get("LapTime")),
-                "sector1_millis": millis(lap.get("Sector1Time")),
-                "sector2_millis": millis(lap.get("Sector2Time")),
-                "sector3_millis": millis(lap.get("Sector3Time")),
+                "lap_time_millis": lap.get("LapTime"),
+                "sector1_millis": lap.get("Sector1Time"),
+                "sector2_millis": lap.get("Sector2Time"),
+                "sector3_millis": lap.get("Sector3Time"),
                 "stint": stint_number,
                 "lap_in_stint": lap_in_stint,
                 "compound": lap.get("Compound"),
@@ -123,16 +148,12 @@ def to_records(laps: Any, key: SessionKey, stamp: dict[str, Any]) -> list[dict[s
                 "is_deleted": bool(lap.get("Deleted") or False),
                 "is_accurate": bool(lap.get("IsAccurate") or False),
                 "track_status": str(lap.get("TrackStatus") or "") or None,
-                "pit_in": _present(lap.get("PitInTime")),
-                "pit_out": _present(lap.get("PitOutTime")),
+                "pit_in": lap.get("PitInTime") is not None,
+                "pit_out": lap.get("PitOutTime") is not None,
                 "position": _int_or_none(lap.get("Position")),
             }
         )
     return records
-
-
-def _present(value: Any) -> bool:
-    return value is not None and value == value
 
 
 def _int_or_none(value: Any) -> int | None:
@@ -148,10 +169,24 @@ def ingest_session(
     run_id: str = "local",
     loader: Callable[[int, int, SessionKind, Path], Any] = load_laps,
 ) -> IngestOutcome:
-    stamp = {"run_id": run_id, "ingested_at": datetime.now(UTC)}
-    laps = loader(key.season, key.round, key.session, cache_dir)
-    records = to_records(laps, key, stamp)
-    kept, dropped = contracts.validate("session_laps", contracts.SessionLapRow, records)
+    fetched_at = datetime.now(UTC)
+    stamp = {"run_id": run_id, "ingested_at": fetched_at}
+    payload = serialize(loader(key.season, key.round, key.session, cache_dir))
+    landed = RawStore(store).land(
+        key,
+        "session_laps",
+        json.dumps(payload).encode(),
+        Provenance(
+            run_id=run_id,
+            source=Source.FASTF1,
+            url=session_url(key),
+            fetched_at=fetched_at,
+            status=200,
+        ),
+    )
+    kept, dropped = contracts.validate(
+        "session_laps", contracts.SessionLapRow, to_records(payload, key, stamp)
+    )
     write_quarantine(store, "session_laps", key, run_id, dropped)
     return IngestOutcome(
         source=Source.FASTF1,
@@ -160,5 +195,6 @@ def ingest_session(
         round=key.round,
         rows=len(kept),
         quarantined=len(dropped),
+        raw_objects=[landed],
         bronze_objects=[write_bronze(store, "session_laps", key, kept)] if kept else [],
     )
