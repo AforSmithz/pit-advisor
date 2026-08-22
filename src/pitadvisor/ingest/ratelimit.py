@@ -217,10 +217,16 @@ class DynamoBucket:
                 self.client.update_item(
                     TableName=self.table,
                     Key={"pk": {"S": f"quota#{self.name}"}},
-                    UpdateExpression="SET tokens = :tokens, updated_at = :now, capacity = :cap",
+                    UpdateExpression="SET #tokens = :tokens, #updated = :now, #capacity = :cap",
                     # the guard is the whole point: two lambdas refilling from the same read
                     # would each think the hour still had room
-                    ConditionExpression=("attribute_not_exists(pk) OR updated_at = :seen_at"),
+                    ConditionExpression=("attribute_not_exists(pk) OR #updated = :seen_at"),
+                    # capacity and tokens are both reserved words in dynamodb
+                    ExpressionAttributeNames={
+                        "#tokens": "tokens",
+                        "#updated": "updated_at",
+                        "#capacity": "capacity",
+                    },
                     ExpressionAttributeValues={
                         ":tokens": {"N": str(available - tokens)},
                         ":now": {"N": str(now)},

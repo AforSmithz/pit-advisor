@@ -133,6 +133,16 @@ def test_dynamo_bucket_writes_the_remaining_tokens():
     assert client.updates[0]["ExpressionAttributeValues"][":tokens"]["N"] == "7.0"
 
 
+def test_dynamo_bucket_aliases_the_reserved_attribute_names():
+    client = FakeDynamo()
+    DynamoBucket("t", client, capacity=10, refill_per_second=0.0, clock=Clock()).take()
+    names = client.updates[0]["ExpressionAttributeNames"]
+    assert set(names.values()) == {"tokens", "updated_at", "capacity"}
+    expression = client.updates[0]["UpdateExpression"]
+    assert "capacity" not in expression.replace("#capacity", "")
+    assert "tokens" not in expression.replace("#tokens", "").replace(":tokens", "")
+
+
 def test_dynamo_bucket_guards_against_a_concurrent_writer():
     client = FakeDynamo(fail_conditions=2)
     bucket = DynamoBucket("t", client, capacity=10, refill_per_second=0.0, clock=Clock())
