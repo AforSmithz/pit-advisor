@@ -31,11 +31,21 @@ between tables and null rates on the columns that should be nearly always presen
 `pitadv emit-views` writes the first view artifact, `pipeline_view.json`, which carries table
 health, quarantine counts by reason and the remaining request quota per source.
 
+Above bronze there is now a transform layer. A dbt project builds conformed silver tables with
+surrogate keys and amendment-aware deduplication, and three gold marts on top of them: race
+results with the finishing status classified, qualifying gaps to pole and to the teammate, and
+pit stop summaries against the event average. The same models run two ways: on duckdb against
+the local Parquet, which is how they are developed and tested, and on Athena as Iceberg tables
+with MERGE, which is how they run in the account. The Glue tables that Athena reads bronze
+through are generated from the same pydantic contracts that validate the rows, so the catalog
+cannot drift from the schema. `pitadv lineage --check` reads the dbt manifest and walks every
+gold model back through silver to the bronze sources and on to the raw objects each one was
+built from; a gold model that cannot be traced to raw fails the command.
+
 A local backfill of the 2023 and 2024 seasons currently produces 46 races, 919 results, 919
 qualifying rows, 1,736 pit stops and one quarantined row: a 2024 pit stop that Jolpica
-publishes with an empty duration. Nothing beyond the P0 stacks is deployed yet, so the
-Step Functions pipeline in the architecture below is still what is being built against rather
-than working software.
+publishes with an empty duration. The lake and ingest stacks are deployed; the transform stack
+synthesizes and is not deployed yet. The race simulation and the agent are not written.
 
 ## The honesty constraint
 
@@ -63,19 +73,18 @@ have it.
 ## Architecture
 
 ```
-EventBridge Scheduler
+EventBridge rule (weekly, off by default)
   |
-  +-- Lambda  jolpica-ingest      results, quali, laps, pitstops, schedules
-  +-- Lambda  weather-ingest      Open-Meteo forecast per upcoming session
-  +-- Lambda  docs-ingest         FIA PDFs into the knowledge base
-  |
-  +-- Step Functions  weekend-pipeline
+  +-- Step Functions  weekend-pipeline        one Fargate task definition, one image
         |
-        +-- Fargate  fastf1-session-ingest    heavy deps, S3-backed cache
-        +-- Lambda   quality-gate             contracts, freshness, row counts
-        +-- Fargate  dbt build                silver and gold, Iceberg MERGE
-        +-- Lambda   race-sim                 Monte Carlo, writes forecasts
-        +-- Lambda   emit-views               gold into versioned view JSON
+        +-- ingest jolpica       results, quali, laps, pitstops, schedules
+        +-- ingest open-meteo    forecast and archive around each session
+        +-- ingest fastf1        session laps, heavy deps, S3-backed cache
+        +-- quality gate         contracts, freshness, keys, references
+        +-- catalog sync         glue bronze tables from the contracts
+        +-- dbt build            silver and gold, Iceberg MERGE
+        +-- lineage check        every gold model traced back to raw
+        +-- emit views           gold into versioned view JSON
 
 S3 (one bucket, prefix separated)
   raw/  bronze/  silver/  gold/  views/  quarantine/  docs/  cache/
@@ -97,9 +106,16 @@ drivers get swapped mid-season, reserve drivers appear, teams get renamed. Gold 
 of marts, one per metric family, and those marts are recomputed rather than appended because
 race results get amended days later by penalties and disqualifications.
 
-The dashboard never touches Athena. A Lambda emits versioned JSON view artifacts into `views/`,
+The dashboard never touches Athena. The pipeline emits versioned JSON view artifacts into
+`views/`,
 CloudFront serves the static Next.js export, and the browser reads JSON, which bounds query cost
 and leaves no origin server to run or pay for.
+
+The pipeline steps are all the same container: one ARM64 Fargate task definition running the
+`pitadv` CLI and dbt, with the command varying per step. The tasks run in public subnets with a
+public IP and no inbound rules, because the alternative is a NAT gateway at roughly thirty
+dollars a month, which is more than everything else in this project put together. A failed
+quality gate stops the run before dbt touches silver.
 
 On failure the pipeline quarantines rather than corrupts. A row that fails its contract goes to
 `quarantine/` with the reason attached, the load continues, and the count by reason is published
@@ -141,6 +157,17 @@ is on the order of a gigabyte across a few dozen models. Spark would spend most 
 starting up, and dbt brings tests, documentation and lineage without any of them being written
 by hand. The cost is that the SQL is portable but the adapter and table format are not free to
 swap later.
+
+Those Iceberg tables live in the bucket the lake already owns rather than in an S3 Tables
+bucket. S3 Tables would bring managed compaction, and it also brings a second storage charge, a
+per-object monitoring charge and a Lake Formation grant model, none of which a single-user
+project on a hundred dollars of credits can justify. Everything Iceberg is actually needed for
+here, which is MERGE on amended results and schema evolution, works without it.
+
+The same models run on duckdb locally and on Athena in the account. Two adapters is a real cost:
+three macros exist purely to paper over the dialects, and a change to either engine's behaviour
+is a change to both targets. It buys a build-and-test cycle measured in seconds with no Athena
+scan, which is what makes it worth having the models under test at all.
 
 The vector store behind the Bedrock Knowledge Base is S3 Vectors rather than OpenSearch
 Serverless. This is the decision the console actively steers you away from, and it is not
@@ -215,6 +242,17 @@ uv run pitadv emit-views --local
 The backfill is safe to interrupt and rerun. A resource whose bronze partition already exists
 is skipped without a request, so a second run costs one request per season, and when the hourly
 budget runs out the command says where it stopped rather than sleeping through it.
+
+The transform layer runs on the same local lake, on duckdb, with no account involved:
+
+```bash
+uv run dbt build --project-dir transform --target local
+uv run dbt test --project-dir transform --target local
+uv run pitadv lineage --check --local
+```
+
+Against the account the same models run on Athena with `--target athena`, after
+`pitadv catalog-sync` has pointed the Glue catalog at the bronze prefixes.
 
 ## Cost
 
