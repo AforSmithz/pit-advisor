@@ -47,6 +47,24 @@ quality layer="bronze":
 views:
     uv run pitadv emit-views --views pipeline --local
 
+# dbt against the local duckdb copy of the lake
+transform *args:
+    uv run dbt build --project-dir transform --target local {{ args }}
+
+lineage:
+    uv run pitadv lineage --check --local
+
+catalog-check:
+    uv run pitadv catalog-sync --check
+
+# build and push the pipeline image the fargate steps run
+image tag="latest":
+    aws ecr get-login-password --profile {{AWS_PROFILE}} --region {{AWS_REGION}} \
+      | docker login --username AWS --password-stdin {{account}}.dkr.ecr.{{AWS_REGION}}.amazonaws.com
+    docker build --platform linux/arm64 -f infra/docker/pipeline.Dockerfile \
+      -t {{account}}.dkr.ecr.{{AWS_REGION}}.amazonaws.com/pitadvisor-pipeline-dev:{{tag}} .
+    docker push {{account}}.dkr.ecr.{{AWS_REGION}}.amazonaws.com/pitadvisor-pipeline-dev:{{tag}}
+
 fmt:
     uv run ruff format .
     uv run ruff check . --fix
@@ -64,4 +82,8 @@ infra-check:
     uv run --directory infra pytest
     uv run --directory infra cdk synth --quiet
 
-check-all: check infra-check
+transform-check:
+    uv run dbt build --project-dir transform --target local
+    uv run pitadv lineage --check --local
+
+check-all: check infra-check transform-check
