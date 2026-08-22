@@ -15,13 +15,27 @@ twenty dollar per month budget, which is a design constraint rather than an afte
 
 ## What exists today
 
-This is early. The repository currently holds the foundations and nothing else: the Python
-package skeleton with typed configuration and the shared key and provenance types, a `pitadv`
-CLI with a `doctor` command that checks the environment, a CDK application, a pre-commit
-setup, and a CI workflow that lints, type checks, tests and synthesizes the infrastructure.
-Nothing is deployed yet, so the architecture below describes what is being built against
-rather than working software. The sections on running the code and on cost describe only what
-is real.
+This is early. What works today is the foundation and the ingest half of the pipeline. The
+foundation is the Python package with typed configuration and shared key and provenance types,
+a `pitadv` CLI, a CDK application covering the lake, the budgets and the ingest ledger, a
+pre-commit setup, and CI that lints, type checks, tests and synthesizes the infrastructure.
+
+On top of that, three sources now land in the lake. Jolpica results, qualifying, laps, pit
+stops and schedules, Open-Meteo weather snapshots per event, and FastF1 session laps all go
+through the same path: a conditional HTTP GET under a token bucket, the response written to
+`raw/` verbatim with its request metadata, a parse into typed rows, a pydantic contract per
+table, and Parquet in `bronze/` partitioned by season and round. Rows that fail their contract
+land in `quarantine/` with the reason attached instead of failing the load. `pitadv
+quality-report` checks row counts, freshness, duplicate natural keys, referential integrity
+between tables and null rates on the columns that should be nearly always present, and
+`pitadv emit-views` writes the first view artifact, `pipeline_view.json`, which carries table
+health, quarantine counts by reason and the remaining request quota per source.
+
+A local backfill of the 2023 and 2024 seasons currently produces 46 races, 919 results, 919
+qualifying rows, 1,736 pit stops and one quarantined row: a 2024 pit stop that Jolpica
+publishes with an empty duration. Nothing beyond the P0 stacks is deployed yet, so the
+Step Functions pipeline in the architecture below is still what is being built against rather
+than working software.
 
 ## The honesty constraint
 
@@ -186,6 +200,21 @@ command names its profile explicitly rather than inheriting one from the shell:
 aws login --profile pitadvisor
 uv run pitadv doctor
 ```
+
+The ingest path runs without an account at all. `--local` swaps the S3 store, the DynamoDB
+ledger and the token bucket for files under `data/local`, which is where the backfill, the
+quality gate and the view emitter are usually exercised:
+
+```bash
+uv run pitadv ingest --source jolpica --season 2024 --dry-run   # prints the plan, fetches nothing
+uv run pitadv backfill --from 2023 --to 2024 --local            # resumable, respects the hourly cap
+uv run pitadv quality-report --layer bronze --local
+uv run pitadv emit-views --local
+```
+
+The backfill is safe to interrupt and rerun. A resource whose bronze partition already exists
+is skipped without a request, so a second run costs one request per season, and when the hourly
+budget runs out the command says where it stopped rather than sleeping through it.
 
 ## Cost
 
