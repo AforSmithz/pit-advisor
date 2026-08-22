@@ -1,0 +1,37 @@
+version: 2
+
+models:
+  - name: gold_race_results
+    description: The race fact the dashboard and the agent read. One row per driver-event.
+    columns:
+      - name: result_id
+        tests: [unique, not_null]
+      - name: event_id
+        tests: [not_null]
+      - name: season
+        tests: [not_null]
+      - name: field_size
+        tests: [not_null]
+      - name: status_class
+        tests:
+          - accepted_values:
+              arguments:
+                values: [finished, retired, disqualified, did_not_start]
+
+  - name: gold_qualifying_gaps
+    description: Gap to pole and to the teammate, per driver-event.
+    columns:
+      - name: qualifying_id
+        tests: [unique, not_null]
+      - name: gap_to_pole_millis
+        tests: [not_null]
+      - name: pole_millis
+        tests: [not_null]
+
+  - name: gold_pit_stop_summary
+    description: Stop count and durations per driver-event, against the event average.
+    columns:
+      - name: event_id
+        tests: [not_null]
+      - name: stop_count
+        tests: [not_null]
