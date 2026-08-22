@@ -329,3 +329,128 @@ def test_version(runner):
     result = runner.invoke(cli.app, ["version"])
     assert result.exit_code == 0
     assert result.output.strip() == package_version("pitadvisor")
+
+
+@pytest.fixture
+def lake(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    return tmp_path / "data" / "local"
+
+
+@pytest.fixture
+def offline(monkeypatch, fetch):
+    monkeypatch.setattr("pitadvisor.ingest.http.fetch", fetch)
+    return fetch
+
+
+def test_dry_run_asks_for_nothing(lake, offline):
+    result = CliRunner().invoke(
+        cli.app, ["ingest", "--source", "jolpica", "--season", "2024", "--dry-run"]
+    )
+    assert result.exit_code == 0
+    assert "GET https://api.jolpi.ca/ergast/f1/2024.json" in result.stdout
+    assert offline.calls == []
+
+
+def test_dry_run_counts_the_requests_against_the_cap(lake, offline):
+    result = CliRunner().invoke(
+        cli.app, ["ingest", "--source", "jolpica", "--season", "2024", "--round", "5", "--dry-run"]
+    )
+    assert "200/hour cap" in result.stdout
+
+
+def test_ingest_local_writes_bronze(lake, offline):
+    result = CliRunner().invoke(
+        cli.app, ["ingest", "--source", "jolpica", "--season", "2024", "--round", "5", "--local"]
+    )
+    assert result.exit_code == 0, result.stdout
+    assert (lake / "bronze/table=results/season=2024/round=05/results.parquet").is_file()
+    assert "3 rows" in result.stdout
+
+
+def test_ingest_local_persists_the_quota_between_runs(lake, offline):
+    runner = CliRunner()
+    runner.invoke(
+        cli.app, ["ingest", "--source", "jolpica", "--season", "2024", "--round", "5", "--local"]
+    )
+    spent = json.loads((lake / "quota.json").read_text())["jolpica"]["tokens"]
+    assert spent < 200
+
+
+def test_weather_needs_the_schedule_first(lake, offline):
+    result = CliRunner().invoke(
+        cli.app, ["ingest", "--source", "open_meteo", "--season", "2024", "--local"]
+    )
+    assert result.exit_code != 0
+    assert "ingest jolpica races first" in result.stderr
+
+
+def test_weather_follows_the_schedule(lake, offline):
+    runner = CliRunner()
+    runner.invoke(
+        cli.app, ["ingest", "--source", "jolpica", "--season", "2024", "--round", "5", "--local"]
+    )
+    result = runner.invoke(
+        cli.app, ["ingest", "--source", "open_meteo", "--season", "2024", "--local"]
+    )
+    assert result.exit_code == 0, result.stdout
+    assert (lake / "bronze/table=weather/season=2024/round=05/weather.parquet").is_file()
+
+
+def test_fastf1_needs_a_session(lake, offline):
+    result = CliRunner().invoke(
+        cli.app, ["ingest", "--source", "fastf1", "--season", "2024", "--round", "5", "--local"]
+    )
+    assert result.exit_code != 0
+    assert "--round and --session" in result.stderr
+
+
+def test_backfill_resumes_without_refetching(lake, offline):
+    runner = CliRunner()
+    first = runner.invoke(cli.app, ["backfill", "--from", "2024", "--to", "2024", "--local"])
+    assert first.exit_code == 0, first.stdout
+    calls = len(offline.calls)
+    second = runner.invoke(cli.app, ["backfill", "--from", "2024", "--to", "2024", "--local"])
+    assert "already in bronze" in second.stdout
+    assert len(offline.calls) == calls + 1
+
+
+def test_quality_report_fails_on_an_empty_lake(lake, offline):
+    result = CliRunner().invoke(cli.app, ["quality-report", "--local"])
+    assert result.exit_code == 1
+    assert "is empty" in result.stdout
+
+
+def test_quality_report_passes_after_an_ingest(lake, offline):
+    runner = CliRunner()
+    runner.invoke(cli.app, ["backfill", "--from", "2024", "--to", "2024", "--local"])
+    result = runner.invoke(cli.app, ["quality-report", "--local"])
+    assert result.exit_code == 0, result.stdout
+    assert "row_count" in result.stdout
+
+
+def test_quality_report_json(lake, offline):
+    runner = CliRunner()
+    runner.invoke(
+        cli.app, ["ingest", "--source", "jolpica", "--season", "2024", "--round", "5", "--local"]
+    )
+    result = runner.invoke(cli.app, ["quality-report", "--local", "--json"])
+    assert json.loads(result.stdout)["layer"] == "bronze"
+
+
+def test_emit_views_writes_the_pipeline_view(lake, offline):
+    runner = CliRunner()
+    runner.invoke(
+        cli.app, ["ingest", "--source", "jolpica", "--season", "2024", "--round", "5", "--local"]
+    )
+    result = runner.invoke(cli.app, ["emit-views", "--local"])
+    assert result.exit_code == 0, result.stdout
+    view = json.loads((lake / "views/pipeline_view.json").read_text())
+    assert view["view"] == "pipeline_view"
+    assert view["quota"][0]["name"] == "jolpica"
+
+
+def test_emit_views_rejects_an_unknown_view(lake, offline):
+    result = CliRunner().invoke(cli.app, ["emit-views", "--views", "weekend", "--local"])
+    assert result.exit_code != 0
+    assert "no emitter yet" in result.stderr

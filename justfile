@@ -34,6 +34,19 @@ deploy stack email:
 doctor:
     uv run pitadv doctor
 
+# everything below writes to data/local, no aws calls
+ingest season round="":
+    uv run pitadv ingest --source jolpica --season {{season}} {{ if round == "" { "" } else { "--round " + round } }} --local
+
+backfill from to:
+    uv run pitadv backfill --from {{from}} --to {{to}} --local
+
+quality layer="bronze":
+    uv run pitadv quality-report --layer {{layer}} --local
+
+views:
+    uv run pitadv emit-views --views pipeline --local
+
 fmt:
     uv run ruff format .
     uv run ruff check . --fix
