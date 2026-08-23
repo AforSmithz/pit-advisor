@@ -28,6 +28,9 @@ SCAN_CAP_BYTES = 1024**3
 # what a laptop may write. dbt on the athena target needs silver and gold too
 LAPTOP_PREFIXES = ("raw", "bronze", "silver", "gold", "quarantine", "views")
 
+# the pipeline also keeps the fastf1 cache warm, which a laptop has no reason to touch
+PIPELINE_PREFIXES = (*LAPTOP_PREFIXES, "cache")
+
 WRITE_PREFIXES = (
     "Write access is granted per prefix rather than per object. Keys inside the lake are "
     "generated from source, season, event and session, or by dbt, so an object-level list "
@@ -271,8 +274,7 @@ class DataStack(Stack):
                 iam.PolicyStatement(
                     actions=["s3:PutObject", "s3:DeleteObject"],
                     resources=[
-                        self.bucket.arn_for_objects(f"{prefix}/*")
-                        for prefix in ("raw", "bronze", "silver", "gold", "quarantine", "views")
+                        self.bucket.arn_for_objects(f"{prefix}/*") for prefix in PIPELINE_PREFIXES
                     ],
                 ),
                 iam.PolicyStatement(
@@ -294,7 +296,7 @@ class DataStack(Stack):
                     id=f"AwsSolutions-IAM5[Resource::<DataBucketE3889A50.Arn>/{prefix}/*]",
                     reason=WRITE_PREFIXES,
                 )
-                for prefix in ("raw", "bronze", "silver", "gold", "quarantine", "views")
+                for prefix in PIPELINE_PREFIXES
             ),
         )
 

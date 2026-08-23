@@ -415,6 +415,13 @@ def test_the_pipeline_gets_the_lake_policy_from_the_data_stack(
     assert str(role["Properties"]["ManagedPolicyArns"]).count(
         f"pitadvisor-pipeline-lake-{ENV_NAME}"
     )
+    writes = [
+        statement
+        for statement in policy["Properties"]["PolicyDocument"]["Statement"]
+        if "s3:PutObject" in actions_of(statement)
+    ]
+    # the fastf1 cache is written by the pipeline and by nothing else
+    assert any("cache/*" in str(statement["Resource"]) for statement in writes)
 
 
 def test_a_laptop_can_push_the_image_and_start_the_pipeline(transform_template: Template) -> None:
