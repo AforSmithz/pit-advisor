@@ -244,6 +244,9 @@ def ingest(
     season: Annotated[int, typer.Option(help="Championship year.")] = 2024,
     round_: Annotated[int | None, typer.Option("--round", help="One event only.")] = None,
     session: Annotated[SessionKind | None, typer.Option(help="Session, fastf1 only.")] = None,
+    with_laps: Annotated[
+        bool, typer.Option("--with-laps", help="Include per-lap timings, jolpica only.")
+    ] = False,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Print the plan, fetch nothing.")
     ] = False,
@@ -270,10 +273,13 @@ def ingest(
     if source is Source.JOLPICA:
         limiter = RateLimiter(bucket_for("jolpica"))
         client = jolpica.JolpicaClient(RawStore(store), ledger, limiter, run_id)
+        resources = _resources(with_laps)
         if round_ is None:
-            outcomes = jolpica.backfill(client, store, season)
+            outcomes = jolpica.backfill(client, store, season, resources)
         else:
-            outcomes = jolpica.ingest_event(client, store, EventKey(season=season, round=round_))
+            outcomes = jolpica.ingest_event(
+                client, store, EventKey(season=season, round=round_), resources
+            )
     elif source is Source.OPEN_METEO:
         limiter = RateLimiter(bucket_for("open_meteo"))
         outcomes = _ingest_weather(store, ledger, limiter, run_id, season, round_)
@@ -285,6 +291,13 @@ def ingest(
     else:
         raise typer.BadParameter(f"{source} has no ingest path yet")
     _render_outcomes(outcomes)
+
+
+def _resources(with_laps: bool) -> tuple[str, ...]:
+    """Laps are four times the requests of everything else, so they are opt in."""
+    if with_laps:
+        return jolpica.RESOURCES
+    return tuple(name for name in jolpica.RESOURCES if name != "laps")
 
 
 def _known_rounds(local: bool, settings: Settings, season: int) -> list[Circuit]:
@@ -334,9 +347,7 @@ def backfill(
     store, ledger, bucket_for = _runtime(local, settings)
     limiter = RateLimiter(bucket_for("jolpica"))
     client = jolpica.JolpicaClient(RawStore(store), ledger, limiter, _run_id())
-    resources = (
-        jolpica.RESOURCES if with_laps else tuple(r for r in jolpica.RESOURCES if r != "laps")
-    )
+    resources = _resources(with_laps)
     done: list[IngestOutcome] = []
     for season in range(from_, to + 1):
         try:

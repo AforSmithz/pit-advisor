@@ -52,7 +52,18 @@ def dbt(tmp_path, lake, *args):
 def test_a_weekend_goes_from_upstream_json_to_a_gold_mart(lake, tmp_path):
     runner = CliRunner()
     ingested = runner.invoke(
-        cli.app, ["ingest", "--source", "jolpica", "--season", "2024", "--round", "5", "--local"]
+        cli.app,
+        [
+            "ingest",
+            "--source",
+            "jolpica",
+            "--season",
+            "2024",
+            "--round",
+            "5",
+            "--with-laps",
+            "--local",
+        ],
     )
     assert ingested.exit_code == 0, ingested.stdout
     weather = runner.invoke(
@@ -89,7 +100,18 @@ def test_a_weekend_goes_from_upstream_json_to_a_gold_mart(lake, tmp_path):
 def test_an_amended_result_replaces_the_old_row(lake, tmp_path):
     runner = CliRunner()
     runner.invoke(
-        cli.app, ["ingest", "--source", "jolpica", "--season", "2024", "--round", "5", "--local"]
+        cli.app,
+        [
+            "ingest",
+            "--source",
+            "jolpica",
+            "--season",
+            "2024",
+            "--round",
+            "5",
+            "--with-laps",
+            "--local",
+        ],
     )
     runner.invoke(
         cli.app, ["ingest", "--source", "open_meteo", "--season", "2024", "--round", "5", "--local"]
@@ -98,7 +120,18 @@ def test_an_amended_result_replaces_the_old_row(lake, tmp_path):
 
     # the same event lands again, as it does when a penalty is applied after the race
     runner.invoke(
-        cli.app, ["ingest", "--source", "jolpica", "--season", "2024", "--round", "5", "--local"]
+        cli.app,
+        [
+            "ingest",
+            "--source",
+            "jolpica",
+            "--season",
+            "2024",
+            "--round",
+            "5",
+            "--with-laps",
+            "--local",
+        ],
     )
     rebuilt = dbt(tmp_path, lake, "run")
     assert rebuilt.returncode == 0, rebuilt.stdout

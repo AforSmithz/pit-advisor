@@ -513,3 +513,29 @@ def test_catalog_sync_check_reports_drift_without_writing(aws, settings):
         aws.stub("glue").add_client_error("get_table", "EntityNotFoundException")
     result = CliRunner().invoke(cli.app, ["catalog-sync", "--check"])
     assert result.exit_code == 1
+
+
+def test_ingest_leaves_the_lap_times_alone_by_default(lake, offline):
+    CliRunner().invoke(
+        cli.app, ["ingest", "--source", "jolpica", "--season", "2024", "--round", "5", "--local"]
+    )
+    assert not any("/laps.json" in url for url in offline.calls)
+    assert any("/results.json" in url for url in offline.calls)
+
+
+def test_ingest_asks_for_laps_when_told_to(lake, offline):
+    CliRunner().invoke(
+        cli.app,
+        [
+            "ingest",
+            "--source",
+            "jolpica",
+            "--season",
+            "2024",
+            "--round",
+            "5",
+            "--with-laps",
+            "--local",
+        ],
+    )
+    assert any("/laps.json" in url for url in offline.calls)
