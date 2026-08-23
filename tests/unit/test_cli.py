@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from importlib.metadata import version as package_version
 
 import boto3.session
@@ -13,6 +14,13 @@ from pitadvisor.config import Settings
 from pitadvisor.quality import catalog
 
 REGION = "ap-southeast-1"
+
+# rich styles --flags mid-token, so the raw stream has escapes inside the option name
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def plain(text: str) -> str:
+    return ANSI.sub("", text)
 
 
 class FakeSession:
@@ -383,7 +391,7 @@ def test_weather_needs_the_schedule_first(lake, offline):
         cli.app, ["ingest", "--source", "open_meteo", "--season", "2024", "--local"]
     )
     assert result.exit_code != 0
-    assert "ingest jolpica races first" in result.stderr
+    assert "ingest jolpica races first" in plain(result.stderr)
 
 
 def test_weather_follows_the_schedule(lake, offline):
@@ -403,7 +411,7 @@ def test_fastf1_needs_a_session(lake, offline):
         cli.app, ["ingest", "--source", "fastf1", "--season", "2024", "--round", "5", "--local"]
     )
     assert result.exit_code != 0
-    assert "--round and --session" in result.stderr
+    assert "--round and --session" in plain(result.stderr)
 
 
 def test_backfill_resumes_without_refetching(lake, offline):
@@ -454,7 +462,7 @@ def test_emit_views_writes_the_pipeline_view(lake, offline):
 def test_emit_views_rejects_an_unknown_view(lake, offline):
     result = CliRunner().invoke(cli.app, ["emit-views", "--views", "weekend", "--local"])
     assert result.exit_code != 0
-    assert "no emitter yet" in result.stderr
+    assert "no emitter yet" in plain(result.stderr)
 
 
 def manifest_at(path, sources=("results", "races")):
@@ -561,7 +569,7 @@ def test_rebuild_replays_bronze_without_asking_upstream(lake, offline):
 def test_rebuild_only_knows_how_to_make_bronze(lake, offline):
     result = CliRunner().invoke(cli.app, ["rebuild", "--layer", "silver", "--local"])
     assert result.exit_code != 0
-    assert "only bronze replays from raw" in result.stderr
+    assert "only bronze replays from raw" in plain(result.stderr)
 
 
 def test_rebuild_says_so_when_raw_is_empty(lake, offline):
