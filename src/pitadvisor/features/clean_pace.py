@@ -10,6 +10,9 @@ OPENING_LAPS = 2
 TRAFFIC_THRESHOLD_MILLIS = 1_500
 REFERENCE_TYRE_AGE = 1
 REFERENCE_LAPS_REMAINING = 0
+# a wet lap is not a slow dry lap, it is a different regime. §5.5 owns wet pace
+WET_COMPOUNDS = frozenset({"INTERMEDIATE", "WET"})
+MIN_CLEAN_LAPS = 5
 
 COLUMNS = (
     "season",
@@ -32,6 +35,8 @@ COLUMNS = (
 
 class Reason(StrEnum):
     NO_LAP_TIME = "no_lap_time"
+    WET_COMPOUND = "wet_compound"
+    NO_COMPOUND = "no_compound"
     DELETED = "deleted"
     OUT_LAP = "out_lap"
     IN_LAP = "in_lap"
@@ -93,6 +98,10 @@ def classify(
     return framed.with_columns(
         pl.when(pl.col("lap_time_millis").is_null())
         .then(pl.lit(Reason.NO_LAP_TIME))
+        .when(pl.col("compound").is_null())
+        .then(pl.lit(Reason.NO_COMPOUND))
+        .when(pl.col("compound").is_in(list(WET_COMPOUNDS)))
+        .then(pl.lit(Reason.WET_COMPOUND))
         .when(pl.col("is_deleted"))
         .then(pl.lit(Reason.DELETED))
         .when(pl.col("pit_out") | (pl.col("lap_in_stint") == 1))
