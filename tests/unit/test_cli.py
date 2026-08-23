@@ -539,3 +539,32 @@ def test_ingest_asks_for_laps_when_told_to(lake, offline):
         ],
     )
     assert any("/laps.json" in url for url in offline.calls)
+
+
+def test_rebuild_replays_bronze_without_asking_upstream(lake, offline):
+    runner = CliRunner()
+    runner.invoke(
+        cli.app, ["ingest", "--source", "jolpica", "--season", "2024", "--round", "5", "--local"]
+    )
+    spent = len(offline.calls)
+    for parquet in (lake / "bronze").rglob("*.parquet"):
+        parquet.unlink()
+
+    result = runner.invoke(cli.app, ["rebuild", "--local"])
+
+    assert result.exit_code == 0, result.stdout
+    assert len(offline.calls) == spent
+    assert (lake / "bronze/table=results/season=2024/round=05/results.parquet").is_file()
+    assert "0 requests" in result.stdout
+
+
+def test_rebuild_only_knows_how_to_make_bronze(lake, offline):
+    result = CliRunner().invoke(cli.app, ["rebuild", "--layer", "silver", "--local"])
+    assert result.exit_code != 0
+    assert "only bronze replays from raw" in result.stderr
+
+
+def test_rebuild_says_so_when_raw_is_empty(lake, offline):
+    result = CliRunner().invoke(cli.app, ["rebuild", "--local"])
+    assert result.exit_code == 0
+    assert "nothing in raw matched" in result.stdout
