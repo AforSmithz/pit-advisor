@@ -67,9 +67,12 @@ image tag="latest":
       -t {{account}}.dkr.ecr.{{AWS_REGION}}.amazonaws.com/pitadvisor-pipeline-dev:{{tag}} .
     # the pipeline overrides the command exactly like this, and an entrypoint that swallows
     # it is a step that exits 0 having done nothing
-    docker run --rm --platform linux/arm64 \
+    # PITADV_AWS_PROFILE is empty for the same reason the task sets it empty: there is no
+    # ~/.aws in the container, so a named profile is a ProfileNotFound at the first api call
+    docker run --rm --platform linux/arm64 -e PITADV_AWS_PROFILE="" \
       {{account}}.dkr.ecr.{{AWS_REGION}}.amazonaws.com/pitadvisor-pipeline-dev:{{tag}} \
-      sh -c "pitadv version && dbt --version > /dev/null"
+      sh -c "pitadv version && dbt --version > /dev/null \
+        && python -c 'from pitadvisor.config import boto_session; boto_session().client(\"s3\")'"
 
 fmt:
     uv run ruff format .
