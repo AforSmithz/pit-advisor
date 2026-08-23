@@ -27,6 +27,7 @@ from pitadvisor.ingest.ratelimit import (
     RateLimiter,
 )
 from pitadvisor.ingest.raw_store import LocalObjectStore, ObjectStore, RawStore, object_store
+from pitadvisor.ingest.rebuild import rebuild_bronze
 from pitadvisor.ingest.weather import Circuit, WeatherClient, event_circuits
 from pitadvisor.ingest.weather import ingest_event as weather_ingest_event
 from pitadvisor.outputs.view_contracts import emit, pipeline_view
@@ -357,6 +358,25 @@ def backfill(
             typer.echo(f"stopped in {season}: {exc}. rerun to resume, raw and bronze are kept")
             raise typer.Exit(0) from exc
     _render_outcomes(done)
+
+
+@app.command(help="Replay raw into bronze with no network at all.")
+def rebuild(
+    layer: Annotated[Layer, typer.Option(help="Which layer to rebuild.")] = Layer.BRONZE,
+    season: Annotated[int | None, typer.Option(help="One season only.")] = None,
+    source: Annotated[Source | None, typer.Option(help="One upstream only.")] = None,
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+) -> None:
+    if layer is not Layer.BRONZE:
+        raise typer.BadParameter(f"only bronze replays from raw, not {layer}")
+    settings = get_settings()
+    store = LocalObjectStore(LOCAL_ROOT) if local else object_store(settings)
+    outcomes = rebuild_bronze(store, _run_id(), season, source)
+    if not outcomes:
+        typer.echo("nothing in raw matched")
+        raise typer.Exit(0)
+    _render_outcomes(outcomes)
+    typer.echo(f"{sum(o.rows for o in outcomes)} rows from {len(outcomes)} partitions, 0 requests")
 
 
 @app.command(name="quality-report", help="Contract, freshness and referential checks over a layer.")
