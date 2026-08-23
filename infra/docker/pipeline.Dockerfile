@@ -19,5 +19,5 @@ COPY transform ./transform
 # dbt only looks for profiles.yml in cwd or ~/.dbt, never in --project-dir
 RUN ln -s transform/profiles.yml profiles.yml
 
-ENTRYPOINT ["sh", "-c"]
-CMD ["pitadv --help"]
+# no entrypoint: the pipeline steps pass their own ["sh", "-c", "<command>"]
+CMD ["pitadv", "--help"]

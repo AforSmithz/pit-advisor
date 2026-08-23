@@ -65,6 +65,11 @@ image tag="latest":
     docker buildx build --platform linux/arm64 --push \
       -f infra/docker/pipeline.Dockerfile \
       -t {{account}}.dkr.ecr.{{AWS_REGION}}.amazonaws.com/pitadvisor-pipeline-dev:{{tag}} .
+    # the pipeline overrides the command exactly like this, and an entrypoint that swallows
+    # it is a step that exits 0 having done nothing
+    docker run --rm --platform linux/arm64 \
+      {{account}}.dkr.ecr.{{AWS_REGION}}.amazonaws.com/pitadvisor-pipeline-dev:{{tag}} \
+      sh -c "pitadv version && dbt --version > /dev/null"
 
 fmt:
     uv run ruff format .
