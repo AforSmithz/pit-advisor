@@ -1,5 +1,5 @@
 # the one image every step of the weekend pipeline runs, built for the arm64 task
-FROM --platform=linux/arm64 python:3.12-slim-bookworm
+FROM python:3.12-slim-bookworm
 
 COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
 
