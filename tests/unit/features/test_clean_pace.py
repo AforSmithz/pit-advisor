@@ -183,3 +183,16 @@ def test_the_gap_is_measured_against_the_car_one_place_ahead():
     )
     gaps = with_gap_ahead(frame).sort("position")["gap_ahead_millis"].to_list()
     assert gaps == [None, 2_000, 3_000]
+
+
+def test_a_race_abandoned_behind_the_safety_car_leaves_no_pace_to_measure():
+    # 2021 spa: three laps behind the sc, half points, and no lap that measures anything
+    frame = laps(
+        *[
+            {"driver_code": code, "lap": lap, "track_status": "1" if lap <= 2 else "4"}
+            for code in ("VER", "RUS")
+            for lap in (1, 2, 3)
+        ]
+    )
+    assert clean(classify(frame)).height == 0
+    assert exclusion_counts(classify(frame)) == {Reason.OPENING_LAPS: 4, Reason.TRACK_NOT_GREEN: 2}
