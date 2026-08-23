@@ -2,7 +2,12 @@
 # pyright: reportUnknownMemberType=false
 from enum import StrEnum
 
+import numpy as np
 import polars as pl
+from pydantic import BaseModel
+from scipy import stats
+
+from pitadvisor.types import SessionKind
 
 OPENING_LAPS = 2
 # a car this close is running in the dirty air of the one ahead, so its lap time is a
@@ -13,6 +18,10 @@ REFERENCE_LAPS_REMAINING = 0
 # a wet lap is not a slow dry lap, it is a different regime. §5.5 owns wet pace
 WET_COMPOUNDS = frozenset({"INTERMEDIATE", "WET"})
 MIN_CLEAN_LAPS = 5
+MIN_DRIVERS = 2
+HUBER_TUNING = 1.345
+# rank is exact here, not a judgement call: a confounded design has a singular value at 1e-15
+RANK_TOLERANCE = 1e-8
 
 COLUMNS = (
     "season",
@@ -73,11 +82,15 @@ def with_gap_ahead(laps: pl.DataFrame) -> pl.DataFrame:
         )
     )
     joined = framed.join(ahead, on=["lap", "position"], how="left")
-    return joined.with_columns(
+    gapped = joined.with_columns(
         pl.when(pl.col("elapsed_is_sound") & pl.col("ahead_elapsed_is_sound"))
         .then(pl.col("elapsed_millis") - pl.col("ahead_elapsed_millis"))
         .otherwise(None)
         .alias("gap_ahead_millis")
+    )
+    # the gap at the line says nothing about the lap just driven, so carry the previous one too
+    return gapped.sort("driver_code", "lap").with_columns(
+        pl.col("gap_ahead_millis").shift(1).over("driver_code").alias("entry_gap_millis")
     )
 
 
@@ -118,7 +131,10 @@ def classify(
         .then(None)
         .when(pl.col("gap_ahead_millis").is_null())
         .then(pl.lit(Reason.GAP_UNKNOWN))
-        .when(pl.col("gap_ahead_millis") < traffic_threshold_millis)
+        .when(
+            (pl.col("gap_ahead_millis") < traffic_threshold_millis)
+            | (pl.col("entry_gap_millis") < traffic_threshold_millis)
+        )
         .then(pl.lit(Reason.TRAFFIC))
         .otherwise(None)
         .alias("exclusion")
@@ -144,3 +160,154 @@ def exclusion_rate(classified: pl.DataFrame) -> float:
     if not classified.height:
         return 0.0
     return int(classified["exclusion"].is_not_null().sum()) / classified.height
+
+
+class UnidentifiableFitError(RuntimeError):
+    def __init__(self, rank: int, params: int) -> None:
+        super().__init__(f"pace design is rank {rank} of {params}, refusing to pseudo-invert")
+
+
+class DriverPace(BaseModel, frozen=True):
+    driver_code: str
+    clean_pace_millis: float
+    standard_error_millis: float
+    interval_low_millis: float
+    interval_high_millis: float
+    clean_laps: int
+    mean_tyre_age: float
+    mean_race_progress: float
+
+
+class SessionPace(BaseModel, frozen=True):
+    season: int
+    round: int
+    session: SessionKind
+    drivers: list[DriverPace]
+    b_tyre_millis: float
+    b_progress_millis: float
+    compound_offsets_millis: dict[str, float]
+    reference_compound: str
+    clean_laps: int
+    total_laps: int
+    exclusions: dict[str, int]
+    exclusion_rate: float
+    condition_number: float
+
+
+def _reference_compound(frame: pl.DataFrame) -> str:
+    counted = frame.group_by("compound").len().sort("len", descending=True)
+    return str(counted["compound"][0])
+
+
+def _weights(residual: np.ndarray) -> np.ndarray:
+    spread = 1.4826 * float(np.median(np.abs(residual - np.median(residual))))
+    if spread <= 0:
+        return np.ones_like(residual)
+    cut = HUBER_TUNING * spread
+    return np.where(np.abs(residual) <= cut, 1.0, cut / np.maximum(np.abs(residual), 1e-9))
+
+
+def _huber(x: np.ndarray, y: np.ndarray, rounds: int = 25) -> tuple[np.ndarray, np.ndarray]:
+    beta = np.linalg.solve(x.T @ x, x.T @ y)
+    weight = np.ones(len(y))
+    for _ in range(rounds):
+        weight = _weights(y - x @ beta)
+        scaled = x * weight[:, None]
+        beta = np.linalg.solve(x.T @ scaled, scaled.T @ y)
+    return beta, weight
+
+
+def fit_session(
+    laps: pl.DataFrame,
+    traffic_threshold_millis: int = TRAFFIC_THRESHOLD_MILLIS,
+    min_clean_laps: int = MIN_CLEAN_LAPS,
+) -> SessionPace | None:
+    classified = classify(laps, traffic_threshold_millis)
+    kept = clean(classified)
+    counts = kept.group_by("driver_code").len()
+    enough = counts.filter(pl.col("len") >= min_clean_laps)["driver_code"].to_list()
+    kept = kept.filter(pl.col("driver_code").is_in(enough))
+    if kept.height < min_clean_laps or len(enough) < MIN_DRIVERS:
+        return None
+
+    drivers = sorted(enough)
+    reference = _reference_compound(kept)
+    others = sorted({str(c) for c in kept["compound"].to_list()} - {reference})
+    tyre = kept["lap_in_stint"].to_numpy().astype(float)
+    progress = kept["laps_remaining"].to_numpy().astype(float)
+    # centred so the intercept sits at the design centroid, where its error is a quarter of
+    # what it is out at the reference state, then shifted back analytically below
+    tyre_mid, progress_mid = float(tyre.mean()), float(progress.mean())
+
+    n = kept.height
+    blocks = [np.zeros((n, len(drivers)))]
+    code = kept["driver_code"].to_list()
+    for row, name in enumerate(code):
+        blocks[0][row, drivers.index(name)] = 1.0
+    blocks.append((tyre - tyre_mid).reshape(-1, 1))
+    blocks.append((progress - progress_mid).reshape(-1, 1))
+    if others:
+        dummies = np.zeros((n, len(others)))
+        for row, name in enumerate(kept["compound"].to_list()):
+            if str(name) in others:
+                dummies[row, others.index(str(name))] = 1.0
+        blocks.append(dummies)
+    x = np.hstack(blocks)
+
+    rank = int(np.linalg.matrix_rank(x, tol=RANK_TOLERANCE))
+    if rank < x.shape[1]:
+        raise UnidentifiableFitError(rank, x.shape[1])
+
+    y = kept["lap_time_millis"].to_numpy().astype(float)
+    beta, weight = _huber(x, y)
+    residual = y - x @ beta
+    dof = max(n - x.shape[1], 1)
+    sigma2 = float(weight @ (residual**2)) / dof
+    covariance = sigma2 * np.linalg.inv(x.T @ (x * weight[:, None]))
+    critical = float(stats.t.ppf(0.975, dof))
+
+    b_tyre = float(beta[len(drivers)])
+    b_progress = float(beta[len(drivers) + 1])
+    shift_tyre = REFERENCE_TYRE_AGE - tyre_mid
+    shift_progress = REFERENCE_LAPS_REMAINING - progress_mid
+
+    paced: list[DriverPace] = []
+    for index, name in enumerate(drivers):
+        contrast = np.zeros(x.shape[1])
+        contrast[index] = 1.0
+        contrast[len(drivers)] = shift_tyre
+        contrast[len(drivers) + 1] = shift_progress
+        pace = float(contrast @ beta)
+        error = float(np.sqrt(contrast @ covariance @ contrast))
+        own = kept.filter(pl.col("driver_code") == name)
+        paced.append(
+            DriverPace(
+                driver_code=name,
+                clean_pace_millis=pace,
+                standard_error_millis=error,
+                interval_low_millis=pace - critical * error,
+                interval_high_millis=pace + critical * error,
+                clean_laps=own.height,
+                mean_tyre_age=float(own["lap_in_stint"].to_numpy().astype(float).mean()),
+                mean_race_progress=float(own["laps_remaining"].to_numpy().astype(float).mean()),
+            )
+        )
+
+    first = kept.row(0, named=True)
+    return SessionPace(
+        season=int(first["season"]),
+        round=int(first["round"]),
+        session=SessionKind(first["session"]),
+        drivers=paced,
+        b_tyre_millis=b_tyre,
+        b_progress_millis=b_progress,
+        compound_offsets_millis={
+            name: float(beta[len(drivers) + 2 + i]) for i, name in enumerate(others)
+        },
+        reference_compound=reference,
+        clean_laps=kept.height,
+        total_laps=classified.height,
+        exclusions=exclusion_counts(classified),
+        exclusion_rate=exclusion_rate(classified),
+        condition_number=float(np.linalg.cond(x)),
+    )
