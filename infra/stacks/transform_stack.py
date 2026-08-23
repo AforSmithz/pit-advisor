@@ -270,8 +270,16 @@ class TransformStack(Stack):
         )
 
         definition = (
-            self._step("IngestJolpica", "pitadv ingest --source jolpica --season $SEASON")
-            .next(self._step("IngestWeather", "pitadv ingest --source open_meteo --season $SEASON"))
+            self._step(
+                "IngestJolpica",
+                "pitadv ingest --source jolpica --season $SEASON --round $ROUND",
+            )
+            .next(
+                self._step(
+                    "IngestWeather",
+                    "pitadv ingest --source open_meteo --season $SEASON --round $ROUND",
+                )
+            )
             .next(
                 self._step(
                     "IngestSession",
@@ -374,6 +382,7 @@ class TransformStack(Stack):
                 iam.PolicyStatement(
                     actions=[
                         "states:StartExecution",
+                        "states:StopExecution",
                         "states:DescribeExecution",
                         "states:GetExecutionHistory",
                         "states:ListExecutions",
