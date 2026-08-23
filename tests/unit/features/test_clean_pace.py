@@ -77,6 +77,9 @@ def test_a_null_track_status_is_not_green():
     ("row", "reason"),
     [
         ({"lap_time_millis": None}, Reason.NO_LAP_TIME),
+        ({"compound": None}, Reason.NO_COMPOUND),
+        ({"compound": "INTERMEDIATE"}, Reason.WET_COMPOUND),
+        ({"compound": "WET"}, Reason.WET_COMPOUND),
         ({"is_deleted": True}, Reason.DELETED),
         ({"lap_in_stint": 1}, Reason.OUT_LAP),
         ({"pit_out": True}, Reason.OUT_LAP),
@@ -196,3 +199,13 @@ def test_a_race_abandoned_behind_the_safety_car_leaves_no_pace_to_measure():
     )
     assert clean(classify(frame)).height == 0
     assert exclusion_counts(classify(frame)) == {Reason.OPENING_LAPS: 4, Reason.TRACK_NOT_GREEN: 2}
+
+
+def test_a_wet_lap_is_not_a_slow_dry_lap():
+    # keeping them in the dry fit puts a 12 s intermediate offset on an additive compound term
+    frame = laps(
+        {"driver_code": "VER", "lap": 10, "compound": "MEDIUM"},
+        {"driver_code": "VER", "lap": 11, "compound": "INTERMEDIATE"},
+    )
+    assert exclusion_counts(classify(frame)) == {Reason.WET_COMPOUND: 1}
+    assert clean(classify(frame))["compound"].to_list() == ["MEDIUM"]
