@@ -10,7 +10,7 @@ with source_rows as (
 
     select * from {{ source('bronze', 'session_laps') }}
     {% if is_incremental() %}
-    where ingested_at > (select max(ingested_at) from {{ this }})
+    {{ newer_than_loaded() }}
     {% endif %}
 
 ),

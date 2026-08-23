@@ -29,3 +29,13 @@ row_number() over (
     order by {{ order_column }} desc
 )
 {% endmacro %}
+
+
+{% macro newer_than_loaded(column='ingested_at') %}
+{#- max() over an empty table is null, and null makes the filter drop every row, so a model
+    whose first build landed nothing would stay empty for good -#}
+where {{ column }} > coalesce(
+    (select max({{ column }}) from {{ this }}),
+    timestamp '1970-01-01 00:00:00'
+)
+{% endmacro %}
