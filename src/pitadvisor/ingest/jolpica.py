@@ -254,7 +254,7 @@ class JolpicaClient:
 
 
 def materialize(
-    client: JolpicaClient,
+    run_id: str,
     store: ObjectStore,
     key: EventKey,
     resource: str,
@@ -262,11 +262,12 @@ def materialize(
     landed: list[str],
     cached_only: bool,
     stamp: dict[str, Any],
+    requests: int | None = None,
 ) -> IngestOutcome:
     records = PARSERS[resource](payloads, stamp)
     model = contracts.TABLES[resource]
     kept, dropped = contracts.validate(resource, model, records)
-    write_quarantine(store, resource, key, client.run_id, dropped)
+    write_quarantine(store, resource, key, run_id, dropped)
     return IngestOutcome(
         source=Source.JOLPICA,
         table=resource,
@@ -276,7 +277,7 @@ def materialize(
         quarantined=len(dropped),
         raw_objects=landed,
         bronze_objects=write_bronze_by_event(store, resource, kept),
-        requests=len(payloads),
+        requests=len(payloads) if requests is None else requests,
         not_modified=cached_only,
     )
 
@@ -304,7 +305,7 @@ def ingest_event(
             continue
         payloads, landed, cached_only = client.pages(key, resource)
         outcomes.append(
-            materialize(client, store, key, resource, payloads, landed, cached_only, stamp)
+            materialize(client.run_id, store, key, resource, payloads, landed, cached_only, stamp)
         )
     return outcomes
 
@@ -326,7 +327,9 @@ def backfill(
     # the schedule is one request and it is what says which rounds exist, so it is never skipped
     payloads, landed, cached_only = client.pages(schedule_key, "races")
     outcomes = [
-        materialize(client, store, schedule_key, "races", payloads, landed, cached_only, stamp)
+        materialize(
+            client.run_id, store, schedule_key, "races", payloads, landed, cached_only, stamp
+        )
     ]
     for round_ in rounds_in(payloads):
         key = EventKey(season=season, round=round_)
