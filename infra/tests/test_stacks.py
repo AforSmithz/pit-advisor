@@ -363,6 +363,13 @@ def test_the_pipeline_builds_bronze_then_silver_then_views(transform_template: T
     assert "dbt build --project-dir transform --target athena" in definition
 
 
+def test_a_step_cannot_overwrite_the_season_and_round(transform_template: Template) -> None:
+    _, machine = only(transform_template, "AWS::StepFunctions::StateMachine")
+    definition = str(machine["Properties"]["DefinitionString"])
+    assert definition.count('"ResultPath":"$.lastTask"') == 8
+    assert "$.season" in definition
+
+
 def test_a_failed_quality_gate_stops_the_pipeline(transform_template: Template) -> None:
     _, machine = only(transform_template, "AWS::StepFunctions::StateMachine")
     definition = str(machine["Properties"]["DefinitionString"])

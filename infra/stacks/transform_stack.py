@@ -446,8 +446,9 @@ class TransformStack(Stack):
                         "BackoffRate": 2,
                     }
                 ],
-                # the task's own output would replace the season and round the next step reads
-                "ResultPath": None,
+                # a null ResultPath would be dropped on the way through jsii, so the task's
+                # output goes to a key of its own rather than over the season and round
+                "ResultPath": "$.lastTask",
                 "TimeoutSeconds": 1800,
             },
         )
