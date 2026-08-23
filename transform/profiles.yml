@@ -7,7 +7,7 @@ pitadvisor:
       schema: main
       threads: 4
 
-    athena:
+    athena: &athena
       type: athena
       s3_staging_dir: "{{ env_var('PITADV_ATHENA_STAGING', 's3://pit-advisor-athena-results-dev-352445792687/athena/') }}"
       s3_data_dir: "{{ env_var('PITADV_SILVER_DIR', 's3://pit-advisor-data-dev-352445792687/silver/') }}"
@@ -17,3 +17,8 @@ pitadvisor:
       work_group: "{{ env_var('PITADV_ATHENA_WORKGROUP', 'pitadvisor') }}"
       aws_profile_name: "{{ env_var('PITADV_AWS_PROFILE', 'pitadvisor') }}"
       threads: 4
+
+    # same target from inside the fargate task, which has a task role and no profile to name
+    athena_task:
+      <<: *athena
+      aws_profile_name: null

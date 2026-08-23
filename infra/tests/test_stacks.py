@@ -360,7 +360,7 @@ def test_the_pipeline_builds_bronze_then_silver_then_views(transform_template: T
     for step in ("IngestJolpica", "QualityGate", "SyncCatalog", "DbtBuild", "CheckLineage"):
         assert step in definition
     assert definition.index("QualityGate") < definition.index("DbtBuild")
-    assert "dbt build --project-dir transform --target athena" in definition
+    assert "dbt build --project-dir transform --target athena_task" in definition
     # a weekend pipeline ingests its own weekend, a season would not fit the quota or the step
     assert "pitadv ingest --source jolpica --season $SEASON --round $ROUND" in definition
 

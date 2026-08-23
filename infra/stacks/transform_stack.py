@@ -258,8 +258,6 @@ class TransformStack(Stack):
                 # ephemeral disk, the lake keeps the warm copy under cache/fastf1/
                 "PITADV_FASTF1_CACHE": "/tmp/fastf1",
                 "PITADV_AWS_REGION": self.region,
-                # the container has a task role, there is no profile to resolve
-                "PITADV_AWS_PROFILE": "",
                 "PITADV_ATHENA_STAGING": f"s3://{results_bucket_name}/athena/",
                 "PITADV_SILVER_DIR": f"s3://{bucket_name}/silver/",
                 "PITADV_GOLD_DIR": f"s3://{bucket_name}/gold/",
@@ -290,7 +288,7 @@ class TransformStack(Stack):
             .next(self._step("SyncCatalog", "pitadv catalog-sync"))
             .next(
                 self._step(
-                    "DbtBuild", "dbt build --project-dir transform --target athena --fail-fast"
+                    "DbtBuild", "dbt build --project-dir transform --target athena_task --fail-fast"
                 )
             )
             .next(self._step("CheckLineage", "pitadv lineage --check"))
