@@ -344,6 +344,12 @@ def test_the_session_step_gets_a_cache_directory(transform_template: Template) -
     assert {"Name": "PITADV_FASTF1_CACHE", "Value": "/tmp/fastf1"} in environment
 
 
+def test_the_task_names_no_aws_profile(transform_template: Template) -> None:
+    _, task = only(transform_template, "AWS::ECS::TaskDefinition")
+    environment = task["Properties"]["ContainerDefinitions"][0]["Environment"]
+    assert {"Name": "PITADV_AWS_PROFILE", "Value": ""} in environment
+
+
 def test_nothing_in_the_transform_stack_runs_a_service(transform_template: Template) -> None:
     assert transform_template.find_resources("AWS::ECS::Service") == {}
 
