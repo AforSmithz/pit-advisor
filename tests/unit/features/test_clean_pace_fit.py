@@ -145,3 +145,40 @@ def test_the_gap_between_two_drivers_does_not_depend_on_the_reference_state(
     assert fit is not None
     paced = {d.driver_code: d.clean_pace_millis for d in fit.drivers}
     assert paced["DDD"] - paced["AAA"] == pytest.approx(DRIVERS["DDD"], abs=60)
+
+
+def test_the_benchmark_is_the_best_three_not_the_single_best():
+    fit = fit_session(session())
+    assert fit is not None
+    fastest = sorted(d.clean_pace_millis for d in fit.drivers)
+    assert fit.benchmark_millis == pytest.approx(float(np.mean(fastest[:3])))
+    assert fit.benchmark_millis > fastest[0]
+
+
+def test_the_cars_quicker_than_the_benchmark_read_negative():
+    fit = fit_session(session())
+    assert fit is not None
+    ordered = sorted(fit.drivers, key=lambda d: d.clean_pace_millis)
+    assert ordered[0].percent_off_benchmark < 0
+    assert ordered[-1].percent_off_benchmark > 0
+    for driver in fit.drivers:
+        expected = 100 * (driver.clean_pace_millis - fit.benchmark_millis) / fit.benchmark_millis
+        assert driver.percent_off_benchmark == pytest.approx(expected)
+
+
+def test_the_benchmark_survives_one_wild_estimate():
+    """The point of trimming: a single bad car must not drag the whole table with it."""
+    frame = session()
+    steady = fit_session(frame)
+    nobbled = fit_session(
+        frame.with_columns(
+            pl.when(pl.col("driver_code") == "AAA")
+            .then(pl.col("lap_time_millis") - 4000)
+            .otherwise(pl.col("lap_time_millis"))
+            .alias("lap_time_millis")
+        )
+    )
+    assert steady is not None
+    assert nobbled is not None
+    moved = abs(nobbled.benchmark_millis - steady.benchmark_millis)
+    assert moved < 4000 / 2
