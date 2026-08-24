@@ -1,12 +1,20 @@
 import json
-from collections.abc import Callable
-from datetime import UTC, datetime
+from collections.abc import Callable, Iterable
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, cast
 
 from pitadvisor.ingest.raw_store import ObjectStore, RawStore, write_bronze, write_quarantine
 from pitadvisor.quality import contracts
-from pitadvisor.types import IngestOutcome, Layer, Provenance, SessionKey, SessionKind, Source
+from pitadvisor.types import (
+    IngestOutcome,
+    Layer,
+    Provenance,
+    SessionKey,
+    SessionKind,
+    Source,
+    bronze_key,
+)
 
 CACHE_PREFIX = f"{Layer.CACHE}/fastf1/"
 
@@ -235,3 +243,59 @@ def ingest_session(
         raw_objects=[landed],
         bronze_objects=[write_bronze(store, "session_laps", key, kept)] if kept else [],
     )
+
+
+def completed_events(season: int, cache_dir: Path, today: date | None = None) -> dict[int, str]:
+    import fastf1  # pyright: ignore[reportMissingImports]
+
+    api: Any = fastf1
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    api.Cache.enable_cache(str(cache_dir))
+    schedule: Any = api.get_event_schedule(season, include_testing=False)
+    return held_events(schedule.to_dict("records"), today or datetime.now(UTC).date())
+
+
+def held_events(events: list[dict[str, Any]], cutoff: date) -> dict[int, str]:
+    """A season in progress still lists the rounds it has not run yet."""
+    held: dict[int, str] = {}
+    for event in events:
+        when = event["EventDate"]
+        if hasattr(when, "date"):
+            when = when.date()
+        if when > cutoff:
+            continue
+        held[int(event["RoundNumber"])] = str(event["EventFormat"])
+    return held
+
+
+def backfill(
+    store: ObjectStore,
+    season: int,
+    cache_dir: Path,
+    run_id: str = "local",
+    kinds: Iterable[SessionKind] = (SessionKind.RACE,),
+    loader: Callable[[int, int, SessionKind, Path], Any] = load_laps,
+    schedule: Callable[[int, Path], dict[int, str]] = completed_events,
+    sync_cache: bool = False,
+    skip_present: bool = True,
+) -> list[IngestOutcome]:
+    wanted = set(kinds)
+    outcomes: list[IngestOutcome] = []
+    for round_, event_format in sorted(schedule(season, cache_dir).items()):
+        for kind in sessions_for(event_format):
+            if kind not in wanted:
+                continue
+            key = SessionKey(season=season, round=round_, session=kind)
+            if skip_present and store.exists(bronze_key("session_laps", key)):
+                outcomes.append(
+                    IngestOutcome(
+                        source=Source.FASTF1,
+                        table="session_laps",
+                        season=season,
+                        round=round_,
+                        skipped="already in bronze",
+                    )
+                )
+                continue
+            outcomes.append(ingest_session(store, key, cache_dir, run_id, loader, sync_cache))
+    return outcomes
