@@ -19,6 +19,9 @@ REFERENCE_LAPS_REMAINING = 0
 WET_COMPOUNDS = frozenset({"INTERMEDIATE", "WET"})
 MIN_CLEAN_LAPS = 5
 MIN_DRIVERS = 2
+# the single fastest estimate is an extreme order statistic: on a race with few clean laps it
+# came back 553 ms low, which is most of the field spread. the mean of the best three is not
+BENCHMARK_TRIM = 3
 HUBER_TUNING = 1.345
 # rank is exact here, not a judgement call: a confounded design has a singular value at 1e-15
 RANK_TOLERANCE = 1e-8
@@ -176,6 +179,8 @@ class DriverPace(BaseModel, frozen=True):
     clean_laps: int
     mean_tyre_age: float
     mean_race_progress: float
+    # negative for the two or three cars quicker than the trimmed benchmark, which is expected
+    percent_off_benchmark: float
 
 
 class SessionPace(BaseModel, frozen=True):
@@ -187,6 +192,7 @@ class SessionPace(BaseModel, frozen=True):
     b_progress_millis: float
     compound_offsets_millis: dict[str, float]
     reference_compound: str
+    benchmark_millis: float
     clean_laps: int
     total_laps: int
     exclusions: dict[str, int]
@@ -271,14 +277,17 @@ def fit_session(
     shift_tyre = REFERENCE_TYRE_AGE - tyre_mid
     shift_progress = REFERENCE_LAPS_REMAINING - progress_mid
 
-    paced: list[DriverPace] = []
+    raw: list[tuple[str, float, float]] = []
     for index, name in enumerate(drivers):
         contrast = np.zeros(x.shape[1])
         contrast[index] = 1.0
         contrast[len(drivers)] = shift_tyre
         contrast[len(drivers) + 1] = shift_progress
-        pace = float(contrast @ beta)
-        error = float(np.sqrt(contrast @ covariance @ contrast))
+        raw.append((name, float(contrast @ beta), float(np.sqrt(contrast @ covariance @ contrast))))
+
+    benchmark = float(np.sort([pace for _, pace, _ in raw])[:BENCHMARK_TRIM].mean())
+    paced: list[DriverPace] = []
+    for name, pace, error in raw:
         own = kept.filter(pl.col("driver_code") == name)
         paced.append(
             DriverPace(
@@ -290,6 +299,7 @@ def fit_session(
                 clean_laps=own.height,
                 mean_tyre_age=float(own["lap_in_stint"].to_numpy().astype(float).mean()),
                 mean_race_progress=float(own["laps_remaining"].to_numpy().astype(float).mean()),
+                percent_off_benchmark=100.0 * (pace - benchmark) / benchmark,
             )
         )
 
@@ -305,6 +315,7 @@ def fit_session(
             name: float(beta[len(drivers) + 2 + i]) for i, name in enumerate(others)
         },
         reference_compound=reference,
+        benchmark_millis=benchmark,
         clean_laps=kept.height,
         total_laps=classified.height,
         exclusions=exclusion_counts(classified),
