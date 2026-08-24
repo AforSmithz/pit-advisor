@@ -1,11 +1,13 @@
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import polars as pl
 import pytest
 
 from pitadvisor.ingest.fastf1_session import (
     UnknownFormatError,
+    backfill,
+    held_events,
     ingest_session,
     millis,
     serialize,
@@ -213,3 +215,63 @@ def test_a_synced_ingest_leaves_the_cache_in_the_lake(store, tmp_path):
 
     ingest_session(store, KEY, cache_dir=cache, run_id="run-1", loader=loader, sync_cache=True)
     assert [item.key for item in store.list("cache/")] == ["cache/fastf1/2024/session.ff1pkl"]
+
+
+def schedule(**formats):
+    return lambda season, cache_dir: {int(r): f for r, f in formats.items()}
+
+
+def test_backfill_pulls_the_race_of_every_round(store):
+    outcomes = backfill(
+        store,
+        2024,
+        cache_dir=None,
+        run_id="run-1",
+        loader=lambda *_: Laps([lap()]),
+        schedule=schedule(**{"1": "conventional", "2": "sprint_qualifying"}),
+    )
+    assert [o.round for o in outcomes] == [1, 2]
+    assert store.exists(
+        "bronze/table=session_laps/season=2024/round=02/session=race/session_laps.parquet"
+    )
+
+
+def test_backfill_asks_the_format_which_sessions_exist(store):
+    outcomes = backfill(
+        store,
+        2024,
+        cache_dir=None,
+        run_id="run-1",
+        kinds=(SessionKind.FP2, SessionKind.SPRINT),
+        loader=lambda *_: Laps([lap()]),
+        schedule=schedule(**{"1": "conventional", "2": "sprint_qualifying"}),
+    )
+    assert [(o.round, o.rows) for o in outcomes] == [(1, 1), (2, 1)]
+    assert store.exists(
+        "bronze/table=session_laps/season=2024/round=01/session=fp2/session_laps.parquet"
+    )
+    assert store.exists(
+        "bronze/table=session_laps/season=2024/round=02/session=sprint/session_laps.parquet"
+    )
+
+
+def test_backfill_resumes_over_what_is_already_in_bronze(store):
+    args = dict(
+        cache_dir=None,
+        run_id="run-1",
+        loader=lambda *_: Laps([lap()]),
+        schedule=schedule(**{"1": "conventional"}),
+    )
+    backfill(store, 2024, **args)
+    again = backfill(store, 2024, **args)
+    assert again[0].skipped == "already in bronze"
+    assert again[0].rows == 0
+
+
+def test_a_season_in_progress_stops_at_the_last_race_held():
+    events = [
+        {"RoundNumber": 1, "EventFormat": "conventional", "EventDate": date(2025, 3, 16)},
+        {"RoundNumber": 2, "EventFormat": "sprint_qualifying", "EventDate": date(2025, 3, 23)},
+        {"RoundNumber": 3, "EventFormat": "conventional", "EventDate": date(2025, 4, 6)},
+    ]
+    assert held_events(events, date(2025, 3, 30)) == {1: "conventional", 2: "sprint_qualifying"}
