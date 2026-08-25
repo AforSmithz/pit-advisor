@@ -356,13 +356,39 @@ def test_nothing_in_the_transform_stack_runs_a_service(transform_template: Templ
 
 def test_every_log_group_expires(transform_template: Template) -> None:
     groups = transform_template.find_resources("AWS::Logs::LogGroup")
-    assert len(groups) == 2
+    assert len(groups) == 3
     assert all(group["Properties"].get("RetentionInDays") for group in groups.values())
 
 
+def machine_definition(template: Template, name: str) -> str:
+    _, machine = only(template, "AWS::StepFunctions::StateMachine", StateMachineName=name)
+    return str(machine["Properties"]["DefinitionString"])
+
+
+def weekend_definition(template: Template) -> str:
+    return machine_definition(template, f"pitadvisor-weekend-{ENV_NAME}")
+
+
+def test_the_backfill_walks_seasons_of_race_sessions(transform_template: Template) -> None:
+    definition = machine_definition(transform_template, f"pitadvisor-backfill-{ENV_NAME}")
+    assert "pitadv backfill --source fastf1 --from $FROM --to $TO --session race" in definition
+    assert '"TimeoutSeconds":21600' in definition
+    # it walks the whole range in one task, so it never sees a season or a round
+    assert "$.season" not in definition
+
+
+def test_the_two_machines_share_one_role(transform_template: Template) -> None:
+    roles = {
+        str(machine["Properties"]["RoleArn"])
+        for machine in transform_template.find_resources(
+            "AWS::StepFunctions::StateMachine"
+        ).values()
+    }
+    assert len(roles) == 1
+
+
 def test_the_pipeline_builds_bronze_then_silver_then_views(transform_template: Template) -> None:
-    _, machine = only(transform_template, "AWS::StepFunctions::StateMachine")
-    definition = str(machine["Properties"]["DefinitionString"])
+    definition = weekend_definition(transform_template)
     for step in ("IngestJolpica", "QualityGate", "SyncCatalog", "DbtBuild", "CheckLineage"):
         assert step in definition
     assert definition.index("QualityGate") < definition.index("DbtBuild")
@@ -372,15 +398,13 @@ def test_the_pipeline_builds_bronze_then_silver_then_views(transform_template: T
 
 
 def test_a_step_cannot_overwrite_the_season_and_round(transform_template: Template) -> None:
-    _, machine = only(transform_template, "AWS::StepFunctions::StateMachine")
-    definition = str(machine["Properties"]["DefinitionString"])
+    definition = weekend_definition(transform_template)
     assert definition.count('"ResultPath":"$.lastTask"') == 8
     assert "$.season" in definition
 
 
 def test_a_failed_quality_gate_stops_the_pipeline(transform_template: Template) -> None:
-    _, machine = only(transform_template, "AWS::StepFunctions::StateMachine")
-    definition = str(machine["Properties"]["DefinitionString"])
+    definition = weekend_definition(transform_template)
     assert "QuarantineHalt" in definition
     assert "QualityGateFailed" in definition
 
