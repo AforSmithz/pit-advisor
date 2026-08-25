@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 from aws_cdk import (
     Acknowledgment,
@@ -317,6 +317,37 @@ class TransformStack(Stack):
             ),
         )
 
+        self.backfill_machine = sfn.StateMachine(
+            self,
+            "SessionBackfill",
+            state_machine_name=f"pitadvisor-backfill-{env_name}",
+            definition_body=sfn.DefinitionBody.from_chainable(
+                self._run(
+                    "BackfillSessions",
+                    "pitadv backfill --source fastf1 --from $FROM --to $TO --session race",
+                    environment=[
+                        {"Name": "FROM", "Value.$": "States.Format('{}', $.from)"},
+                        {"Name": "TO", "Value.$": "States.Format('{}', $.to)"},
+                    ],
+                    # a cold fastf1 cache is the whole point of running this once, and it is slow
+                    timeout_seconds=21600,
+                )
+            ),
+            role=self._pipeline_role(env_name),
+            timeout=Duration.hours(7),
+            tracing_enabled=True,
+            logs=sfn.LogOptions(
+                destination=logs.LogGroup(
+                    self,
+                    "BackfillStateLogs",
+                    log_group_name=f"/pitadvisor/{env_name}/session-backfill",
+                    retention=logs.RetentionDays.ONE_MONTH,
+                    removal_policy=RemovalPolicy.DESTROY,
+                ),
+                level=sfn.LogLevel.ALL,
+            ),
+        )
+
         # off unless asked for: every run costs fargate minutes and jolpica quota
         self.schedule = events.Rule(
             self,
@@ -390,8 +421,11 @@ class TransformStack(Stack):
                     ],
                     resources=[
                         self.state_machine.state_machine_arn,
+                        self.backfill_machine.state_machine_arn,
                         f"arn:aws:states:{self.region}:{self.account}:execution:"
                         f"pitadvisor-weekend-{env_name}:*",
+                        f"arn:aws:states:{self.region}:{self.account}:execution:"
+                        f"pitadvisor-backfill-{env_name}:*",
                     ],
                 ),
             ],
@@ -405,12 +439,31 @@ class TransformStack(Stack):
                 ),
                 reason=EXECUTION_WILDCARD,
             ),
+            Acknowledgment(
+                id=(
+                    "AwsSolutions-IAM5[Resource::arn:aws:states:"
+                    f"{self.region}:{self.account}:execution:pitadvisor-backfill-{env_name}:*]"
+                ),
+                reason=EXECUTION_WILDCARD,
+            ),
         )
 
         CfnOutput(self, "PipelineRepositoryUri", value=self.repository.repository_uri)
         CfnOutput(self, "WeekendPipelineArn", value=self.state_machine.state_machine_arn)
+        CfnOutput(self, "SessionBackfillArn", value=self.backfill_machine.state_machine_arn)
 
-    def _run(self, task_id: str, command: str) -> sfn.CustomState:
+    def _run(
+        self,
+        task_id: str,
+        command: str,
+        environment: list[dict[str, str]] | None = None,
+        timeout_seconds: int = 1800,
+    ) -> sfn.CustomState:
+        # ecs wants strings, the execution input carries numbers
+        carried = environment or [
+            {"Name": "SEASON", "Value.$": "States.Format('{}', $.season)"},
+            {"Name": "ROUND", "Value.$": "States.Format('{}', $.round)"},
+        ]
         return sfn.CustomState(
             self,
             task_id,
@@ -436,9 +489,7 @@ class TransformStack(Stack):
                                 "Name": self.container.container_name,
                                 "Command": ["sh", "-c", command],
                                 "Environment": [
-                                    # ecs wants strings, the execution input carries numbers
-                                    {"Name": "SEASON", "Value.$": "States.Format('{}', $.season)"},
-                                    {"Name": "ROUND", "Value.$": "States.Format('{}', $.round)"},
+                                    *carried,
                                     {"Name": "PITADV_RUN_ID", "Value.$": "$$.Execution.Name"},
                                 ],
                             }
@@ -458,7 +509,7 @@ class TransformStack(Stack):
                 # a null ResultPath would be dropped on the way through jsii, so the task's
                 # output goes to a key of its own rather than over the season and round
                 "ResultPath": "$.lastTask",
-                "TimeoutSeconds": 1800,
+                "TimeoutSeconds": timeout_seconds,
             },
         )
 
@@ -477,11 +528,14 @@ class TransformStack(Stack):
         return sfn.Chain.start(gate)
 
     def _pipeline_role(self, env_name: str) -> iam.Role:
+        existing = getattr(self, "_state_role", None)
+        if existing is not None:
+            return cast(iam.Role, existing)
         role = iam.Role(
             self,
             "PipelineStateRole",
             assumed_by=iam.ServicePrincipal("states.amazonaws.com"),
-            description="runs the weekend pipeline's fargate steps and nothing else",
+            description="runs the pipeline's fargate steps and nothing else",
         )
         # literal arns: an acknowledgment id cannot contain the :: that a pseudo parameter renders
         role.add_to_policy(
@@ -520,4 +574,5 @@ class TransformStack(Stack):
                 ],
             )
         )
+        self._state_role = role
         return role
