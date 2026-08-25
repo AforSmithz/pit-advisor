@@ -16,6 +16,8 @@ COPY src ./src
 RUN uv sync --frozen --no-dev --group transform --extra sessions
 
 COPY transform ./transform
+# the circuit taxonomy only, not data/local: that is the laptop's lake
+COPY data/reference ./data/reference
 # dbt only looks for profiles.yml in cwd or ~/.dbt, never in --project-dir
 RUN ln -s transform/profiles.yml profiles.yml
 
