@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from pitadvisor.config import Settings, boto_session, get_settings
 from pitadvisor.ingest import jolpica
+from pitadvisor.ingest.fastf1_session import backfill as session_backfill
 from pitadvisor.ingest.fastf1_session import ingest_session
 from pitadvisor.ingest.ratelimit import (
     HOURLY_CAPS,
@@ -339,12 +340,22 @@ def _ingest_weather(
 def backfill(
     from_: Annotated[int, typer.Option("--from", help="First season.")],
     to: Annotated[int, typer.Option("--to", help="Last season, inclusive.")],
+    source: Annotated[Source, typer.Option(help="Which upstream to walk.")] = Source.JOLPICA,
     local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
     with_laps: Annotated[
-        bool, typer.Option("--with-laps", help="Include per-lap timings.")
+        bool, typer.Option("--with-laps", help="Include per-lap timings, jolpica only.")
     ] = False,
+    sessions: Annotated[
+        list[SessionKind] | None,
+        typer.Option("--session", help="Session to pull, repeatable, fastf1 only."),
+    ] = None,
 ) -> None:
     settings = get_settings()
+    if source is Source.FASTF1:
+        _backfill_sessions(from_, to, local, settings, sessions)
+        return
+    if source is not Source.JOLPICA:
+        raise typer.BadParameter(f"{source} has no backfill path yet")
     store, ledger, bucket_for = _runtime(local, settings)
     limiter = RateLimiter(bucket_for("jolpica"))
     client = jolpica.JolpicaClient(RawStore(store), ledger, limiter, _run_id())
@@ -358,6 +369,22 @@ def backfill(
             typer.echo(f"stopped in {season}: {exc}. rerun to resume, raw and bronze are kept")
             raise typer.Exit(0) from exc
     _render_outcomes(done)
+
+
+def _backfill_sessions(
+    from_: int, to: int, local: bool, settings: Settings, sessions: list[SessionKind] | None
+) -> None:
+    store, _, _ = _runtime(local, settings)
+    kinds = tuple(sessions) if sessions else (SessionKind.RACE,)
+    run_id = _run_id()
+    for season in range(from_, to + 1):
+        typer.echo(f"season {season}")
+        # a cold fastf1 cache makes this hours long, so each season prints as it lands
+        _render_outcomes(
+            session_backfill(
+                store, season, settings.fastf1_cache, run_id, kinds, sync_cache=not local
+            )
+        )
 
 
 @app.command(help="Replay raw into bronze with no network at all.")
