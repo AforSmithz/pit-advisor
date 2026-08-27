@@ -18,17 +18,18 @@ from pitadvisor.ingest.raw_store import ObjectStore
 from pitadvisor.quality.checks import read_table
 from pitadvisor.types import Layer, SessionKind
 
-PACE_COLUMNS = (
-    "season",
-    "round",
-    "race_date",
-    "circuit_id",
-    "driver_code",
-    "constructor_id",
-    "regime",
-    "is_wet",
-    "value",
-)
+PACE_SCHEMA = {
+    "season": pl.Int64,
+    "round": pl.Int64,
+    "race_date": pl.Date,
+    "circuit_id": pl.String,
+    "driver_code": pl.String,
+    "constructor_id": pl.String,
+    "regime": pl.String,
+    "is_wet": pl.Boolean,
+    "value": pl.Float64,
+}
+PACE_COLUMNS = tuple(PACE_SCHEMA)
 
 
 class NoEventError(RuntimeError):
@@ -165,7 +166,7 @@ def pace_frame(
         for driver in pace.drivers
     ]
     if not rows:
-        return pl.DataFrame(schema={name: pl.String for name in PACE_COLUMNS})
+        return pl.DataFrame(schema=PACE_SCHEMA)
     seats = results.select("season", "round", "driver_code", "constructor_id").drop_nulls()
     return (
         pl.DataFrame(rows)
@@ -247,6 +248,11 @@ def assemble(
 
     paces, skipped = session_paces(store, layer=layer)
     pace = pace_frame(paces, results, events)
+    if not pace.height:
+        raise NoEventError(
+            "no clean pace to stand on: bronze has no fastf1 session_laps, "
+            "run 'pitadv backfill --source fastf1' first"
+        )
     quali = quali_frame(qualifying, events)
     stacked = quali_events(quali.filter(pl.col("race_date") < cutoff), paces)
 

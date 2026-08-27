@@ -642,3 +642,11 @@ def test_emit_views_assembles_once_for_every_event_view(lake, seed_lake, monkeyp
     )
     assert result.exit_code == 0, result.stdout
     assert len(calls) == 1
+
+
+def test_metrics_says_what_is_missing_when_the_lake_has_no_session_laps(lake, offline):
+    result = CliRunner().invoke(cli.app, ["ingest", "--source", "jolpica", "--local"])
+    assert result.exit_code == 0, result.stdout
+    result = CliRunner().invoke(cli.app, ["metrics", "--local"])
+    assert result.exit_code == 1
+    assert "no fastf1 session_laps" in plain(result.stderr)

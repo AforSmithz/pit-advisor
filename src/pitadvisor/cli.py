@@ -437,6 +437,14 @@ def quality_report(
 EVENT_VIEWS = {"weekend": weekend_view, "driver": driver_view, "track": track_view}
 
 
+def _assembled(store: ObjectStore, event: str) -> feature_assemble.Assembled:
+    try:
+        return feature_assemble.assemble(store, _event(store, event), _run_id())
+    except feature_assemble.NoEventError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
+
 def _event(store: ObjectStore, event: str) -> feature_assemble.EventContext:
     if event == "next":
         return feature_assemble.next_event(store)
@@ -467,7 +475,7 @@ def emit_views(
     if not needed:
         return
     # every event view comes off one assembly, which is the expensive part
-    assembled = feature_assemble.assemble(store, _event(store, event), _run_id())
+    assembled = _assembled(store, event)
     for name in needed:
         typer.echo(emit(store, EVENT_VIEWS[name](assembled)))
 
@@ -482,7 +490,7 @@ def metrics(
     as_json: Annotated[bool, typer.Option("--json", help="Emit the metrics as JSON.")] = False,
 ) -> None:
     store, _, _ = _runtime(local, get_settings())
-    assembled = feature_assemble.assemble(store, _event(store, event), _run_id())
+    assembled = _assembled(store, event)
     if as_json:
         typer.echo(assembled.metrics.model_dump_json(indent=2))
         return
