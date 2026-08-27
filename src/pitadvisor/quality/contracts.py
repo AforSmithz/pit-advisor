@@ -49,6 +49,8 @@ class RaceRow(BronzeRow):
 
 class ResultRow(BronzeRow):
     driver_id: str
+    # the only bridge to fastf1, which knows a driver by his three letters and nothing else
+    driver_code: str | None = None
     constructor_id: str
     car_number: int | None = None
     grid: int = Field(ge=0, le=30)
@@ -64,6 +66,7 @@ class ResultRow(BronzeRow):
 
 class QualifyingRow(BronzeRow):
     driver_id: str
+    driver_code: str | None = None
     constructor_id: str
     position: int = Field(ge=1, le=30)
     q1_millis: int | None = Field(default=None, ge=0)
