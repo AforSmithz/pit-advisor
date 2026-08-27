@@ -3,6 +3,7 @@ import pytest
 
 from pitadvisor.features.clean_pace import (
     Reason,
+    Regime,
     classify,
     clean,
     exclusion_counts,
@@ -78,8 +79,8 @@ def test_a_null_track_status_is_not_green():
     [
         ({"lap_time_millis": None}, Reason.NO_LAP_TIME),
         ({"compound": None}, Reason.NO_COMPOUND),
-        ({"compound": "INTERMEDIATE"}, Reason.WET_COMPOUND),
-        ({"compound": "WET"}, Reason.WET_COMPOUND),
+        ({"compound": "INTERMEDIATE"}, Reason.OFF_REGIME),
+        ({"compound": "WET"}, Reason.OFF_REGIME),
         ({"is_deleted": True}, Reason.DELETED),
         ({"lap_in_stint": 1}, Reason.OUT_LAP),
         ({"pit_out": True}, Reason.OUT_LAP),
@@ -207,5 +208,20 @@ def test_a_wet_lap_is_not_a_slow_dry_lap():
         {"driver_code": "VER", "lap": 10, "compound": "MEDIUM"},
         {"driver_code": "VER", "lap": 11, "compound": "INTERMEDIATE"},
     )
-    assert exclusion_counts(classify(frame)) == {Reason.WET_COMPOUND: 1}
+    assert exclusion_counts(classify(frame)) == {Reason.OFF_REGIME: 1}
     assert clean(classify(frame))["compound"].to_list() == ["MEDIUM"]
+
+
+def test_the_wet_regime_keeps_the_laps_the_dry_one_throws_away():
+    frame = laps(
+        *[{"driver_code": "AAA", "lap": lap, "compound": "INTERMEDIATE"} for lap in range(3, 12)],
+        *[{"driver_code": "BBB", "lap": lap, "compound": "MEDIUM"} for lap in range(3, 12)],
+    )
+    assert exclusion_counts(classify(frame, regime=Regime.DRY))[Reason.OFF_REGIME] == 9
+    assert exclusion_counts(classify(frame, regime=Regime.WET))[Reason.OFF_REGIME] == 9
+
+
+def test_a_compound_fastf1_could_not_name_is_in_neither_regime():
+    frame = laps({"compound": "UNKNOWN"})
+    for regime in (Regime.DRY, Regime.WET):
+        assert exclusion_counts(classify(frame, regime=regime)) == {Reason.OFF_REGIME: 1}

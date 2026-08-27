@@ -15,8 +15,11 @@ OPENING_LAPS = 2
 TRAFFIC_THRESHOLD_MILLIS = 1_500
 REFERENCE_TYRE_AGE = 1
 REFERENCE_LAPS_REMAINING = 0
-# a wet lap is not a slow dry lap, it is a different regime. §5.5 owns wet pace
-WET_COMPOUNDS = frozenset({"INTERMEDIATE", "WET"})
+# a wet lap is not a slow dry lap, it is a different regime, so each is fitted on its own
+# and the two are compared in features/weather.py rather than mixed here. anything fastf1
+# could not name is in neither set and is dropped from both
+SLICKS = frozenset({"SOFT", "MEDIUM", "HARD"})
+WETS = frozenset({"INTERMEDIATE", "WET"})
 MIN_CLEAN_LAPS = 5
 MIN_DRIVERS = 2
 # the single fastest estimate is an extreme order statistic: on a race with few clean laps it
@@ -45,9 +48,17 @@ COLUMNS = (
 )
 
 
+class Regime(StrEnum):
+    DRY = "dry"
+    WET = "wet"
+
+
+COMPOUNDS = {Regime.DRY: SLICKS, Regime.WET: WETS}
+
+
 class Reason(StrEnum):
     NO_LAP_TIME = "no_lap_time"
-    WET_COMPOUND = "wet_compound"
+    OFF_REGIME = "off_regime"
     NO_COMPOUND = "no_compound"
     DELETED = "deleted"
     OUT_LAP = "out_lap"
@@ -106,7 +117,9 @@ def with_laps_remaining(laps: pl.DataFrame) -> pl.DataFrame:
 
 
 def classify(
-    laps: pl.DataFrame, traffic_threshold_millis: int = TRAFFIC_THRESHOLD_MILLIS
+    laps: pl.DataFrame,
+    traffic_threshold_millis: int = TRAFFIC_THRESHOLD_MILLIS,
+    regime: Regime = Regime.DRY,
 ) -> pl.DataFrame:
     """One reason per lap, first match wins, so the counts add up to the laps we started with."""
     framed = with_laps_remaining(with_gap_ahead(laps))
@@ -116,8 +129,8 @@ def classify(
         .then(pl.lit(Reason.NO_LAP_TIME))
         .when(pl.col("compound").is_null())
         .then(pl.lit(Reason.NO_COMPOUND))
-        .when(pl.col("compound").is_in(list(WET_COMPOUNDS)))
-        .then(pl.lit(Reason.WET_COMPOUND))
+        .when(~pl.col("compound").is_in(list(COMPOUNDS[regime])))
+        .then(pl.lit(Reason.OFF_REGIME))
         .when(pl.col("is_deleted"))
         .then(pl.lit(Reason.DELETED))
         .when(pl.col("pit_out") | (pl.col("lap_in_stint") == 1))
@@ -187,6 +200,7 @@ class SessionPace(BaseModel, frozen=True):
     season: int
     round: int
     session: SessionKind
+    regime: Regime
     drivers: list[DriverPace]
     b_tyre_millis: float
     b_progress_millis: float
@@ -227,8 +241,9 @@ def fit_session(
     laps: pl.DataFrame,
     traffic_threshold_millis: int = TRAFFIC_THRESHOLD_MILLIS,
     min_clean_laps: int = MIN_CLEAN_LAPS,
+    regime: Regime = Regime.DRY,
 ) -> SessionPace | None:
-    classified = classify(laps, traffic_threshold_millis)
+    classified = classify(laps, traffic_threshold_millis, regime)
     kept = clean(classified)
     counts = kept.group_by("driver_code").len()
     enough = counts.filter(pl.col("len") >= min_clean_laps)["driver_code"].to_list()
@@ -308,6 +323,7 @@ def fit_session(
         season=int(first["season"]),
         round=int(first["round"]),
         session=SessionKind(first["session"]),
+        regime=regime,
         drivers=paced,
         b_tyre_millis=b_tyre,
         b_progress_millis=b_progress,

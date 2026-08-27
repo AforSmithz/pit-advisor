@@ -4,7 +4,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from pitadvisor.features.clean_pace import DriverPace, SessionPace
+from pitadvisor.features.clean_pace import DriverPace, Regime, SessionPace
 from pitadvisor.features.quali_race import (
     NoQualifyingLapError,
     Segment,
@@ -123,6 +123,7 @@ def session_pace(percent: dict[str, float]) -> SessionPace:
         season=2024,
         round=5,
         session=SessionKind.RACE,
+        regime=Regime.DRY,
         drivers=[
             DriverPace(
                 driver_code=code,
