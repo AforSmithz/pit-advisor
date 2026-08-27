@@ -46,7 +46,9 @@ packages = ["src/pitadvisor"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --strict-markers"
+# the test tree mirrors the source tree, so two test_weather.py exist and rootdir-relative
+# module names are the only thing that keeps them apart
+addopts = "-q --strict-markers --import-mode=importlib"
 
 [tool.uv]
 default-groups = ["dev", "transform"]
