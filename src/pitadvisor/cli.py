@@ -12,6 +12,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import BaseModel
 
 from pitadvisor.config import Settings, boto_session, get_settings
+from pitadvisor.features import assemble as feature_assemble
 from pitadvisor.ingest import jolpica
 from pitadvisor.ingest.fastf1_session import backfill as session_backfill
 from pitadvisor.ingest.fastf1_session import ingest_session
@@ -31,7 +32,13 @@ from pitadvisor.ingest.raw_store import LocalObjectStore, ObjectStore, RawStore,
 from pitadvisor.ingest.rebuild import rebuild_bronze
 from pitadvisor.ingest.weather import Circuit, WeatherClient, event_circuits
 from pitadvisor.ingest.weather import ingest_event as weather_ingest_event
-from pitadvisor.outputs.view_contracts import emit, pipeline_view
+from pitadvisor.outputs.view_contracts import (
+    driver_view,
+    emit,
+    pipeline_view,
+    track_view,
+    weekend_view,
+)
 from pitadvisor.quality import catalog, checks, lineage
 from pitadvisor.types import EventKey, IngestOutcome, Layer, SessionKey, SessionKind, Source
 
@@ -427,21 +434,105 @@ def quality_report(
         raise typer.Exit(1)
 
 
+EVENT_VIEWS = {"weekend": weekend_view, "driver": driver_view, "track": track_view}
+
+
+def _event(store: ObjectStore, event: str) -> feature_assemble.EventContext:
+    if event == "next":
+        return feature_assemble.next_event(store)
+    try:
+        season, round_ = (int(part) for part in event.split(":", 1))
+    except ValueError as exc:
+        raise typer.BadParameter("--event takes 'next' or 'season:round'") from exc
+    return feature_assemble.event_at(store, season, round_)
+
+
 @app.command(name="emit-views", help="Write the versioned view artifacts the dashboard reads.")
 def emit_views(
     views: Annotated[str, typer.Option(help="Comma separated view names.")] = "pipeline",
+    event: Annotated[str, typer.Option(help="'next' or 'season:round'.")] = "next",
     local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
 ) -> None:
     settings = get_settings()
     store, _, bucket_for = _runtime(local, settings)
-    wanted = {name.strip() for name in views.split(",") if name.strip()}
-    unknown = wanted - {"pipeline"}
+    wanted = [name.strip() for name in views.split(",") if name.strip()]
+    unknown = set(wanted) - {"pipeline"} - set(EVENT_VIEWS)
     if unknown:
         raise typer.BadParameter(f"no emitter yet for {', '.join(sorted(unknown))}")
-    report = checks.report(store, Layer.BRONZE)
-    quota = [bucket_for(name).state() for name in HOURLY_CAPS]
-    view = pipeline_view(report, _run_id(), quota)
-    typer.echo(emit(store, view))
+    if "pipeline" in wanted:
+        report = checks.report(store, Layer.BRONZE)
+        quota = [bucket_for(name).state() for name in HOURLY_CAPS]
+        typer.echo(emit(store, pipeline_view(report, _run_id(), quota)))
+    needed = [name for name in wanted if name in EVENT_VIEWS]
+    if not needed:
+        return
+    # every event view comes off one assembly, which is the expensive part
+    assembled = feature_assemble.assemble(store, _event(store, event), _run_id())
+    for name in needed:
+        typer.echo(emit(store, EVENT_VIEWS[name](assembled)))
+
+
+@app.command(help="Fit the feature stack for one event and print what it stands on.")
+def metrics(
+    event: Annotated[str, typer.Option(help="'next' or 'season:round'.")] = "next",
+    explain: Annotated[
+        bool, typer.Option("--explain", help="Print the exclusion reason counts.")
+    ] = False,
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+    as_json: Annotated[bool, typer.Option("--json", help="Emit the metrics as JSON.")] = False,
+) -> None:
+    store, _, _ = _runtime(local, get_settings())
+    assembled = feature_assemble.assemble(store, _event(store, event), _run_id())
+    if as_json:
+        typer.echo(assembled.metrics.model_dump_json(indent=2))
+        return
+    _render_metrics(assembled.metrics, explain)
+
+
+def _render_metrics(metrics: feature_assemble.EventMetrics, explain: bool) -> None:
+    context, coverage = metrics.context, metrics.coverage
+    typer.echo(f"{context.season} r{context.round:02d}  {context.race_name}  {context.circuit_id}")
+    typer.echo(f"as of {metrics.as_of}, run {metrics.run_id}")
+    typer.echo(
+        f"pace       {coverage.sessions_fitted} fits "
+        f"({coverage.dry_sessions} dry, {coverage.wet_sessions} wet), "
+        f"{coverage.sessions_skipped} skipped, "
+        f"{coverage.clean_laps} of {coverage.total_laps} laps clean"
+    )
+    typer.echo(
+        f"form       {len(metrics.form.drivers)} drivers over {metrics.form.events_used} events, "
+        f"{metrics.form.components} components, {metrics.form.flagged_pairs} pairs flagged"
+    )
+    typer.echo(
+        f"quali      {len(metrics.quali.drivers)} drivers over {metrics.quali.events_used} events"
+    )
+    typer.echo(
+        f"track      {len(metrics.track.regression)} teams, "
+        f"{len(metrics.track.disagreements)} disagreements, "
+        f"nearest {', '.join(item.circuit_id for item in metrics.track.neighbours[1:4])}"
+    )
+    if metrics.weather:
+        weights = metrics.weather
+        typer.echo(
+            f"weather    dry {weights.dry:.2f} mixed {weights.mixed:.2f} wet {weights.wet:.2f}, "
+            f"snapshot {weights.snapshot_at:%Y-%m-%d %H:%M}"
+        )
+    else:
+        typer.echo("weather    no forecast covers the session window")
+    typer.echo(
+        f"wet pace   {len(metrics.wet.drivers)} drivers rated over "
+        f"{metrics.wet.wet_sessions} wet sessions"
+    )
+    typer.echo(
+        f"dnf        {len(metrics.reliability.teams)} team hazards, "
+        f"cause coverage {metrics.reliability.cause_coverage:.0%}"
+    )
+    if not explain:
+        return
+    typer.echo(f"\nexclusions ({coverage.exclusion_rate:.0%} of laps)")
+    for reason, count in coverage.exclusions.items():
+        share = count / coverage.total_laps if coverage.total_laps else 0.0
+        typer.echo(f"  {reason:<18} {count:>7}  {share:>6.1%}")
 
 
 @app.command(name="catalog-sync", help="Point the Glue catalog at the bronze tables.")

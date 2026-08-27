@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 
 from pitadvisor import cli
 from pitadvisor.config import Settings
+from pitadvisor.ingest.raw_store import LocalObjectStore
 from pitadvisor.quality import catalog
 
 REGION = "ap-southeast-1"
@@ -460,7 +461,7 @@ def test_emit_views_writes_the_pipeline_view(lake, offline):
 
 
 def test_emit_views_rejects_an_unknown_view(lake, offline):
-    result = CliRunner().invoke(cli.app, ["emit-views", "--views", "weekend", "--local"])
+    result = CliRunner().invoke(cli.app, ["emit-views", "--views", "forecast", "--local"])
     assert result.exit_code != 0
     assert "no emitter yet" in plain(result.stderr)
 
@@ -576,3 +577,68 @@ def test_rebuild_says_so_when_raw_is_empty(lake, offline):
     result = CliRunner().invoke(cli.app, ["rebuild", "--local"])
     assert result.exit_code == 0
     assert "nothing in raw matched" in result.stdout
+
+
+def seeded_local(lake, seed_lake, **kwargs):
+    return seed_lake(LocalObjectStore(lake), **kwargs)
+
+
+def test_metrics_reports_what_the_fit_stands_on(lake, seed_lake):
+    seeded_local(lake, seed_lake)
+    result = CliRunner().invoke(cli.app, ["metrics", "--event", "2024:6", "--local"])
+    assert result.exit_code == 0, result.stdout
+    assert "suzuka" in result.stdout
+    assert "form" in result.stdout
+    assert "dnf" in result.stdout
+
+
+def test_metrics_explain_prints_the_exclusion_reasons(lake, seed_lake):
+    seeded_local(lake, seed_lake)
+    result = CliRunner().invoke(cli.app, ["metrics", "--event", "2024:6", "--explain", "--local"])
+    assert result.exit_code == 0, result.stdout
+    assert "exclusions" in result.stdout
+    assert "opening_laps" in result.stdout
+
+
+def test_metrics_without_explain_keeps_the_reasons_out(lake, seed_lake):
+    seeded_local(lake, seed_lake)
+    result = CliRunner().invoke(cli.app, ["metrics", "--event", "2024:6", "--local"])
+    assert "opening_laps" not in result.stdout
+
+
+def test_metrics_rejects_an_event_it_cannot_parse(lake, seed_lake):
+    seeded_local(lake, seed_lake)
+    result = CliRunner().invoke(cli.app, ["metrics", "--event", "suzuka", "--local"])
+    assert result.exit_code != 0
+    assert "season:round" in plain(result.stderr)
+
+
+def test_emit_views_writes_the_three_event_views(lake, seed_lake):
+    seeded_local(lake, seed_lake)
+    result = CliRunner().invoke(
+        cli.app,
+        ["emit-views", "--views", "weekend,driver,track", "--event", "2024:6", "--local"],
+    )
+    assert result.exit_code == 0, result.stdout
+    for name in ("weekend", "driver", "track"):
+        payload = json.loads((lake / f"views/{name}_view.json").read_text())
+        assert payload["view"] == f"{name}_view"
+        assert payload["event"]["circuit_id"] == "suzuka"
+
+
+def test_emit_views_assembles_once_for_every_event_view(lake, seed_lake, monkeypatch):
+    seeded_local(lake, seed_lake)
+    calls = []
+    original = cli.feature_assemble.assemble
+
+    def counted(*args, **kwargs):
+        calls.append(args)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(cli.feature_assemble, "assemble", counted)
+    result = CliRunner().invoke(
+        cli.app,
+        ["emit-views", "--views", "weekend,driver,track", "--event", "2024:6", "--local"],
+    )
+    assert result.exit_code == 0, result.stdout
+    assert len(calls) == 1
