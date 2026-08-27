@@ -176,3 +176,9 @@ def test_both_estimators_carry_a_race_to_race_spread_beside_their_error():
     fitted = track_fit.fit(frame, "monza", date(2025, 1, 1), profiles, half_life=HALF_LIFE)
     for item in (fitted.regression[0], fitted.similarity[0]):
         assert item.spread > item.standard_error
+
+
+def test_the_taxonomy_is_found_from_anywhere_not_just_the_repo_root(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert track_fit.TAXONOMY.is_absolute()
+    assert len(track_fit.load()) >= 24

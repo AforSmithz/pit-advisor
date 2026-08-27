@@ -9,7 +9,20 @@ import polars as pl
 import yaml
 from pydantic import BaseModel, Field
 
-TAXONOMY = Path("data/reference/circuits.yml")
+RELATIVE = Path("data/reference/circuits.yml")
+
+
+def _taxonomy() -> Path:
+    """The file is hand-maintained at the repo root, not shipped inside the package, so it
+    is found by walking up from here rather than by trusting the working directory."""
+    for parent in Path(__file__).resolve().parents:
+        found = parent / RELATIVE
+        if found.exists():
+            return found
+    return RELATIVE
+
+
+TAXONOMY = _taxonomy()
 DEMANDS = ("downforce", "traction", "braking", "top_speed", "abrasion", "kerbs")
 FEATURES = ("length_km", "corners", "altitude_m", *DEMANDS)
 
