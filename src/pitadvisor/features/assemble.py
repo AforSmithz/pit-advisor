@@ -52,9 +52,14 @@ class Coverage(BaseModel, frozen=True):
     races_in_lake: int
     sessions_fitted: int
     sessions_skipped: int
+    # why a session produced no fit. a race with no dry fit is not the same failure as one
+    # whose design was confounded, and pooling them into a count hides both
+    skips: dict[str, int]
     dry_sessions: int
     wet_sessions: int
     clean_laps: int
+    # laps seen by a fit, so a mixed race that yields both regimes contributes twice. the
+    # exclusion rate is per fit-lap, which is the denominator the reasons are counted over
     total_laps: int
     exclusions: dict[str, int]
     exclusion_rate: float
@@ -127,27 +132,32 @@ def session_paces(
     store: ObjectStore,
     session: SessionKind = SessionKind.RACE,
     layer: Layer = Layer.BRONZE,
-) -> tuple[list[SessionPace], int]:
+) -> tuple[list[SessionPace], dict[str, int]]:
     """Both regimes on every race: a mixed race yields a dry fit and a wet one, and either
     can come back empty without that being a failure."""
     laps = read_table(store, layer, "session_laps")
     if laps is None:
-        return [], 0
+        return [], {}
     wanted = laps.filter(pl.col("session") == str(session))
     found: list[SessionPace] = []
-    skipped = 0
+    skipped: dict[str, int] = {}
     for _, rows in wanted.group_by("season", "round"):
         for regime in (Regime.DRY, Regime.WET):
             try:
                 fitted = fit_session(rows, regime=regime)
             except UnidentifiableFitError:
-                skipped += 1
+                skipped[f"{regime}: confounded design"] = (
+                    skipped.get(f"{regime}: confounded design", 0) + 1
+                )
                 continue
             if fitted is None:
-                skipped += 1
+                skipped[f"{regime}: too few clean laps"] = (
+                    skipped.get(f"{regime}: too few clean laps", 0) + 1
+                )
                 continue
             found.append(fitted)
-    return sorted(found, key=lambda pace: (pace.season, pace.round, pace.regime)), skipped
+    ordered = sorted(found, key=lambda pace: (pace.season, pace.round, pace.regime))
+    return ordered, dict(sorted(skipped.items()))
 
 
 def pace_frame(
@@ -265,7 +275,8 @@ def assemble(
         coverage=Coverage(
             races_in_lake=events.height,
             sessions_fitted=len(paces),
-            sessions_skipped=skipped,
+            sessions_skipped=sum(skipped.values()),
+            skips=skipped,
             dry_sessions=sum(1 for item in paces if item.regime is Regime.DRY),
             wet_sessions=sum(1 for item in paces if item.regime is Regime.WET),
             clean_laps=sum(item.clean_laps for item in paces),

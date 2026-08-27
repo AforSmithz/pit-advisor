@@ -505,8 +505,10 @@ def _render_metrics(metrics: feature_assemble.EventMetrics, explain: bool) -> No
         f"pace       {coverage.sessions_fitted} fits "
         f"({coverage.dry_sessions} dry, {coverage.wet_sessions} wet), "
         f"{coverage.sessions_skipped} skipped, "
-        f"{coverage.clean_laps} of {coverage.total_laps} laps clean"
+        f"{coverage.clean_laps} of {coverage.total_laps} fit-laps clean"
     )
+    for reason, count in coverage.skips.items():
+        typer.echo(f"           {count:>4} skipped, {reason}")
     typer.echo(
         f"form       {len(metrics.form.drivers)} drivers over {metrics.form.events_used} events, "
         f"{metrics.form.components} components, {metrics.form.flagged_pairs} pairs flagged"
@@ -537,7 +539,7 @@ def _render_metrics(metrics: feature_assemble.EventMetrics, explain: bool) -> No
     )
     if not explain:
         return
-    typer.echo(f"\nexclusions ({coverage.exclusion_rate:.0%} of laps)")
+    typer.echo(f"\nexclusions ({coverage.exclusion_rate:.0%} of fit-laps)")
     for reason, count in coverage.exclusions.items():
         share = count / coverage.total_laps if coverage.total_laps else 0.0
         typer.echo(f"  {reason:<18} {count:>7}  {share:>6.1%}")

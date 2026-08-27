@@ -52,7 +52,14 @@ def test_every_race_yields_a_dry_fit_and_a_wet_race_yields_a_wet_one(seeded):
 def test_a_lake_with_no_session_laps_reports_nothing_rather_than_failing(store):
     paces, skipped = session_paces(store)
     assert paces == []
-    assert skipped == 0
+    assert skipped == {}
+
+
+def test_a_dry_race_records_why_its_wet_fit_was_skipped(seeded):
+    built = seeded(wet_rounds=(3,))
+    _, skipped = session_paces(built.store)
+    assert skipped["wet: too few clean laps"] == built.events - len(built.seasons)
+    assert "dry: too few clean laps" in skipped
 
 
 def test_the_whole_stack_assembles_from_bronze(seeded):
@@ -60,6 +67,7 @@ def test_the_whole_stack_assembles_from_bronze(seeded):
     metrics = assembled_for(built).metrics
     assert metrics.context.circuit_id == "suzuka"
     assert metrics.coverage.sessions_fitted == built.events
+    assert sum(metrics.coverage.skips.values()) == metrics.coverage.sessions_skipped
     assert metrics.coverage.drivers_rated == len(built.codes)
     assert len(metrics.form.drivers) == len(built.codes)
     assert metrics.form.components == len(built.teams)
