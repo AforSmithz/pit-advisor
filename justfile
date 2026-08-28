@@ -105,3 +105,15 @@ web-data:
 
 web-check:
     cd web && pnpm install --frozen-lockfile && pnpm lint && pnpm test && pnpm build
+
+# the html is immutable per build, the view json is not, so they get different cache headers
+web-deploy: web-check
+    aws s3 sync web/out/ s3://pit-advisor-web-{{env_var_or_default("PITADV_ENV", "dev")}}-{{account}}/ \
+      --delete --exclude "data/*" --profile {{AWS_PROFILE}} --region {{AWS_REGION}}
+    aws s3 sync web/out/data/ s3://pit-advisor-web-{{env_var_or_default("PITADV_ENV", "dev")}}-{{account}}/data/ \
+      --delete --cache-control "max-age=300" --profile {{AWS_PROFILE}} --region {{AWS_REGION}}
+    aws cloudfront create-invalidation --distribution-id $( \
+      aws cloudformation describe-stacks --stack-name pitadvisor-web-{{env_var_or_default("PITADV_ENV", "dev")}} \
+        --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" --output text \
+        --profile {{AWS_PROFILE}} --region {{AWS_REGION}}) \
+      --paths "/*" --profile {{AWS_PROFILE}} --region {{AWS_REGION}}

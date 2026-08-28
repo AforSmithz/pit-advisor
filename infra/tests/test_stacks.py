@@ -3,7 +3,7 @@ from typing import Any
 import aws_cdk as cdk
 import pytest
 from aws_cdk.assertions import Match, Template
-from stacks import DataStack, IngestStack, ObservabilityStack, TransformStack
+from stacks import DataStack, IngestStack, ObservabilityStack, TransformStack, WebStack
 
 ACCOUNT = "123456789012"
 REGION = "ap-southeast-1"
@@ -12,8 +12,10 @@ DATA_STACK = f"pitadvisor-data-{ENV_NAME}"
 INGEST_STACK = f"pitadvisor-ingest-{ENV_NAME}"
 OBSERVABILITY_STACK = f"pitadvisor-observability-{ENV_NAME}"
 TRANSFORM_STACK = f"pitadvisor-transform-{ENV_NAME}"
+WEB_STACK = f"pitadvisor-web-{ENV_NAME}"
 DATA_BUCKET = f"pit-advisor-data-{ENV_NAME}-{ACCOUNT}"
 RESULTS_BUCKET = f"pit-advisor-athena-results-{ENV_NAME}-{ACCOUNT}"
+SITE_BUCKET = f"pit-advisor-web-{ENV_NAME}-{ACCOUNT}"
 ALERT_EMAIL = "alerts@example.com"
 
 Resource = dict[str, Any]
@@ -21,7 +23,7 @@ Resource = dict[str, Any]
 
 def build(
     alert_email: str | None = None,
-) -> tuple[cdk.App, DataStack, IngestStack, ObservabilityStack, TransformStack]:
+) -> tuple[cdk.App, DataStack, IngestStack, ObservabilityStack, TransformStack, WebStack]:
     app = cdk.App(context={"env": ENV_NAME})
     aws_env = cdk.Environment(account=ACCOUNT, region=REGION)
     data = DataStack(app, DATA_STACK, env_name=ENV_NAME, env=aws_env)
@@ -32,7 +34,14 @@ def build(
     cdk.Tags.of(app).add("project", "pit-advisor")
     cdk.Tags.of(app).add("env", ENV_NAME)
     transform = TransformStack(app, TRANSFORM_STACK, env_name=ENV_NAME, env=aws_env)
-    return app, data, ingest, observability, transform
+    web = WebStack(app, WEB_STACK, env_name=ENV_NAME, env=aws_env)
+    return app, data, ingest, observability, transform, web
+
+
+def sole(template: Template, kind: str) -> Resource:
+    found = template.find_resources(kind)
+    assert len(found) == 1, f"{kind}: {sorted(found)}"
+    return found.popitem()[1]
 
 
 def only(template: Template, kind: str, **props: Any) -> tuple[str, Resource]:
@@ -56,6 +65,11 @@ def ingest_template() -> Template:
 @pytest.fixture
 def transform_template() -> Template:
     return Template.from_stack(build()[4])
+
+
+@pytest.fixture
+def web_template() -> Template:
+    return Template.from_stack(build()[5])
 
 
 @pytest.fixture
@@ -471,3 +485,49 @@ def test_the_image_repository_keeps_five_tags(transform_template: Template) -> N
     _, repository = only(transform_template, "AWS::ECR::Repository")
     assert '"countNumber":5' in repository["Properties"]["LifecyclePolicy"]["LifecyclePolicyText"]
     assert repository["Properties"]["ImageScanningConfiguration"]["ScanOnPush"] is True
+
+
+def test_the_site_bucket_is_private(web_template: Template) -> None:
+    _, bucket = only(web_template, "AWS::S3::Bucket", BucketName=SITE_BUCKET)
+    assert bucket["Properties"]["PublicAccessBlockConfiguration"] == {
+        "BlockPublicAcls": True,
+        "BlockPublicPolicy": True,
+        "IgnorePublicAcls": True,
+        "RestrictPublicBuckets": True,
+    }
+
+
+def test_only_cloudfront_can_read_the_site(web_template: Template) -> None:
+    policies = web_template.find_resources("AWS::S3::BucketPolicy")
+    statements = [
+        statement
+        for policy in policies.values()
+        for statement in policy["Properties"]["PolicyDocument"]["Statement"]
+        if statement["Effect"] == "Allow"
+    ]
+    readers = [
+        statement
+        for statement in statements
+        if statement.get("Principal", {}).get("Service") == "cloudfront.amazonaws.com"
+    ]
+    assert len(readers) == 1
+    assert "AWS:SourceArn" in readers[0]["Condition"]["StringEquals"]
+
+
+def test_the_distribution_redirects_to_https(web_template: Template) -> None:
+    distribution = sole(web_template, "AWS::CloudFront::Distribution")
+    behaviour = distribution["Properties"]["DistributionConfig"]["DefaultCacheBehavior"]
+    assert behaviour["ViewerProtocolPolicy"] == "redirect-to-https"
+    assert behaviour["Compress"] is True
+
+
+def test_a_directory_request_gets_an_index(web_template: Template) -> None:
+    function = sole(web_template, "AWS::CloudFront::Function")
+    assert "index.html" in function["Properties"]["FunctionCode"]
+
+
+def test_the_site_carries_a_content_security_policy(web_template: Template) -> None:
+    policy = sole(web_template, "AWS::CloudFront::ResponseHeadersPolicy")
+    headers = policy["Properties"]["ResponseHeadersPolicyConfig"]["SecurityHeadersConfig"]
+    assert headers["ContentSecurityPolicy"]["ContentSecurityPolicy"].startswith("default-src")
+    assert headers["StrictTransportSecurity"]["AccessControlMaxAgeSec"] == 31536000

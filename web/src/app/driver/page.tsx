@@ -13,7 +13,7 @@ export default async function DriverIndex() {
 
   const rows: Row[] = drivers.map((driver) => ({
     name: driver.driver_code,
-    sub: `${label(driver.constructor_id)} · ${driver.pace.length} rated races`,
+    sub: `${label(driver.constructor_id)} · ${driver.pace.length}`,
     estimate: driver.form,
     missing: driver.form_component === null ? "no shared car lineage" : "no fit",
     href: `/driver/${driver.driver_code}/`,
@@ -34,7 +34,7 @@ export default async function DriverIndex() {
       <div className="mt-10">
         <Plate
           title="Every rated driver"
-          note={`Form is a teammate-normalised effect with a ${view.half_life_events}-event half life. A driver with no shared car lineage has no comparable figure at all.`}
+          note={`Form is a teammate-normalised effect with a ${view.half_life_events}-event half life. The second figure under each code is how many races it was fitted from. A driver with no shared car lineage has no comparable figure at all.`}
           footer={
             <Provenance
               view={view.view}
