@@ -182,3 +182,73 @@ def test_the_benchmark_survives_one_wild_estimate():
     assert nobbled is not None
     moved = abs(nobbled.benchmark_millis - steady.benchmark_millis)
     assert moved < 4000 / 2
+
+
+def one_stint(noise_millis: float = 120.0, seed: int = 3) -> pl.DataFrame:
+    """A race nobody pitted on, which is what a heavily filtered real race looks like once
+    only one stint per driver survives the exclusions."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for position, (code, effect) in enumerate(DRIVERS.items(), start=1):
+        for lap in range(1, TOTAL_LAPS + 1):
+            rows.append(
+                {
+                    "season": 2024,
+                    "round": 5,
+                    "session": "race",
+                    "driver_code": code,
+                    "lap": lap,
+                    "lap_time_millis": int(
+                        BASE
+                        + effect
+                        + B_TYRE * lap
+                        + B_PROGRESS * (TOTAL_LAPS - lap)
+                        + rng.normal(0, noise_millis)
+                    ),
+                    "stint": 1,
+                    "lap_in_stint": lap,
+                    "compound": "MEDIUM",
+                    "is_deleted": False,
+                    "is_accurate": True,
+                    "track_status": "1",
+                    "pit_in": False,
+                    "pit_out": False,
+                    "position": position,
+                }
+            )
+    return pl.DataFrame(rows)
+
+
+def test_a_design_one_column_short_drops_the_progress_slope_instead_of_refusing():
+    fit = fit_session(one_stint())
+    assert fit is not None
+    assert fit.b_progress_millis is None
+    # the two slopes are one column, so what is left is their difference
+    assert fit.b_tyre_millis == pytest.approx(B_TYRE - B_PROGRESS, abs=12)
+
+
+def test_the_driver_gaps_survive_the_absorbed_slope():
+    fit = fit_session(one_stint())
+    assert fit is not None
+    paced = {driver.driver_code: driver.clean_pace_millis for driver in fit.drivers}
+    anchor = paced["AAA"]
+    for code, effect in DRIVERS.items():
+        assert paced[code] - anchor == pytest.approx(effect, abs=60)
+
+
+def test_the_normalisation_is_unmoved_by_the_absorbed_slope():
+    fit = fit_session(one_stint())
+    assert fit is not None
+    ordered = [driver.driver_code for driver in fit.drivers]
+    assert ordered == list(DRIVERS)
+
+
+def test_a_confound_the_progress_slope_cannot_explain_still_refuses():
+    frame = one_stint().with_columns(
+        pl.when(pl.col("driver_code") == "AAA")
+        .then(pl.lit("SOFT"))
+        .otherwise(pl.lit("MEDIUM"))
+        .alias("compound")
+    )
+    with pytest.raises(UnidentifiableFitError):
+        fit_session(frame)

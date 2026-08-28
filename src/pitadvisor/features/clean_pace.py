@@ -203,7 +203,9 @@ class SessionPace(BaseModel, frozen=True):
     regime: Regime
     drivers: list[DriverPace]
     b_tyre_millis: float
-    b_progress_millis: float
+    # None when the design was one column short and the driver intercepts absorbed the race
+    # trend, which happens when every surviving clean lap came from a single stint
+    b_progress_millis: float | None
     compound_offsets_millis: dict[str, float]
     reference_compound: str
     benchmark_millis: float
@@ -275,9 +277,21 @@ def fit_session(
         blocks.append(dummies)
     x = np.hstack(blocks)
 
+    progress_column = len(drivers) + 1
     rank = int(np.linalg.matrix_rank(x, tol=RANK_TOLERANCE))
+    absorbed = False
     if rank < x.shape[1]:
-        raise UnidentifiableFitError(rank, x.shape[1])
+        # on a race where every driver's surviving laps came from one stint, lap_in_stint and
+        # laps_remaining differ by a per-driver constant that the dummies already carry, so the
+        # pair is one column short. degradation is the half worth keeping: the race trend is
+        # common to the field and cancels in the normalisation anyway
+        trimmed = np.delete(x, progress_column, axis=1)
+        if (
+            x.shape[1] - rank != 1
+            or int(np.linalg.matrix_rank(trimmed, tol=RANK_TOLERANCE)) < (trimmed.shape[1])
+        ):
+            raise UnidentifiableFitError(rank, x.shape[1])
+        x, absorbed = trimmed, True
 
     y = kept["lap_time_millis"].to_numpy().astype(float)
     beta, weight = _huber(x, y)
@@ -288,8 +302,11 @@ def fit_session(
     critical = float(stats.t.ppf(0.975, dof))
 
     b_tyre = float(beta[len(drivers)])
-    b_progress = float(beta[len(drivers) + 1])
+    b_progress = None if absorbed else float(beta[progress_column])
     shift_tyre = REFERENCE_TYRE_AGE - tyre_mid
+    # with the slope absorbed there is nothing to shift along, so the estimate stays at the
+    # session's mean race progress. every driver sits at the same point, so the normalisation
+    # is unaffected and only the raw millis are not on the documented reference state
     shift_progress = REFERENCE_LAPS_REMAINING - progress_mid
 
     raw: list[tuple[str, float, float]] = []
@@ -297,7 +314,8 @@ def fit_session(
         contrast = np.zeros(x.shape[1])
         contrast[index] = 1.0
         contrast[len(drivers)] = shift_tyre
-        contrast[len(drivers) + 1] = shift_progress
+        if not absorbed:
+            contrast[progress_column] = shift_progress
         raw.append((name, float(contrast @ beta), float(np.sqrt(contrast @ covariance @ contrast))))
 
     benchmark = float(np.sort([pace for _, pace, _ in raw])[:BENCHMARK_TRIM].mean())
@@ -328,7 +346,8 @@ def fit_session(
         b_tyre_millis=b_tyre,
         b_progress_millis=b_progress,
         compound_offsets_millis={
-            name: float(beta[len(drivers) + 2 + i]) for i, name in enumerate(others)
+            name: float(beta[len(drivers) + (1 if absorbed else 2) + i])
+            for i, name in enumerate(others)
         },
         reference_compound=reference,
         benchmark_millis=benchmark,
