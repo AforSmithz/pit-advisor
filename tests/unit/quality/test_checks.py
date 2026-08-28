@@ -2,19 +2,26 @@ from datetime import UTC, datetime, timedelta
 
 from pitadvisor.ingest.raw_store import write_bronze, write_quarantine
 from pitadvisor.quality.checks import Status, report
-from pitadvisor.quality.contracts import LapRow, PitStopRow, Quarantined, Reason, ResultRow
+from pitadvisor.quality.contracts import (
+    LapRow,
+    PitStopRow,
+    QualifyingRow,
+    Quarantined,
+    Reason,
+    ResultRow,
+)
 from pitadvisor.types import EventKey, Layer
 
 KEY = EventKey(season=2024, round=5)
 NOW = datetime(2024, 5, 6, 12, tzinfo=UTC)
 
 
-def result(driver="norris", ingested_at=NOW):
+def result(driver="norris", ingested_at=NOW, round=5):
     return ResultRow(
         run_id="run-1",
         ingested_at=ingested_at,
         season=2024,
-        round=5,
+        round=round,
         driver_id=driver,
         constructor_id="mclaren",
         grid=3,
@@ -23,6 +30,19 @@ def result(driver="norris", ingested_at=NOW):
         points=18,
         laps_completed=57,
         status="Finished",
+    )
+
+
+def qualified(driver="norris", position=3, round=5):
+    return QualifyingRow(
+        run_id="run-1",
+        ingested_at=NOW,
+        season=2024,
+        round=round,
+        driver_id=driver,
+        constructor_id="mclaren",
+        position=position,
+        q1_millis=78000,
     )
 
 
@@ -85,6 +105,32 @@ def test_a_lap_for_an_unknown_driver_fails_the_reference(store):
     referential = outcome_for(found, "referential", "laps")
     assert referential.status is Status.FAIL
     assert "1 rows" in referential.detail
+
+
+def test_qualifying_without_a_result_passes_when_the_driver_raced_that_season(store):
+    write_bronze(store, "results", KEY, [result("norris")])
+    write_bronze(store, "results", EventKey(season=2024, round=6), [result("stroll", round=6)])
+    write_bronze(store, "qualifying", KEY, [qualified("norris"), qualified("stroll", 14)])
+    found = report(store, Layer.BRONZE, now=NOW)
+    assert outcome_for(found, "referential", "qualifying").status is Status.OK
+    assert found.ok
+
+
+def test_a_qualifying_driver_who_raced_nowhere_that_season_still_fails(store):
+    write_bronze(store, "results", KEY, [result("norris")])
+    write_bronze(store, "qualifying", KEY, [qualified("n0rr1s")])
+    found = report(store, Layer.BRONZE, now=NOW)
+    assert outcome_for(found, "referential", "qualifying").status is Status.FAIL
+
+
+def test_a_withdrawal_is_counted_as_a_diagnostic(store):
+    write_bronze(store, "results", KEY, [result("norris")])
+    write_bronze(store, "results", EventKey(season=2024, round=6), [result("stroll", round=6)])
+    write_bronze(store, "qualifying", KEY, [qualified("norris"), qualified("stroll", 14)])
+    found = report(store, Layer.BRONZE, now=NOW)
+    diagnostic = next(item for item in found.diagnostics if item.name == "did_not_start")
+    assert diagnostic.value == 1
+    assert diagnostic.table == "qualifying"
 
 
 def test_references_are_skipped_when_the_parent_is_absent(store):

@@ -37,11 +37,12 @@ NULL_WATCH: dict[str, tuple[str, ...]] = {
 }
 NULL_WARN_RATE = 0.05
 
-# every table on the left must have its drivers accounted for in the race result
-REFERENCES: tuple[tuple[str, str], ...] = (
-    ("laps", "results"),
-    ("pitstops", "results"),
-    ("qualifying", "results"),
+# every table on the left must have its drivers accounted for in the race result. qualifying is
+# scoped to the season because a driver can qualify and then not start, which is not a defect
+REFERENCES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("laps", "results", ("season", "round")),
+    ("pitstops", "results", ("season", "round")),
+    ("qualifying", "results", ("season",)),
 )
 
 
@@ -58,6 +59,13 @@ class Outcome(BaseModel, frozen=True):
     detail: str
 
 
+class Diagnostic(BaseModel, frozen=True):
+    name: str
+    table: str
+    value: int
+    detail: str
+
+
 class QuarantineCount(BaseModel, frozen=True):
     table: str
     reason: str
@@ -70,6 +78,7 @@ class QualityReport(BaseModel, frozen=True):
     generated_at: datetime
     outcomes: list[Outcome]
     quarantine: list[QuarantineCount]
+    diagnostics: list[Diagnostic] = []
 
     @property
     def ok(self) -> bool:
@@ -221,23 +230,21 @@ def check_nulls(
 
 def check_references(connection: duckdb.DuckDBPyConnection, present: set[str]) -> list[Outcome]:
     outcomes: list[Outcome] = []
-    for child, parent in REFERENCES:
+    for child, parent, scope in REFERENCES:
         if child not in present or parent not in present:
             continue
+        on = " and ".join(f"p.{column} = c.{column}" for column in (*scope, "driver_id"))
         missing = int(
             _scalar(
                 connection,
                 f"""
                 select count(*) from {child} c
-                where not exists (
-                    select 1 from {parent} p
-                    where p.season = c.season and p.round = c.round
-                      and p.driver_id = c.driver_id
-                )
+                where not exists (select 1 from {parent} p where {on})
                 """,
             )
             or 0
         )
+        where = " and ".join(scope)
         outcomes.append(
             Outcome(
                 check="referential",
@@ -246,11 +253,40 @@ def check_references(connection: duckdb.DuckDBPyConnection, present: set[str]) -
                 detail=(
                     f"{missing} rows reference a driver missing from {parent}"
                     if missing
-                    else f"every driver resolves in {parent}"
+                    else f"every driver resolves in {parent} within the same {where}"
                 ),
             )
         )
     return outcomes
+
+
+def count_did_not_start(
+    connection: duckdb.DuckDBPyConnection, present: set[str]
+) -> list[Diagnostic]:
+    if "qualifying" not in present or "results" not in present:
+        return []
+    withdrawn = int(
+        _scalar(
+            connection,
+            """
+            select count(*) from qualifying q
+            where not exists (
+                select 1 from results r
+                where r.season = q.season and r.round = q.round
+                  and r.driver_id = q.driver_id
+            )
+            """,
+        )
+        or 0
+    )
+    return [
+        Diagnostic(
+            name="did_not_start",
+            table="qualifying",
+            value=withdrawn,
+            detail=f"{withdrawn} drivers qualified without appearing in the race result",
+        )
+    ]
 
 
 def report(
@@ -261,6 +297,7 @@ def report(
 ) -> QualityReport:
     stamp = now or datetime.now(UTC)
     outcomes: list[Outcome] = []
+    diagnostics: list[Diagnostic] = []
     with staged(store, layer) as (connection, present):
         for table in sorted(present):
             outcomes.append(check_row_count(connection, table))
@@ -269,6 +306,7 @@ def report(
             outcomes.append(check_duplicates(connection, table, columns))
             outcomes.extend(check_nulls(connection, table, columns))
         outcomes.extend(check_references(connection, present))
+        diagnostics = count_did_not_start(connection, present)
         if not present:
             outcomes.append(
                 Outcome(
@@ -280,4 +318,5 @@ def report(
         generated_at=stamp,
         outcomes=outcomes,
         quarantine=quarantine_counts(store),
+        diagnostics=diagnostics,
     )
