@@ -5,6 +5,8 @@
 # working notes, kept locally
 docs/
 .claude/
+.impeccable/
+.playwright-mcp/
 
 # python
 __pycache__/
