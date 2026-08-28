@@ -44,6 +44,13 @@ class QuarantineSummary(BaseModel, frozen=True):
     explained: bool
 
 
+class PipelineDiagnostic(BaseModel, frozen=True):
+    name: str
+    table: str
+    value: int
+    detail: str
+
+
 class QuotaUsage(BaseModel, frozen=True):
     name: str
     capacity: int
@@ -61,6 +68,7 @@ class PipelineView(BaseModel, frozen=True):
     healthy: bool
     tables: list[TableHealth]
     quarantine: list[QuarantineSummary]
+    diagnostics: list[PipelineDiagnostic]
     quota: list[QuotaUsage]
 
 
@@ -101,6 +109,7 @@ def pipeline_view(
         healthy=report.ok,
         tables=tables,
         quarantine=[QuarantineSummary(**item.model_dump()) for item in report.quarantine],
+        diagnostics=[PipelineDiagnostic(**item.model_dump()) for item in report.diagnostics],
         quota=[
             QuotaUsage(
                 name=state.name,

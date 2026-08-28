@@ -430,6 +430,8 @@ def quality_report(
         for item in result.quarantine:
             tag = "known" if item.explained else "UNEXPLAINED"
             typer.echo(f"quar  {item.table:<13} {item.reason:<20} {item.rows} rows ({tag})")
+        for item in result.diagnostics:
+            typer.echo(f"diag  {item.table:<13} {item.name:<13} {item.detail}")
     if not result.ok:
         raise typer.Exit(1)
 
