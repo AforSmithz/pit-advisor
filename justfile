@@ -96,3 +96,12 @@ transform-check:
     uv run pitadv lineage --check --local
 
 check-all: check infra-check transform-check
+
+# the dashboard reads emitted views off disk, so they have to be copied in first
+web-data:
+    aws s3 cp s3://pit-advisor-data-{{env_var_or_default("PITADV_ENV", "dev")}}-{{account}}/views/ \
+      web/public/data/ --recursive --exclude "*" --include "*_view.json" \
+      --profile {{AWS_PROFILE}} --region {{AWS_REGION}}
+
+web-check:
+    cd web && pnpm install --frozen-lockfile && pnpm lint && pnpm test && pnpm build

@@ -284,7 +284,10 @@ def count_did_not_start(
             name="did_not_start",
             table="qualifying",
             value=withdrawn,
-            detail=f"{withdrawn} drivers qualified without appearing in the race result",
+            detail=(
+                f"{withdrawn} driver{'' if withdrawn == 1 else 's'} qualified "
+                "without appearing in the race result"
+            ),
         )
     ]
 
