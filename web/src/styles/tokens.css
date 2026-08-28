@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+@theme {
+  --color-plate: #0e0f11;
+  --color-subplate: #141619;
+  --color-engrave: #22262b;
+  --color-engrave-lit: #363c44;
+  --color-steel: #868d96;
+  --color-lume: #ece6d6;
+  --color-lume-dim: #a49e90;
+  --color-split: #c8202a;
+  --color-split-lit: #e5776d;
+  --color-wet: #6f97a8;
+
+  --font-plate: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
+  --font-figure: var(--font-chivo-mono), ui-monospace, "SF Mono", monospace;
+
+  --text-engraved: 0.6875rem;
+  --text-engraved--line-height: 1rem;
+  --text-engraved--letter-spacing: 0.14em;
+
+  --tracking-plate: -0.02em;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  background: var(--color-plate);
+}
+
+body {
+  background: var(--color-plate);
+  color: var(--color-lume);
+  font-family: var(--font-plate);
+  font-feature-settings: "ss01", "cv01";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* the parts of the dial we did not draw */
+::selection {
+  background: var(--color-split);
+  color: var(--color-lume);
+}
+
+:focus-visible {
+  outline: 1px solid var(--color-split-lit);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-color: var(--color-engrave-lit) var(--color-plate);
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-plate);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-engrave-lit);
+  border: 3px solid var(--color-plate);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-steel);
+}
+
+.figure {
+  font-family: var(--font-figure);
+  font-variant-numeric: tabular-nums;
+}
+
+.engraved {
+  font-size: var(--text-engraved);
+  line-height: var(--text-engraved--line-height);
+  letter-spacing: var(--text-engraved--letter-spacing);
+  text-transform: uppercase;
+  color: var(--color-steel);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* a missing fit is a cut face, not a dash */
+.cut-face {
+  border: 1px solid var(--color-engrave-lit);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 5px,
+    var(--color-engrave) 5px 6px
+  );
+}
+
+/* the chapter ring runs out of room for numerals long before it runs out of room for ticks */
+@media (max-width: 640px) {
+  .tick[data-odd] .numeral {
+    display: none;
+  }
+}
