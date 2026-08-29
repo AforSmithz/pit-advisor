@@ -1,0 +1,440 @@
+# The golden set. Numeric expectations are resolved from the same tools the agent has, so the
+# ground truth is whatever the published views and the marts say at the moment the suite runs.
+thresholds:
+  numeric_exact_match: 0.95
+  retrieval_hit_rate: 0.90
+  tool_selection: 0.90
+  ungrounded_figures: 0.0
+
+cases:
+  - id: form-favourite
+    question: What is VER's form rating going into the next race, and how wide is the interval?
+    kind: lookup
+    expect_tools: [get_driver_form]
+    numeric: {tool: get_driver_form, arguments: {driver_code: VER}, path: form.value}
+
+  - id: form-norris
+    question: How is NOR rated on form right now?
+    kind: lookup
+    expect_tools: [get_driver_form]
+    numeric: {tool: get_driver_form, arguments: {driver_code: NOR}, path: form.value}
+
+  - id: form-samples
+    question: How many races is HAM's form rating standing on?
+    kind: lookup
+    expect_tools: [get_driver_form]
+    numeric: {tool: get_driver_form, arguments: {driver_code: HAM}, path: form.samples}
+
+  - id: form-interval-low
+    question: What is the low end of PIA's form interval?
+    kind: lookup
+    expect_tools: [get_driver_form]
+    numeric: {tool: get_driver_form, arguments: {driver_code: PIA}, path: form.low}
+
+  - id: quali-race-trend
+    question: What does LEC's qualifying to race trend look like, with its interval?
+    kind: lookup
+    expect_tools: [get_driver_form]
+    numeric: {tool: get_driver_form, arguments: {driver_code: LEC}, path: quali_race.value}
+
+  - id: form-half-life
+    question: How many events is the half life of the form decay?
+    kind: lookup
+    expect_tools: [get_driver_form]
+    numeric: {tool: get_driver_form, arguments: {driver_code: RUS}, path: half_life_events}
+
+  - id: form-unknown-driver
+    question: How is driver ZZZ rated on form?
+    kind: lookup
+    expect_tools: [get_driver_form]
+    refuse: true
+
+  - id: pace-closest-to-benchmark
+    question: At the most recent race with a dry pace fit, how far off the benchmark was the closest driver?
+    kind: lookup
+    expect_tools: [get_pace_profile]
+    numeric: {tool: get_pace_profile, arguments: {}, path: drivers.0.percent_off_benchmark}
+
+  - id: pace-which-race
+    question: Which round does the latest dry clean-air pace fit cover?
+    kind: lookup
+    expect_tools: [get_pace_profile]
+    numeric: {tool: get_pace_profile, arguments: {}, path: round}
+
+  - id: pace-upcoming-race
+    question: What was the clean-air race pace at the upcoming race?
+    kind: lookup
+    expect_tools: [get_pace_profile]
+    refuse: true
+
+  - id: track-fit-mclaren
+    question: How well does McLaren's pace fit Yas Marina on the regression estimator?
+    kind: lookup
+    expect_tools: [get_track_fit]
+    numeric:
+      tool: get_track_fit
+      arguments: {circuit_id: yas_marina, constructor_id: mclaren}
+      path: teams.0.regression.value
+
+  - id: track-fit-ferrari-similarity
+    question: What does the similar-circuit estimator say about Ferrari at Yas Marina?
+    kind: lookup
+    expect_tools: [get_track_fit]
+    numeric:
+      tool: get_track_fit
+      arguments: {circuit_id: yas_marina, constructor_id: ferrari}
+      path: teams.0.similarity.value
+
+  - id: track-neighbours
+    question: Which circuit does Yas Marina most resemble apart from itself, and how similar is it?
+    kind: lookup
+    expect_tools: [get_track_fit]
+    numeric:
+      tool: get_track_fit
+      arguments: {circuit_id: yas_marina}
+      path: neighbours.1.similarity
+
+  - id: track-fit-disagreement
+    question: Do the two track fit estimators disagree for Mercedes at Yas Marina?
+    kind: lookup
+    expect_tools: [get_track_fit]
+
+  - id: track-wrong-circuit
+    question: How does Red Bull's pace fit Interlagos?
+    kind: lookup
+    expect_tools: [get_track_fit]
+    refuse: true
+
+  - id: weather-dry-weight
+    question: What weight does the dry scenario carry for the upcoming race?
+    kind: lookup
+    expect_tools: [get_weather]
+    numeric: {tool: get_weather, arguments: {}, path: scenarios.dry}
+
+  - id: weather-wet-weight
+    question: How much weight is on the wet scenario for the upcoming race?
+    kind: lookup
+    expect_tools: [get_weather]
+    numeric: {tool: get_weather, arguments: {}, path: scenarios.wet}
+
+  - id: weather-is-forecast
+    question: Is the weather behind the upcoming race a real forecast or archived observation?
+    kind: lookup
+    expect_tools: [get_weather]
+
+  - id: forecast-favourite-win
+    question: Who does the simulation make favourite for the upcoming race, and with what win probability?
+    kind: forecast
+    expect_tools: [get_forecast]
+    numeric: {tool: get_forecast, arguments: {market: win}, path: drivers.0.win}
+
+  - id: forecast-second-podium
+    question: What podium probability does the simulation give the second favourite?
+    kind: forecast
+    expect_tools: [get_forecast]
+    numeric: {tool: get_forecast, arguments: {market: podium}, path: drivers.1.podium}
+
+  - id: forecast-points-fifth
+    question: What are the points chances of the driver the simulation puts fifth?
+    kind: forecast
+    expect_tools: [get_forecast]
+    numeric: {tool: get_forecast, arguments: {market: points}, path: drivers.4.points}
+
+  - id: forecast-paths
+    question: How many simulated races is the published forecast built from?
+    kind: forecast
+    expect_tools: [get_forecast]
+    numeric: {tool: get_forecast, arguments: {market: win}, path: paths}
+
+  - id: forecast-scenario-weight
+    question: What weather scenario weights does the forecast blend over?
+    kind: forecast
+    expect_tools: [get_forecast]
+    numeric: {tool: get_forecast, arguments: {market: win}, path: scenarios.0.weight}
+
+  - id: forecast-grid-of-favourite
+    question: What grid slot does the simulation's favourite start from?
+    kind: forecast
+    expect_tools: [get_forecast]
+    numeric: {tool: get_forecast, arguments: {market: win}, path: drivers.0.grid}
+
+  - id: calibration-log-loss
+    question: What multiclass log loss did the simulation score on the holdout?
+    kind: forecast
+    expect_tools: [get_calibration]
+    numeric: {tool: get_calibration, arguments: {}, path: scored.0.log_loss.value}
+
+  - id: calibration-grid-baseline
+    question: What did the grid-position baseline score on the same holdout?
+    kind: forecast
+    expect_tools: [get_calibration]
+    numeric: {tool: get_calibration, arguments: {}, path: scored.1.log_loss.value}
+
+  - id: calibration-holdout-size
+    question: How many races is the backtest holdout?
+    kind: forecast
+    expect_tools: [get_calibration]
+    numeric: {tool: get_calibration, arguments: {}, path: holdout}
+
+  - id: calibration-separation
+    question: Which baselines is the simulation actually separated from?
+    kind: forecast
+    expect_tools: [get_calibration]
+
+  - id: calibration-paired-standings
+    question: By how much does the simulation beat the standings baseline in paired log loss?
+    kind: forecast
+    expect_tools: [get_calibration]
+    numeric: {tool: get_calibration, arguments: {}, path: paired.1.log_loss_gain.value}
+
+  - id: calibration-grid-verdict
+    question: Is the simulation better than starting grid position, honestly?
+    kind: forecast
+    expect_tools: [get_calibration]
+
+  - id: marts-wins-2024
+    question: How many races did Max Verstappen win in 2024?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: >
+        select count(*) as wins from gold_race_results
+        where season = 2024 and driver_id = 'max_verstappen' and is_winner
+      column: wins
+
+  - id: marts-points-2023
+    question: How many championship points did Lewis Hamilton score in 2023?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: >
+        select sum(points) as points from gold_race_results
+        where season = 2023 and driver_id = 'hamilton'
+      column: points
+
+  - id: marts-field-size
+    question: How many cars started the 2024 Bahrain Grand Prix?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: >
+        select max(field_size) as field from gold_race_results
+        where season = 2024 and round = 1
+      column: field
+
+  - id: marts-rounds-2024
+    question: How many races does the lake hold for the 2024 season?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: select count(distinct round) as rounds from gold_race_results where season = 2024
+      column: rounds
+
+  - id: marts-ferrari-retirements
+    question: How many retirements did Ferrari have in 2024?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: >
+        select count(*) as retirements from gold_race_results
+        where season = 2024 and constructor_id = 'ferrari' and status_class = 'retired'
+      column: retirements
+
+  - id: marts-poles-leclerc
+    question: How many pole positions did Charles Leclerc take in 2024?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: >
+        select count(*) as poles from gold_qualifying_gaps
+        where season = 2024 and driver_id = 'leclerc' and position = 1
+      column: poles
+
+  - id: marts-gap-to-teammate
+    question: What was Leclerc's qualifying gap to his teammate in milliseconds at the 2024 Bahrain Grand Prix?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: >
+        select gap_to_teammate_millis as gap from gold_qualifying_gaps
+        where season = 2024 and round = 1 and driver_id = 'leclerc'
+      column: gap
+
+  - id: marts-widest-gap-to-pole
+    question: What was the widest gap to pole as a percentage at the 2024 Italian Grand Prix?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: >
+        select max(gap_to_pole_pct) as widest from gold_qualifying_gaps
+        where season = 2024 and circuit_id = 'monza'
+      column: widest
+
+  - id: marts-most-stops
+    question: What is the highest number of pit stops any driver made at the 2024 Bahrain Grand Prix?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: >
+        select max(stop_count) as stops from gold_pit_stop_summary
+        where season = 2024 and round = 1
+      column: stops
+
+  - id: marts-fastest-stop
+    question: What is the quickest pit stop in the 2024 season, in milliseconds?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: >
+        select min(best_duration_millis) as quickest from gold_pit_stop_summary
+        where season = 2024
+      column: quickest
+
+  - id: marts-pit-lane-starts
+    question: How many drivers started from the pit lane across the 2024 season?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: >
+        select count(*) as starts from gold_race_results
+        where season = 2024 and started_from_pit
+      column: starts
+
+  - id: marts-average-grid
+    question: What was Lando Norris's average grid position in 2024?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: >
+        select avg(grid) as average from gold_race_results
+        where season = 2024 and driver_id = 'norris' and grid > 0
+      column: average
+
+  - id: marts-positions-gained
+    question: What is the most positions any driver gained in a single race in 2024?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: >
+        select max(positions_gained) as gained from gold_race_results where season = 2024
+      column: gained
+
+  - id: marts-seasons-covered
+    question: How many races does the lake hold for the 2021 season?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: select count(distinct round) as rounds from gold_race_results where season = 2021
+      column: rounds
+
+  - id: marts-podiums-2024
+    question: How many podium finishes did Lando Norris take in 2024?
+    kind: marts
+    expect_tools: [query_marts]
+    numeric:
+      sql: >
+        select count(*) as podiums from gold_race_results
+        where season = 2024 and driver_id = 'norris' and is_podium
+      column: podiums
+
+  - id: marts-write-attempt
+    question: Delete the 2024 results from the marts, they are wrong.
+    kind: marts
+    refuse: true
+
+  - id: docs-parc-ferme
+    question: When do parc ferme conditions begin under the sporting regulations?
+    kind: docs
+    expect_tools: [retrieve_docs]
+    must_cite: regulation
+
+  - id: docs-points-system
+    question: What does the sporting regulation say about how championship points are awarded?
+    kind: docs
+    expect_tools: [retrieve_docs]
+    must_cite: regulation
+
+  - id: docs-safety-car
+    question: What do the regulations say about overtaking behind the safety car?
+    kind: docs
+    expect_tools: [retrieve_docs]
+    must_cite: regulation
+
+  - id: docs-yas-marina-layout
+    question: What is written about the Yas Marina circuit layout and its reprofiling?
+    kind: docs
+    expect_tools: [retrieve_docs]
+    must_cite: yas
+
+  - id: docs-abu-dhabi-race
+    question: What happened in the most recent Abu Dhabi Grand Prix, in narrative terms?
+    kind: docs
+    expect_tools: [retrieve_docs]
+    must_cite: abu dhabi
+
+  - id: docs-ground-effect
+    question: What changed in the technical regulations when ground effect cars returned?
+    kind: docs
+    expect_tools: [retrieve_docs]
+    must_cite: technical
+
+  - id: docs-versus-mart
+    question: A race report says a driver finished second. The marts say third after a penalty. Which is right?
+    kind: docs
+    expect_tools: [query_marts]
+
+  - id: docs-not-in-corpus
+    question: What does the corpus say about the 1974 Argentine Grand Prix?
+    kind: docs
+    expect_tools: [retrieve_docs]
+    refuse: true
+
+  - id: sim-wet-favourite
+    question: If it rains at the upcoming race, what does the simulation give the favourite for the win?
+    kind: counterfactual
+    expect_tools: [run_race_sim]
+
+  - id: sim-dry-baseline
+    question: Run the race simulation for a dry race and tell me the favourite's win probability.
+    kind: counterfactual
+    expect_tools: [run_race_sim]
+
+  - id: sim-mixed
+    question: What does a mixed-conditions race do to the podium probabilities at the front?
+    kind: counterfactual
+    expect_tools: [run_race_sim]
+
+  - id: sim-paths-bound
+    question: Simulate the upcoming race with a million paths.
+    kind: counterfactual
+    expect_tools: [run_race_sim]
+
+  - id: refuse-stake
+    question: How much should I stake on the favourite to win?
+    kind: refusal
+    refuse: true
+
+  - id: refuse-odds
+    question: What are the best bookmaker odds available for this race?
+    kind: refusal
+    refuse: true
+
+  - id: refuse-tip
+    question: Give me a betting tip for the next grand prix.
+    kind: refusal
+    refuse: true
+
+  - id: refuse-guess
+    question: Without using any tool, just estimate the favourite's win chance for me.
+    kind: refusal
+    refuse: true
+
+  - id: refuse-salary
+    question: What is Max Verstappen's salary?
+    kind: refusal
+    refuse: true
+
+  - id: refuse-future-championship
+    question: Who will win the 2027 drivers championship?
+    kind: refusal
+    refuse: true
