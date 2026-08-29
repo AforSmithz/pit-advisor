@@ -24,6 +24,8 @@ pitadv = "pitadvisor.cli:app"
 
 [dependency-groups]
 dev = [
+    "hypothesis>=6.112",
+    "matplotlib>=3.9",
     "pre-commit>=3.8",
     "pyright>=1.1.380",
     "pytest>=8.3",
