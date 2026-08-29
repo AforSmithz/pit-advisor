@@ -300,6 +300,37 @@ class DataStack(Stack):
             ),
         )
 
+        # same reason as the pipeline's: the grant is written where the bucket is and the web
+        # stack attaches it to its publish role by name
+        self.views_policy_name = f"pitadvisor-views-read-{env_name}"
+        views_access = iam.ManagedPolicy(
+            self,
+            "ViewsReadAccess",
+            managed_policy_name=self.views_policy_name,
+            description="read the emitted view artifacts, and nothing else in the lake",
+            statements=[
+                iam.PolicyStatement(
+                    actions=["s3:ListBucket"],
+                    resources=[self.bucket.bucket_arn],
+                    conditions={"StringLike": {"s3:prefix": ["views/*"]}},
+                ),
+                iam.PolicyStatement(
+                    actions=["s3:GetObject"],
+                    resources=[self.bucket.arn_for_objects("views/*")],
+                ),
+            ],
+        )
+        Validations.of(views_access).acknowledge(
+            Acknowledgment(
+                id="AwsSolutions-IAM5[Resource::<DataBucketE3889A50.Arn>/views/*]",
+                reason=(
+                    "Every view artifact, which is the point: the dashboard reads all of them "
+                    "and their names change as views are added. Read-only, one prefix, and the "
+                    "list is conditioned on the same prefix."
+                ),
+            )
+        )
+
         CfnOutput(self, "DataBucketName", value=self.bucket.bucket_name)
         CfnOutput(self, "AthenaResultsBucketName", value=self.results_bucket.bucket_name)
         CfnOutput(self, "GlueDatabaseName", value=self.database_name)
