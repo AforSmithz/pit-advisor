@@ -14,6 +14,8 @@ from pitadvisor.features.track_fit import load as load_circuits
 from pitadvisor.features.weather import ScenarioWeights
 from pitadvisor.ingest.ratelimit import BucketState
 from pitadvisor.ingest.raw_store import ObjectStore
+from pitadvisor.model import backtest
+from pitadvisor.model.backtest import Assumption
 from pitadvisor.quality.checks import QualityReport, Status
 from pitadvisor.types import Layer, Source
 
@@ -479,4 +481,248 @@ def track_view(
             for team in teams
         ],
         dropped_reprofiled=metrics.track.dropped_reprofiled,
+    )
+
+
+class ScenarioShare(BaseModel, frozen=True):
+    scenario: str
+    weight: float
+    paths: int
+
+
+class ForecastDriver(BaseModel, frozen=True):
+    driver_code: str
+    constructor_id: str
+    grid: int
+    win: float
+    podium: float
+    points: float
+    finish: float
+    expected_position: float
+    # the tenth and ninetieth of the simulated finishing order. §6.2 wants the spread on the
+    # page, and a single expected position hides the whole point of running paths
+    position_low: int
+    position_high: int
+    position: list[float]
+
+
+class ScenarioDriver(BaseModel, frozen=True):
+    scenario: str
+    driver_code: str
+    win: float
+    podium: float
+    points: float
+
+
+class Evidence(BaseModel, frozen=True):
+    """What the backtest said about this forecast, carried next to it. A probability with no
+    score attached is the thing this project exists not to ship."""
+
+    holdout: int
+    races: int
+    from_season: int
+    log_loss: dict[str, Estimate]
+    brier: dict[str, Estimate]
+    beats_baselines: bool
+
+
+class ForecastView(BaseModel, frozen=True):
+    view: str = "forecast_view"
+    schema_version: str = SCHEMA_VERSION
+    generated_at: datetime
+    run_id: str
+    as_of: date
+    event: EventContext
+    paths: int
+    laps: int
+    scenarios: list[ScenarioShare]
+    weights_are_forecast: bool
+    drivers: list[ForecastDriver]
+    by_scenario: list[ScenarioDriver]
+    assumptions: list[Assumption]
+    evidence: Evidence | None
+
+
+def _quantile(row: list[float], share: float) -> int:
+    running = 0.0
+    for index, value in enumerate(row, start=1):
+        running += value
+        if running >= share:
+            return index
+    return len(row)
+
+
+def forecast_view(
+    predicted: backtest.Forecast,
+    context: EventContext,
+    run_id: str,
+    seats: dict[str, str],
+    grid: dict[str, int],
+    evidence: Evidence | None = None,
+    generated_at: datetime | None = None,
+) -> ForecastView:
+    outcome = predicted.outcome
+    rows = [
+        ForecastDriver(
+            driver_code=code,
+            constructor_id=seats.get(code, "unknown"),
+            grid=grid.get(code, len(outcome.driver_code)),
+            win=outcome.win[index],
+            podium=outcome.podium[index],
+            points=outcome.points[index],
+            finish=outcome.finish[index],
+            expected_position=outcome.expected_position[index],
+            position_low=_quantile(outcome.position[index], 0.1),
+            position_high=_quantile(outcome.position[index], 0.9),
+            position=outcome.position[index],
+        )
+        for index, code in enumerate(outcome.driver_code)
+    ]
+    return ForecastView(
+        generated_at=generated_at or datetime.now(UTC),
+        run_id=run_id,
+        as_of=predicted.as_of,
+        event=context,
+        paths=predicted.paths,
+        laps=predicted.laps,
+        scenarios=[
+            ScenarioShare(
+                scenario=name,
+                weight=predicted.scenario_weights.get(name, 0.0),
+                paths=predicted.scenarios[name].paths if name in predicted.scenarios else 0,
+            )
+            for name in backtest.SCENARIOS
+        ],
+        weights_are_forecast=predicted.weights_are_forecast,
+        drivers=sorted(rows, key=lambda item: item.expected_position),
+        by_scenario=[
+            ScenarioDriver(
+                scenario=name,
+                driver_code=code,
+                win=run.win[index],
+                podium=run.podium[index],
+                points=run.points[index],
+            )
+            for name, run in predicted.scenarios.items()
+            for index, code in enumerate(run.driver_code)
+        ],
+        assumptions=predicted.assumptions,
+        evidence=evidence,
+    )
+
+
+class CurvePoint(BaseModel, frozen=True):
+    low: float
+    high: float
+    forecast: float
+    observed: float
+    count: int
+
+
+class ScoredModel(BaseModel, frozen=True):
+    name: str
+    rows: int
+    races: int
+    log_loss: Estimate
+    brier: Estimate
+    calibration: dict[str, float]
+    curves: dict[str, list[CurvePoint]]
+
+
+class RaceLoss(BaseModel, frozen=True):
+    season: int
+    round: int
+    circuit_id: str
+    race_date: date
+    starters: int
+    log_loss: dict[str, float]
+
+
+class CalibrationView(BaseModel, frozen=True):
+    view: str = "calibration_view"
+    schema_version: str = SCHEMA_VERSION
+    generated_at: datetime
+    run_id: str
+    from_season: int
+    holdout: int
+    paths: int
+    seed: int
+    field: int
+    model_name: str
+    events: list[str]
+    scored: list[ScoredModel]
+    per_race: list[RaceLoss]
+    beats_baselines: bool
+    assumptions: list[Assumption]
+
+
+def calibration_view(
+    report: backtest.Report, generated_at: datetime | None = None
+) -> CalibrationView:
+    return CalibrationView(
+        generated_at=generated_at or report.generated_at,
+        run_id=report.run_id,
+        from_season=report.from_season,
+        holdout=report.holdout,
+        paths=report.paths,
+        seed=report.seed,
+        field=report.field,
+        model_name=backtest.MODEL,
+        events=list(backtest.EVENTS),
+        scored=[
+            ScoredModel(
+                name=item.name,
+                rows=item.rows,
+                races=item.races,
+                log_loss=Estimate(
+                    value=item.log_loss.value,
+                    low=item.log_loss.low,
+                    high=item.log_loss.high,
+                    samples=item.races,
+                ),
+                brier=Estimate(
+                    value=item.brier.value,
+                    low=item.brier.low,
+                    high=item.brier.high,
+                    samples=item.races,
+                ),
+                calibration=item.calibration,
+                curves={
+                    event: [CurvePoint(**point.model_dump()) for point in bins]
+                    for event, bins in item.curves.items()
+                },
+            )
+            for item in report.scored
+        ],
+        per_race=[RaceLoss(**item.model_dump()) for item in report.per_race],
+        beats_baselines=report.beats_baselines,
+        assumptions=report.assumptions,
+    )
+
+
+def evidence_from(report: backtest.Report) -> Evidence:
+    ours = next(item for item in report.scored if item.name == backtest.MODEL)
+    return Evidence(
+        holdout=report.holdout,
+        races=ours.races,
+        from_season=report.from_season,
+        log_loss={
+            item.name: Estimate(
+                value=item.log_loss.value,
+                low=item.log_loss.low,
+                high=item.log_loss.high,
+                samples=item.races,
+            )
+            for item in report.scored
+        },
+        brier={
+            item.name: Estimate(
+                value=item.brier.value,
+                low=item.brier.low,
+                high=item.brier.high,
+                samples=item.races,
+            )
+            for item in report.scored
+        },
+        beats_baselines=report.beats_baselines,
     )

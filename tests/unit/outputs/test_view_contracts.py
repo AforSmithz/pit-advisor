@@ -6,8 +6,11 @@ from pitadvisor.ingest.ratelimit import BucketState
 from pitadvisor.ingest.raw_store import write_bronze, write_quarantine
 from pitadvisor.outputs.view_contracts import (
     SCHEMA_VERSION,
+    calibration_view,
     driver_view,
     emit,
+    evidence_from,
+    forecast_view,
     pipeline_view,
     track_view,
     view_key,
@@ -228,3 +231,108 @@ def test_every_event_view_round_trips_through_the_store(store, seeded):
         assert payload["view"] == view.view
         assert payload["run_id"] == "run-1"
         assert payload["schema_version"] == SCHEMA_VERSION
+
+
+def predicted_for(built, round_=6, season=2024, paths=200):
+    import numpy as np
+
+    from pitadvisor.model import backtest
+
+    pane = backtest.panel(built.store)
+    context = event_at(built.store, season, round_)
+    forecast = backtest.forecast(
+        pane, context, context.race_date, np.random.default_rng(5), paths=paths
+    )
+    seats, _ = backtest.seats_for(pane, context, context.race_date)
+    grid = backtest.grid_for(pane, context, forecast.outcome.driver_code)
+    return pane, context, forecast, seats, grid
+
+
+def report_for(built, holdout=4, paths=150):
+    import numpy as np
+
+    from pitadvisor.model import backtest
+
+    pane = backtest.panel(built.store)
+    return backtest.run(pane, 2024, holdout, np.random.default_rng(5), "run-1", paths=paths, seed=5)
+
+
+def test_the_forecast_view_names_itself_and_its_event(seeded):
+    _, context, forecast, seats, grid = predicted_for(seeded())
+    view = forecast_view(forecast, context, "run-1", seats, grid, generated_at=NOW)
+    assert view.view == "forecast_view"
+    assert view.schema_version == SCHEMA_VERSION
+    assert view.event.circuit_id == "suzuka"
+    assert view.laps > 0
+
+
+def test_every_forecast_driver_carries_a_whole_distribution_and_a_spread(seeded):
+    _, context, forecast, seats, grid = predicted_for(seeded())
+    view = forecast_view(forecast, context, "run-1", seats, grid, generated_at=NOW)
+    assert view.drivers
+    for driver in view.drivers:
+        assert len(driver.position) == 20
+        assert abs(sum(driver.position) - 1.0) < 1e-9
+        assert 1 <= driver.position_low <= driver.position_high <= 20
+        assert 0.0 <= driver.win <= driver.podium <= driver.points <= 1.0
+
+
+def test_the_forecast_view_is_ordered_by_where_the_simulation_expects_them(seeded):
+    _, context, forecast, seats, grid = predicted_for(seeded())
+    view = forecast_view(forecast, context, "run-1", seats, grid, generated_at=NOW)
+    expected = [driver.expected_position for driver in view.drivers]
+    assert expected == sorted(expected)
+
+
+def test_the_forecast_view_says_whether_the_weather_was_forecast_or_assumed(seeded):
+    _, context, forecast, seats, grid = predicted_for(seeded())
+    view = forecast_view(forecast, context, "run-1", seats, grid, generated_at=NOW)
+    assert view.weights_are_forecast is False
+    assert {item.scenario for item in view.scenarios} == {"dry", "mixed", "wet"}
+    assert abs(sum(item.weight for item in view.scenarios) - 1.0) < 1e-9
+
+
+def test_the_forecast_view_carries_the_backtest_that_judged_it(seeded):
+    built = seeded()
+    report = report_for(built)
+    _, context, forecast, seats, grid = predicted_for(built)
+    view = forecast_view(
+        forecast, context, "run-1", seats, grid, evidence_from(report), generated_at=NOW
+    )
+    assert view.evidence is not None
+    assert "simulation" in view.evidence.log_loss
+    assert view.evidence.beats_baselines == report.beats_baselines
+
+
+def test_the_calibration_view_carries_a_curve_for_every_model_and_event(seeded):
+    view = calibration_view(report_for(seeded()), generated_at=NOW)
+    assert view.view == "calibration_view"
+    assert view.model_name == "simulation"
+    assert {item.name for item in view.scored} >= {"simulation", "grid"}
+    for scored in view.scored:
+        assert set(scored.curves) == set(view.events)
+        for points in scored.curves.values():
+            assert all(0.0 <= point.observed <= 1.0 for point in points)
+
+
+def test_the_calibration_view_keeps_the_per_race_series(seeded):
+    view = calibration_view(report_for(seeded()), generated_at=NOW)
+    assert view.per_race
+    assert all("simulation" in item.log_loss for item in view.per_race)
+    assert [item.race_date for item in view.per_race] == sorted(
+        item.race_date for item in view.per_race
+    )
+
+
+def test_both_new_views_round_trip_through_the_store(seeded, store):
+    built = seeded()
+    report = report_for(built)
+    _, context, forecast, seats, grid = predicted_for(built)
+    for view in (
+        forecast_view(forecast, context, "run-1", seats, grid, generated_at=NOW),
+        calibration_view(report, generated_at=NOW),
+    ):
+        assert emit(store, view).endswith(view_key(view.view))
+        stored = json.loads(store.get(view_key(view.view)).decode())
+        assert stored["schema_version"] == SCHEMA_VERSION
+        assert stored["view"] == view.view
