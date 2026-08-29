@@ -160,6 +160,129 @@ export const trackView = z
   })
   .strict();
 
+const bounds = z.object({
+  value: z.number(),
+  low: z.number().nullable(),
+  high: z.number().nullable(),
+  races: z.number().int(),
+  draws: z.number().int(),
+});
+
+export const assumption = z.object({
+  name: z.string(),
+  value: z.number(),
+  detail: z.string(),
+});
+
+export const forecastView = z
+  .object({
+    ...viewHead,
+    as_of: z.string(),
+    event: eventContext,
+    paths: z.number().int(),
+    laps: z.number().int(),
+    scenarios: z.array(
+      z.object({
+        scenario: z.string(),
+        weight: z.number(),
+        paths: z.number().int(),
+      }),
+    ),
+    weights_are_forecast: z.boolean(),
+    drivers: z.array(
+      z.object({
+        driver_code: z.string(),
+        constructor_id: z.string(),
+        grid: z.number().int(),
+        win: z.number(),
+        podium: z.number(),
+        points: z.number(),
+        finish: z.number(),
+        expected_position: z.number(),
+        position_low: z.number().int(),
+        position_high: z.number().int(),
+        position: z.array(z.number()),
+      }),
+    ),
+    by_scenario: z.array(
+      z.object({
+        scenario: z.string(),
+        driver_code: z.string(),
+        win: z.number(),
+        podium: z.number(),
+        points: z.number(),
+      }),
+    ),
+    assumptions: z.array(assumption),
+    evidence: z
+      .object({
+        holdout: z.number().int(),
+        races: z.number().int(),
+        from_season: z.number().int(),
+        log_loss: z.record(z.string(), bounds),
+        brier: z.record(z.string(), bounds),
+        beats_baselines: z.boolean(),
+        separated_from: z.array(z.string()),
+      })
+      .nullable(),
+  })
+  .strict();
+
+export const calibrationView = z
+  .object({
+    ...viewHead,
+    from_season: z.number().int(),
+    holdout: z.number().int(),
+    paths: z.number().int(),
+    seed: z.number().int(),
+    field: z.number().int(),
+    model_name: z.string(),
+    events: z.array(z.string()),
+    scored: z.array(
+      z.object({
+        name: z.string(),
+        rows: z.number().int(),
+        races: z.number().int(),
+        log_loss: bounds,
+        brier: bounds,
+        calibration: z.record(z.string(), z.number()),
+        curves: z.record(
+          z.string(),
+          z.array(
+            z.object({
+              low: z.number(),
+              high: z.number(),
+              forecast: z.number(),
+              observed: z.number(),
+              count: z.number().int(),
+            }),
+          ),
+        ),
+      }),
+    ),
+    per_race: z.array(
+      z.object({
+        season: z.number().int(),
+        round: z.number().int(),
+        circuit_id: z.string(),
+        race_date: z.string(),
+        starters: z.number().int(),
+        log_loss: z.record(z.string(), z.number()),
+      }),
+    ),
+    beats_baselines: z.boolean(),
+    separated_from: z.array(z.string()),
+    paired: z.array(
+      z.object({
+        baseline: z.string(),
+        log_loss_gain: bounds,
+        brier_gain: bounds,
+      }),
+    ),
+    assumptions: z.array(assumption),
+  })
+  .strict();
+
 export const pipelineView = z
   .object({
     ...viewHead,
@@ -212,3 +335,10 @@ export type WeekendView = z.infer<typeof weekendView>;
 export type DriverView = z.infer<typeof driverView>;
 export type TrackView = z.infer<typeof trackView>;
 export type PipelineView = z.infer<typeof pipelineView>;
+export type Bounds = z.infer<typeof bounds>;
+export type Assumption = z.infer<typeof assumption>;
+export type ForecastView = z.infer<typeof forecastView>;
+export type CalibrationView = z.infer<typeof calibrationView>;
+export type ScoredModel = CalibrationView["scored"][number];
+export type CurvePoint = ScoredModel["curves"][string][number];
+export type ForecastDriver = ForecastView["drivers"][number];

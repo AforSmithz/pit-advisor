@@ -1,7 +1,14 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ZodType } from "zod";
-import { driverView, pipelineView, trackView, weekendView } from "./schemas";
+import {
+  calibrationView,
+  driverView,
+  forecastView,
+  pipelineView,
+  trackView,
+  weekendView,
+} from "./schemas";
 
 const dataDir = path.join(process.cwd(), "public", "data");
 
@@ -16,7 +23,9 @@ async function read<T>(name: string, schema: ZodType<T>): Promise<T> {
   }
   const parsed = schema.safeParse(JSON.parse(raw));
   if (!parsed.success) {
-    throw new Error(`${name}.json does not match the view contract: ${parsed.error.message}`);
+    throw new Error(
+      `${name}.json does not match the view contract: ${parsed.error.message}`,
+    );
   }
   return parsed.data;
 }
@@ -25,3 +34,5 @@ export const loadWeekend = () => read("weekend_view", weekendView);
 export const loadDriver = () => read("driver_view", driverView);
 export const loadTrack = () => read("track_view", trackView);
 export const loadPipeline = () => read("pipeline_view", pipelineView);
+export const loadForecast = () => read("forecast_view", forecastView);
+export const loadCalibration = () => read("calibration_view", calibrationView);

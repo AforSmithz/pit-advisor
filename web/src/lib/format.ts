@@ -35,3 +35,21 @@ export function staleness(iso: string, now: Date): string {
   const days = Math.round(hours / 24);
   return `${days}d ago`;
 }
+
+// the assumption list carries raw fitted numbers in whatever unit the model works in, and
+// milliseconds of pit loss read as noise until they are seconds
+export function assumption(name: string, value: number): string {
+  if (name === "degradation_millis_per_lap" || name === "dirty_air_millis") {
+    return `${value.toFixed(0)} ms`;
+  }
+  if (name.endsWith("_millis")) return `${(value / 1000).toFixed(2)} s`;
+  if (name === "laps") return value.toFixed(0);
+  if (name === "safety_car_per_green_lap") return perLap(value);
+  if (name === "pass_probability_at_parity")
+    return `${(value * 100).toFixed(1)}%`;
+  return plain(value, 2);
+}
+
+export function gain(value: number, digits = 4): string {
+  return `${value >= 0 ? "+" : "\u2212"}${Math.abs(value).toFixed(digits)}`;
+}
