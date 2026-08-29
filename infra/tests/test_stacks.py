@@ -4,7 +4,14 @@ from typing import Any
 import aws_cdk as cdk
 import pytest
 from aws_cdk.assertions import Match, Template
-from stacks import DataStack, IngestStack, ObservabilityStack, TransformStack, WebStack
+from stacks import (
+    AgentStack,
+    DataStack,
+    IngestStack,
+    ObservabilityStack,
+    TransformStack,
+    WebStack,
+)
 
 ACCOUNT = "123456789012"
 REGION = "ap-southeast-1"
@@ -14,6 +21,7 @@ INGEST_STACK = f"pitadvisor-ingest-{ENV_NAME}"
 OBSERVABILITY_STACK = f"pitadvisor-observability-{ENV_NAME}"
 TRANSFORM_STACK = f"pitadvisor-transform-{ENV_NAME}"
 WEB_STACK = f"pitadvisor-web-{ENV_NAME}"
+AGENT_STACK = f"pitadvisor-agent-{ENV_NAME}"
 DATA_BUCKET = f"pit-advisor-data-{ENV_NAME}-{ACCOUNT}"
 RESULTS_BUCKET = f"pit-advisor-athena-results-{ENV_NAME}-{ACCOUNT}"
 SITE_BUCKET = f"pit-advisor-web-{ENV_NAME}-{ACCOUNT}"
@@ -24,7 +32,9 @@ Resource = dict[str, Any]
 
 def build(
     alert_email: str | None = None,
-) -> tuple[cdk.App, DataStack, IngestStack, ObservabilityStack, TransformStack, WebStack]:
+) -> tuple[
+    cdk.App, DataStack, IngestStack, ObservabilityStack, TransformStack, WebStack, AgentStack
+]:
     app = cdk.App(context={"env": ENV_NAME})
     aws_env = cdk.Environment(account=ACCOUNT, region=REGION)
     data = DataStack(app, DATA_STACK, env_name=ENV_NAME, env=aws_env)
@@ -36,7 +46,8 @@ def build(
     cdk.Tags.of(app).add("env", ENV_NAME)
     transform = TransformStack(app, TRANSFORM_STACK, env_name=ENV_NAME, env=aws_env)
     web = WebStack(app, WEB_STACK, env_name=ENV_NAME, env=aws_env)
-    return app, data, ingest, observability, transform, web
+    agent = AgentStack(app, AGENT_STACK, env_name=ENV_NAME, env=aws_env)
+    return app, data, ingest, observability, transform, web, agent
 
 
 def sole(template: Template, kind: str) -> Resource:
@@ -71,6 +82,11 @@ def transform_template() -> Template:
 @pytest.fixture
 def web_template() -> Template:
     return Template.from_stack(build()[5])
+
+
+@pytest.fixture
+def agent_template() -> Template:
+    return Template.from_stack(build()[6])
 
 
 @pytest.fixture
@@ -254,7 +270,8 @@ def test_dev_user_writes_only_the_landing_prefixes(data_template: Template) -> N
     target = str(lake[0]["Resource"])
     for prefix in ("raw/*", "bronze/*", "silver/*", "gold/*", "quarantine/*", "views/*"):
         assert prefix in target
-    assert "docs/" not in target
+    # docs/ joined the list when the corpus builder became a laptop command
+    assert "docs/*" in target
     assert "cache/" not in target
 
 
@@ -584,3 +601,166 @@ def test_the_views_grant_is_read_only(data_template: Template) -> None:
         )
     }
     assert actions == {"s3:ListBucket", "s3:GetObject"}
+
+
+def agent_role_policies(template: Template) -> list[Resource]:
+    return [
+        statement
+        for policy in template.find_resources("AWS::IAM::Policy").values()
+        for statement in policy["Properties"]["PolicyDocument"]["Statement"]
+    ]
+
+
+def test_the_vector_index_matches_the_embedding_model(agent_template: Template) -> None:
+    index = sole(agent_template, "AWS::S3Vectors::Index")["Properties"]
+    assert index["Dimension"] == 1024
+    assert index["DistanceMetric"] == "cosine"
+    assert index["DataType"] == "float32"
+
+
+def test_bedrocks_own_metadata_is_kept_out_of_the_filterable_budget(
+    agent_template: Template,
+) -> None:
+    index = sole(agent_template, "AWS::S3Vectors::Index")["Properties"]
+    keys = index["MetadataConfiguration"]["NonFilterableMetadataKeys"]
+    assert set(keys) == {"AMAZON_BEDROCK_METADATA", "AMAZON_BEDROCK_TEXT"}
+
+
+def test_the_knowledge_base_stores_its_vectors_in_s3_vectors(agent_template: Template) -> None:
+    base = sole(agent_template, "AWS::Bedrock::KnowledgeBase")["Properties"]
+    assert base["StorageConfiguration"]["Type"] == "S3_VECTORS"
+    embedding = base["KnowledgeBaseConfiguration"]["VectorKnowledgeBaseConfiguration"]
+    assert "cohere.embed-english-v3" in str(embedding["EmbeddingModelArn"])
+
+
+def test_the_knowledge_base_role_cannot_be_borrowed_by_another_account(
+    agent_template: Template,
+) -> None:
+    _, role = only(agent_template, "AWS::IAM::Role", RoleName=f"pitadvisor-kb-{ENV_NAME}")
+    statement = role["Properties"]["AssumeRolePolicyDocument"]["Statement"][0]
+    assert statement["Principal"]["Service"] == "bedrock.amazonaws.com"
+    assert statement["Condition"]["StringEquals"]["aws:SourceAccount"] == ACCOUNT
+    assert "knowledge-base/*" in str(statement["Condition"]["ArnLike"]["aws:SourceArn"])
+
+
+def test_only_the_docs_prefix_is_indexed(agent_template: Template) -> None:
+    source = sole(agent_template, "AWS::Bedrock::DataSource")["Properties"]
+    s3 = source["DataSourceConfiguration"]["S3Configuration"]
+    assert s3["InclusionPrefixes"] == ["docs/"]
+    assert DATA_BUCKET in str(s3["BucketArn"])
+
+
+def test_the_corpus_is_chunked_rather_than_indexed_whole(agent_template: Template) -> None:
+    source = sole(agent_template, "AWS::Bedrock::DataSource")["Properties"]
+    chunking = source["VectorIngestionConfiguration"]["ChunkingConfiguration"]
+    assert chunking["ChunkingStrategy"] == "FIXED_SIZE"
+    assert chunking["FixedSizeChunkingConfiguration"]["MaxTokens"] == 300
+
+
+def test_the_guardrail_denies_staking_advice(agent_template: Template) -> None:
+    guardrail = sole(agent_template, "AWS::Bedrock::Guardrail")["Properties"]
+    topic = guardrail["TopicPolicyConfig"]["TopicsConfig"][0]
+    assert topic["Type"] == "DENY"
+    assert "staking" in topic["Definition"].lower()
+    assert topic["Examples"]
+
+
+def test_the_guardrail_checks_grounding_and_relevance(agent_template: Template) -> None:
+    guardrail = sole(agent_template, "AWS::Bedrock::Guardrail")["Properties"]
+    filters = guardrail["ContextualGroundingPolicyConfig"]["FiltersConfig"]
+    assert {item["Type"] for item in filters} == {"GROUNDING", "RELEVANCE"}
+    assert all(item["Threshold"] > 0 for item in filters)
+
+
+def test_both_functions_run_on_arm_with_an_explicit_timeout(agent_template: Template) -> None:
+    functions = agent_template.find_resources("AWS::Lambda::Function")
+    assert len(functions) == 2
+    for function in functions.values():
+        assert function["Properties"]["Architectures"] == ["arm64"]
+        assert function["Properties"]["Timeout"] > 0
+        assert function["Properties"]["PackageType"] == "Image"
+
+
+def test_every_agent_log_group_expires(agent_template: Template) -> None:
+    groups = agent_template.find_resources("AWS::Logs::LogGroup")
+    assert groups
+    for group in groups.values():
+        assert group["Properties"]["RetentionInDays"] == 14
+
+
+def test_the_ask_url_is_not_open_to_the_internet(agent_template: Template) -> None:
+    url = sole(agent_template, "AWS::Lambda::Url")["Properties"]
+    assert url["AuthType"] == "AWS_IAM"
+
+
+def test_the_model_grant_carries_no_wildcard(agent_template: Template) -> None:
+    invokes = [
+        statement
+        for statement in agent_role_policies(agent_template)
+        if "bedrock:InvokeModel" in str(statement["Action"])
+    ]
+    assert invokes
+    for statement in invokes:
+        assert "*" not in str(statement["Resource"]).replace("global.", "")
+    # every grant on the answering model is conditioned on the profile it came through. the
+    # one without a condition is the knowledge base embedding its corpus
+    answering = [item for item in invokes if "claude" in str(item["Resource"])]
+    assert answering
+    assert all(item.get("Condition") for item in answering)
+
+
+def test_the_global_profile_grant_has_all_three_parts(agent_template: Template) -> None:
+    invokes = [
+        statement
+        for statement in agent_role_policies(agent_template)
+        if "bedrock:InvokeModel" in str(statement["Action"])
+        and "inference-profile" in str(statement["Resource"])
+    ]
+    assert invokes
+    profiles = [statement for statement in invokes if "global." in str(statement["Resource"])]
+    assert profiles
+
+
+def test_the_functions_hold_no_aws_managed_policy(agent_template: Template) -> None:
+    for role in agent_template.find_resources("AWS::IAM::Role").values():
+        arns = str(role["Properties"].get("ManagedPolicyArns", []))
+        assert "iam::aws:policy" not in arns
+
+
+def test_the_agent_reads_the_lake_through_the_policy_the_data_stack_wrote(
+    agent_template: Template, data_template: Template
+) -> None:
+    named = {
+        policy["Properties"]["ManagedPolicyName"]
+        for policy in data_template.find_resources("AWS::IAM::ManagedPolicy").values()
+    }
+    assert f"pitadvisor-agent-lake-{ENV_NAME}" in named
+    assert f"pitadvisor-kb-corpus-{ENV_NAME}" in named
+    attached = str(
+        [
+            role["Properties"].get("ManagedPolicyArns", [])
+            for role in agent_template.find_resources("AWS::IAM::Role").values()
+        ]
+    )
+    assert f"pitadvisor-agent-lake-{ENV_NAME}" in attached
+
+
+def test_the_ask_function_knows_which_knowledge_base_and_guardrail_to_use(
+    agent_template: Template,
+) -> None:
+    _, function = only(
+        agent_template, "AWS::Lambda::Function", FunctionName=f"pitadvisor-ask-{ENV_NAME}"
+    )
+    environment = function["Properties"]["Environment"]["Variables"]
+    assert "PITADV_KNOWLEDGE_BASE_ID" in environment
+    assert "PITADV_GUARDRAIL_ID" in environment
+    # no ~/.aws in the image, so a named profile is a ProfileNotFound at the first call
+    assert environment["PITADV_AWS_PROFILE"] == ""
+
+
+def test_the_agent_stack_is_tagged_as_its_own_component(agent_template: Template) -> None:
+    _, function = only(
+        agent_template, "AWS::Lambda::Function", FunctionName=f"pitadvisor-ask-{ENV_NAME}"
+    )
+    tags = {tag["Key"]: tag["Value"] for tag in function["Properties"].get("Tags", [])}
+    assert tags.get("component") == "agent"

@@ -26,7 +26,7 @@ from constructs import Construct
 SCAN_CAP_BYTES = 1024**3
 
 # what a laptop may write. dbt on the athena target needs silver and gold too
-LAPTOP_PREFIXES = ("raw", "bronze", "silver", "gold", "quarantine", "views")
+LAPTOP_PREFIXES = ("raw", "bronze", "silver", "gold", "quarantine", "views", "docs")
 
 # the pipeline also keeps the fastf1 cache warm, which a laptop has no reason to touch
 PIPELINE_PREFIXES = (*LAPTOP_PREFIXES, "cache")
@@ -331,7 +331,71 @@ class DataStack(Stack):
             )
         )
 
+        # the agent's two functions read the lake and need athena's scratch space. same reason
+        # again: the grant is written where the bucket is, the agent stack attaches it by name
+        self.agent_policy_name = f"pitadvisor-agent-lake-{env_name}"
+        agent_access = iam.ManagedPolicy(
+            self,
+            "AgentLakeAccess",
+            managed_policy_name=self.agent_policy_name,
+            description="what the agent's functions may read in the lake",
+            statements=[
+                iam.PolicyStatement(
+                    actions=["s3:ListBucket", "s3:GetBucketLocation"],
+                    resources=[self.bucket.bucket_arn, self.results_bucket.bucket_arn],
+                ),
+                iam.PolicyStatement(
+                    actions=["s3:GetObject"],
+                    resources=[self.bucket.arn_for_objects("*")],
+                ),
+                iam.PolicyStatement(
+                    actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+                    resources=[self.results_bucket.arn_for_objects("*")],
+                ),
+            ],
+        )
+        Validations.of(agent_access).acknowledge(
+            Acknowledgment(
+                id="AwsSolutions-IAM5[Resource::<DataBucketE3889A50.Arn>/*]", reason=OBJECT_WILDCARD
+            ),
+            Acknowledgment(
+                id="AwsSolutions-IAM5[Resource::<AthenaResultsBucket879938FA.Arn>/*]",
+                reason=OBJECT_WILDCARD,
+            ),
+        )
+
+        self.corpus_policy_name = f"pitadvisor-kb-corpus-{env_name}"
+        corpus_access = iam.ManagedPolicy(
+            self,
+            "CorpusReadAccess",
+            managed_policy_name=self.corpus_policy_name,
+            description="what the knowledge base may read while it indexes the corpus",
+            statements=[
+                iam.PolicyStatement(
+                    actions=["s3:ListBucket"],
+                    resources=[self.bucket.bucket_arn],
+                    conditions={"StringLike": {"s3:prefix": ["docs/*"]}},
+                ),
+                iam.PolicyStatement(
+                    actions=["s3:GetObject"],
+                    resources=[self.bucket.arn_for_objects("docs/*")],
+                ),
+            ],
+        )
+        Validations.of(corpus_access).acknowledge(
+            Acknowledgment(
+                id="AwsSolutions-IAM5[Resource::<DataBucketE3889A50.Arn>/docs/*]",
+                reason=(
+                    "The knowledge base reads every document in the corpus, which is what a "
+                    "corpus is. The names are generated from wikipedia titles and regulation "
+                    "issue dates, the grant is read-only, and the list is conditioned on the "
+                    "same prefix."
+                ),
+            )
+        )
+
         CfnOutput(self, "DataBucketName", value=self.bucket.bucket_name)
         CfnOutput(self, "AthenaResultsBucketName", value=self.results_bucket.bucket_name)
         CfnOutput(self, "GlueDatabaseName", value=self.database_name)
         CfnOutput(self, "AthenaWorkGroupName", value=self.workgroup_name)
+        CfnOutput(self, "AgentLakePolicyName", value=self.agent_policy_name)
