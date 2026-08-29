@@ -77,6 +77,18 @@ image tag="latest":
       sh -c "pitadv version && dbt --version > /dev/null \
         && python -c 'from pitadvisor.config import boto_session; boto_session().client(\"s3\")'"
 
+# ask the agent one question against the deployed lake
+ask question:
+    uv run pitadv ask "{{question}}" --tools
+
+# score the agent against the golden set. costs bedrock tokens
+evals *args:
+    uv run pitadv evals --suite evals/golden.yaml --report results/evals/ {{args}}
+
+# build the knowledge base corpus under docs/
+docs-sync *args:
+    uv run pitadv docs-sync {{args}}
+
 fmt:
     uv run ruff format .
     uv run ruff check . --fix

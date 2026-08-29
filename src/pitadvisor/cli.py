@@ -12,8 +12,12 @@ from boto3.session import Session
 from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import BaseModel
 
+from pitadvisor.agent import evals as agent_evals
+from pitadvisor.agent import tools as agent_tools
+from pitadvisor.agent.runtime import agent_for
 from pitadvisor.config import Settings, boto_session, get_settings
 from pitadvisor.features import assemble as feature_assemble
+from pitadvisor.ingest import docs as doc_corpus
 from pitadvisor.ingest import jolpica
 from pitadvisor.ingest.fastf1_session import backfill as session_backfill
 from pitadvisor.ingest.fastf1_session import ingest_session
@@ -710,3 +714,89 @@ def lineage_command(
         raise typer.Exit(1)
     if check and not all(item.ok for item in traces):
         raise typer.Exit(1)
+
+
+EVAL_RESULTS = Path("results/evals")
+GOLDEN = Path("evals/golden.yaml")
+
+
+@app.command(help="Ask the grounded agent one question.")
+def ask(
+    question: Annotated[str, typer.Argument(help="What to ask.")],
+    local: Annotated[bool, typer.Option("--local", help="Local lake and local corpus.")] = False,
+    show_tools: Annotated[bool, typer.Option("--tools", help="Print the tool calls.")] = False,
+) -> None:
+    settings = get_settings()
+    store, _, _ = _runtime(local, settings)
+    answer = agent_for(settings, agent_tools.toolbox(settings, store, local)).ask(question)
+    if show_tools:
+        for call in answer.calls:
+            marker = "ok  " if call.ok else "FAIL"
+            typer.echo(
+                f"{marker}  {call.name:<18} {call.arguments}{'' if call.ok else '  ' + call.detail}"
+            )
+        typer.echo("")
+    typer.echo(answer.text)
+    if answer.ungrounded:
+        typer.echo(f"\nungrounded figures: {', '.join(answer.ungrounded)}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command(help="Score the agent against the golden set.")
+def evals(
+    suite: Annotated[Path, typer.Option(help="The golden set to run.")] = GOLDEN,
+    report: Annotated[Path, typer.Option(help="Where the artifacts land.")] = EVAL_RESULTS,
+    local: Annotated[bool, typer.Option("--local", help="Local lake and local corpus.")] = False,
+    only: Annotated[str | None, typer.Option(help="Comma separated case ids or kinds.")] = None,
+) -> None:
+    settings = get_settings()
+    store, _, _ = _runtime(local, settings)
+    try:
+        loaded = agent_evals.load(suite)
+    except agent_evals.SuiteError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    if only:
+        wanted = {item.strip() for item in only.split(",") if item.strip()}
+        cases = [case for case in loaded.cases if case.id in wanted or case.kind in wanted]
+        if not cases:
+            raise typer.BadParameter(f"nothing in the suite matches {only}")
+        loaded = loaded.model_copy(update={"cases": cases})
+    box = agent_tools.toolbox(settings, store, local)
+    result = agent_evals.run(agent_for(settings, box, strict=False), box, loaded, _run_id())
+    report.mkdir(parents=True, exist_ok=True)
+    (report / agent_evals.REPORT).write_text(result.model_dump_json(indent=2))
+    (report / agent_evals.SUMMARY).write_text(agent_evals.summarise(result))
+    typer.echo(agent_evals.summarise(result), nl=False)
+    typer.echo(f"\nwrote {report / agent_evals.REPORT}")
+    if not result.passed:
+        raise typer.Exit(1)
+
+
+@app.command(name="docs-sync", help="Build the knowledge base corpus under docs/.")
+def docs_sync(
+    limit: Annotated[int | None, typer.Option(help="Stop after this many pages.")] = None,
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+    add: Annotated[Path | None, typer.Option(help="Drop one curated file into the corpus.")] = None,
+    title: Annotated[str | None, typer.Option(help="Title for the curated file.")] = None,
+    kind: Annotated[str, typer.Option(help="Kind for the curated file.")] = "regulation",
+) -> None:
+    settings = get_settings()
+    store, ledger, bucket_for = _runtime(local, settings)
+    if add is not None:
+        if title is None:
+            raise typer.BadParameter("--add needs --title")
+        item = doc_corpus.Curated(title=title, kind=kind)
+        typer.echo(doc_corpus.add_curated(store, add, item))
+        return
+    limiter = RateLimiter(bucket_for("wikipedia"))
+    outcomes = doc_corpus.ingest_wikipedia(
+        store, RawStore(store), ledger, _run_id(), limiter, limit=limit
+    )
+    for outcome in outcomes:
+        if outcome.skipped:
+            typer.echo(f"skip  {outcome.title:<44} {outcome.skipped}")
+        else:
+            typer.echo(f"ok    {outcome.title:<44} {outcome.characters} characters")
+    written = [item for item in outcomes if item.key]
+    typer.echo(f"{len(written)} documents, {len(doc_corpus.corpus(store))} in the corpus")

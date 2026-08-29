@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     max_scanned_bytes: int = 1024**3
     ledger_table: str = ""
     fastf1_cache: Path = Path("fastf1_cache")
+    # haiku 4.5 is inference-profile only in ap-southeast-1, and the only profile is global
+    bedrock_model: str = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+    knowledge_base_id: str = ""
+    guardrail_id: str = ""
+    guardrail_version: str = "DRAFT"
 
     @model_validator(mode="after")
     def _derive_names(self) -> "Settings":
