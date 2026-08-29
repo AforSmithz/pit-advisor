@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+// PLAN 6.2: calibration leads, because a probability with no score attached is the thing
+// this project exists not to ship
 const ROUTES = [
-  { href: "/", name: "Weekend" },
+  { href: "/", name: "Calibration" },
+  { href: "/weekend/", name: "Weekend" },
   { href: "/driver/", name: "Drivers" },
   { href: "/track/", name: "Track" },
   { href: "/forecast/", name: "Forecast" },
-  { href: "/calibration/", name: "Calibration" },
   { href: "/pipeline/", name: "Pipeline" },
 ];
 
@@ -23,7 +25,8 @@ export function Rail({ trackHref }: { trackHref: string }) {
       <ul className="flex flex-1 flex-wrap gap-x-5 gap-y-1 lg:flex-col lg:gap-y-0">
         {ROUTES.map((route) => {
           const href = route.href === "/track/" ? trackHref : route.href;
-          const active = route.href === "/" ? path === "/" : path.startsWith(route.href);
+          const active =
+            route.href === "/" ? path === "/" : path.startsWith(route.href);
           return (
             <li key={route.href} className="lg:border-t lg:border-engrave">
               <Link
@@ -44,8 +47,9 @@ export function Rail({ trackHref }: { trackHref: string }) {
         })}
       </ul>
       <p className="engraved hidden normal-case tracking-normal lg:mt-auto lg:block">
-        Every figure on this dial was computed in the backend and arrives with its interval and
-        sample count. Nothing here is calculated in the browser.
+        Every figure on this dial was computed in the backend and arrives with
+        its interval and sample count. Nothing here is calculated in the
+        browser.
       </p>
     </nav>
   );
