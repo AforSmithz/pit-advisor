@@ -182,3 +182,41 @@ def test_the_taxonomy_is_found_from_anywhere_not_just_the_repo_root(tmp_path, mo
     monkeypatch.chdir(tmp_path)
     assert track_fit.TAXONOMY.is_absolute()
     assert len(track_fit.load()) >= 24
+
+
+def test_two_estimators_that_part_company_in_the_fifteenth_decimal_have_not_disagreed():
+    """A noiseless fit drives both standard errors to zero, and whether two intervals of
+    width 1e-16 happen to touch is decided by floating point rather than by evidence."""
+    near = track_fit.Prediction(
+        constructor_id="alpha",
+        estimate=3.0554343081623716,
+        standard_error=3.19e-15,
+        interval_low=3.0554343081623716 - 6e-15,
+        interval_high=3.0554343081623716 + 6e-15,
+        spread=0.0,
+        samples=6,
+        effective_samples=6.0,
+    )
+    same = near.model_copy(
+        update={
+            "estimate": 3.055434308162372,
+            "interval_low": 3.055434308162372 - 3e-16,
+            "interval_high": 3.055434308162372 + 3e-16,
+        }
+    )
+    assert track_fit._overlap(near, same)
+
+
+def test_a_real_gap_between_the_estimators_is_still_a_disagreement():
+    apart = track_fit.Prediction(
+        constructor_id="alpha",
+        estimate=1.0,
+        standard_error=0.05,
+        interval_low=0.9,
+        interval_high=1.1,
+        spread=0.2,
+        samples=6,
+        effective_samples=6.0,
+    )
+    other = apart.model_copy(update={"estimate": 2.0, "interval_low": 1.9, "interval_high": 2.1})
+    assert not track_fit._overlap(apart, other)

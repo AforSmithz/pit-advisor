@@ -86,6 +86,8 @@ HALF_LIFE_EVENTS = 20.0
 RIDGE = 1.0
 NEIGHBOURS = 5
 CONFIDENCE_Z = 1.96
+# relative, because the estimates are percentages of a lap and the floor has to scale
+DISAGREEMENT_FLOOR = 1e-9
 
 COLUMNS = ("season", "round", "race_date", "circuit_id", "constructor_id", "value")
 
@@ -275,7 +277,11 @@ def by_regression(
 
 
 def _overlap(a: Prediction, b: Prediction) -> bool:
-    return a.interval_low <= b.interval_high and b.interval_low <= a.interval_high
+    # two estimators that part company in the fifteenth decimal have not disagreed about
+    # anything. on a noiseless fit both errors go to zero and whether the intervals touch is
+    # decided by the order the BLAS summed its terms, so the comparison needs a floor
+    slack = DISAGREEMENT_FLOOR * max(abs(a.estimate), abs(b.estimate), 1.0)
+    return a.interval_low - slack <= b.interval_high and b.interval_low - slack <= a.interval_high
 
 
 def fit(
