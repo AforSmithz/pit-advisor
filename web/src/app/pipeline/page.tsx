@@ -18,7 +18,7 @@ export default async function PipelinePage() {
     <div className="pt-2">
       <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-4 border-b border-engrave-lit pb-5">
         <div>
-          <h1 className="text-3xl tracking-plate text-lume sm:text-4xl">Pipeline</h1>
+          <h1 className="legend text-4xl text-lume sm:text-5xl">Pipeline</h1>
           <p className="engraved mt-2">
             {view.layer} · {view.healthy ? "gate open" : "gate closed"}
           </p>

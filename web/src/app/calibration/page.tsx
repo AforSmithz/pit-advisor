@@ -5,7 +5,7 @@ export const metadata = { title: "Calibration · Pit Advisor" };
 export default function CalibrationPage() {
   return (
     <div className="pt-2">
-      <h1 className="mb-10 text-3xl tracking-plate text-lume sm:text-4xl">Calibration</h1>
+      <h1 className="legend mb-10 text-4xl text-lume sm:text-5xl">Calibration</h1>
       <NotBuilt
         title="Nothing to calibrate yet"
         what="This page leads the dashboard the day a forecast exists, because a reliability curve is the only honest way to read a probability. Until something is being predicted there is nothing to plot, and an empty diagonal would be decoration."

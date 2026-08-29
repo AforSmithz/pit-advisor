@@ -50,7 +50,7 @@ export default async function DriverPage({ params }: { params: Promise<{ code: s
       />
 
       <div className="mt-10 flex items-baseline gap-4">
-        <h2 className="text-5xl tracking-plate text-lume">{driver.driver_code}</h2>
+        <h2 className="legend text-6xl text-lume">{driver.driver_code}</h2>
         <p className="engraved">{label(driver.constructor_id)}</p>
       </div>
 

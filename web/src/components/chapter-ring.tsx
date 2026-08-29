@@ -36,7 +36,7 @@ export function ChapterRing(props: Props) {
             </span>
           </div>
           <div>
-            <h1 className="text-3xl tracking-plate text-lume sm:text-4xl">{props.raceName}</h1>
+            <h1 className="legend text-4xl text-lume sm:text-5xl">{props.raceName}</h1>
             <p className="engraved mt-2">
               {props.season} · {label(props.circuitId)}
             </p>

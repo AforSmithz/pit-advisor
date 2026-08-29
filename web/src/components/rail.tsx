@@ -17,7 +17,7 @@ export function Rail({ trackHref }: { trackHref: string }) {
   return (
     <nav className="flex shrink-0 gap-x-6 gap-y-1 border-b border-engrave-lit px-5 py-3 lg:sticky lg:top-0 lg:h-dvh lg:w-52 lg:flex-col lg:justify-start lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-6 lg:py-8">
       <Link href="/" className="mb-0 hidden lg:mb-10 lg:block">
-        <span className="block text-sm tracking-plate text-lume">Pit Advisor</span>
+        <span className="legend block text-base text-lume">Pit Advisor</span>
         <span className="engraved block">race weekend dial</span>
       </Link>
       <ul className="flex flex-1 flex-wrap gap-x-5 gap-y-1 lg:flex-col lg:gap-y-0">
