@@ -1,0 +1,29 @@
+pit advisor backtest, run 20260831T081638-c74abf, generated 2026-08-31 08:18
+60 races held out from 2021 onwards, 1198 driver-races, 4000 paths a race, seed 11
+
+multiclass over classified finishing position, intervals bootstrapped at the race
+level because drivers inside one race share a car, a strategy and a safety car
+
+simulation  log loss 2.5881 [2.5512, 2.6251]  brier 0.8979 [0.8911, 0.9050]  ece win 0.011  ece podium 0.045  ece points 0.087
+grid        log loss 2.6017 [2.5529, 2.6545]  brier 0.9035 [0.8977, 0.9097]  ece win 0.023  ece podium 0.035  ece points 0.044
+standings   log loss 2.7033 [2.6599, 2.7450]  brier 0.9191 [0.9144, 0.9236]  ece win 0.013  ece podium 0.027  ece points 0.036
+last_race   log loss 2.7923 [2.7612, 2.8250]  brier 0.9286 [0.9250, 0.9323]  ece win 0.010  ece podium 0.022  ece points 0.039
+
+the simulation beats grid, standings, last_race on log loss
+this holdout separates it from standings, last_race, the rest are inside bootstrap noise
+
+how much better than each baseline, resampled over the same races. an
+interval that straddles zero means the two are not separated by this holdout
+  vs grid        log loss +0.0137 [-0.0184, +0.0472]  brier +0.0056 [+0.0011, +0.0098]
+  vs standings   log loss +0.1152 [+0.0748, +0.1579]  brier +0.0212 [+0.0146, +0.0284]
+  vs last_race   log loss +0.2042 [+0.1651, +0.2455]  brier +0.0307 [+0.0236, +0.0379]
+
+assumptions the simulation was run under
+  laps                               70.000  race distance the simulation runs
+  reference_lap_millis            81425.438  dry benchmark the percentage ratings are scaled against
+  degradation_millis_per_lap         48.870  shrunk from 54 races, field 46
+  pit_loss_millis                 23648.867  in-lap plus out-lap against the driver's own green pace
+  safety_car_per_green_lap            0.011  field rate 0.0150, period 4.6 laps
+  pass_probability_at_parity          0.133  within 143 weighted attempts inside striking range, slope 1.02 per percent
+  dirty_air_millis                  735.248  what a lap inside the following gap costs against the driver's own clean pace, field 978
+  race_day_sd_percent                 0.592  how far a driver's Sunday drifts from his own rating

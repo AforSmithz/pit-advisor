@@ -1,0 +1,1595 @@
+{
+  "generated_at": "2026-08-31T08:18:36.765345Z",
+  "run_id": "20260831T081638-c74abf",
+  "from_season": 2021,
+  "holdout": 60,
+  "paths": 4000,
+  "field": 20,
+  "seed": 11,
+  "scored": [
+    {
+      "name": "simulation",
+      "rows": 1198,
+      "races": 60,
+      "log_loss": {
+        "value": 2.5880786096668347,
+        "low": 2.5512170416509656,
+        "high": 2.62505478797576,
+        "draws": 2000
+      },
+      "brier": {
+        "value": 0.8978840151144327,
+        "low": 0.8911217478801654,
+        "high": 0.9050189431782766,
+        "draws": 2000
+      },
+      "calibration": {
+        "win": 0.010590390273810287,
+        "podium": 0.04517098326215364,
+        "points": 0.08720792170342584
+      },
+      "curves": {
+        "win": [
+          {
+            "low": 0.0,
+            "high": 0.1,
+            "forecast": 0.015132506665428487,
+            "observed": 0.00940733772342427,
+            "count": 1063
+          },
+          {
+            "low": 0.1,
+            "high": 0.2,
+            "forecast": 0.1482067695445259,
+            "observed": 0.16279069767441862,
+            "count": 43
+          },
+          {
+            "low": 0.2,
+            "high": 0.30000000000000004,
+            "forecast": 0.24192630628872938,
+            "observed": 0.23333333333333334,
+            "count": 30
+          },
+          {
+            "low": 0.30000000000000004,
+            "high": 0.4,
+            "forecast": 0.3551127673377004,
+            "observed": 0.5,
+            "count": 12
+          },
+          {
+            "low": 0.4,
+            "high": 0.5,
+            "forecast": 0.45582573023385875,
+            "observed": 0.5263157894736842,
+            "count": 19
+          },
+          {
+            "low": 0.5,
+            "high": 0.6000000000000001,
+            "forecast": 0.5373261495482126,
+            "observed": 0.625,
+            "count": 24
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.7000000000000001,
+            "forecast": 0.6274963794033671,
+            "observed": 0.6666666666666666,
+            "count": 6
+          },
+          {
+            "low": 0.7000000000000001,
+            "high": 0.8,
+            "forecast": 0.7006171875,
+            "observed": 1.0,
+            "count": 1
+          }
+        ],
+        "podium": [
+          {
+            "low": 0.0,
+            "high": 0.1,
+            "forecast": 0.03103312837159411,
+            "observed": 0.00655307994757536,
+            "count": 763
+          },
+          {
+            "low": 0.1,
+            "high": 0.2,
+            "forecast": 0.14456803689859615,
+            "observed": 0.1103448275862069,
+            "count": 145
+          },
+          {
+            "low": 0.2,
+            "high": 0.30000000000000004,
+            "forecast": 0.24040360962375515,
+            "observed": 0.2318840579710145,
+            "count": 69
+          },
+          {
+            "low": 0.30000000000000004,
+            "high": 0.4,
+            "forecast": 0.339190370501831,
+            "observed": 0.49056603773584906,
+            "count": 53
+          },
+          {
+            "low": 0.4,
+            "high": 0.5,
+            "forecast": 0.44750273000366975,
+            "observed": 0.5686274509803921,
+            "count": 51
+          },
+          {
+            "low": 0.5,
+            "high": 0.6000000000000001,
+            "forecast": 0.5463371259150364,
+            "observed": 0.4444444444444444,
+            "count": 27
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.7000000000000001,
+            "forecast": 0.6495779326381284,
+            "observed": 0.8958333333333334,
+            "count": 48
+          },
+          {
+            "low": 0.7000000000000001,
+            "high": 0.8,
+            "forecast": 0.7521618114572832,
+            "observed": 0.75,
+            "count": 36
+          },
+          {
+            "low": 0.8,
+            "high": 0.9,
+            "forecast": 0.8271852320926026,
+            "observed": 1.0,
+            "count": 6
+          }
+        ],
+        "points": [
+          {
+            "low": 0.0,
+            "high": 0.1,
+            "forecast": 0.053819176280782983,
+            "observed": 0.07142857142857142,
+            "count": 14
+          },
+          {
+            "low": 0.1,
+            "high": 0.2,
+            "forecast": 0.16283884333579976,
+            "observed": 0.05263157894736842,
+            "count": 76
+          },
+          {
+            "low": 0.2,
+            "high": 0.30000000000000004,
+            "forecast": 0.2545416911456463,
+            "observed": 0.15315315315315314,
+            "count": 222
+          },
+          {
+            "low": 0.30000000000000004,
+            "high": 0.4,
+            "forecast": 0.3471831833633909,
+            "observed": 0.23711340206185566,
+            "count": 194
+          },
+          {
+            "low": 0.4,
+            "high": 0.5,
+            "forecast": 0.44814915217500895,
+            "observed": 0.48484848484848486,
+            "count": 165
+          },
+          {
+            "low": 0.5,
+            "high": 0.6000000000000001,
+            "forecast": 0.5467903667338473,
+            "observed": 0.6179775280898876,
+            "count": 89
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.7000000000000001,
+            "forecast": 0.6552497853922278,
+            "observed": 0.7549019607843137,
+            "count": 102
+          },
+          {
+            "low": 0.7000000000000001,
+            "high": 0.8,
+            "forecast": 0.7528760304680113,
+            "observed": 0.8661971830985915,
+            "count": 142
+          },
+          {
+            "low": 0.8,
+            "high": 0.9,
+            "forecast": 0.846665399771706,
+            "observed": 0.9177215189873418,
+            "count": 158
+          },
+          {
+            "low": 0.9,
+            "high": 1.0,
+            "forecast": 0.9134173911981581,
+            "observed": 0.9722222222222222,
+            "count": 36
+          }
+        ]
+      }
+    },
+    {
+      "name": "grid",
+      "rows": 1198,
+      "races": 60,
+      "log_loss": {
+        "value": 2.6017287846829937,
+        "low": 2.5529384232088095,
+        "high": 2.6545167655246393,
+        "draws": 2000
+      },
+      "brier": {
+        "value": 0.903505758482536,
+        "low": 0.8976603929652993,
+        "high": 0.909682081210526,
+        "draws": 2000
+      },
+      "calibration": {
+        "win": 0.02300208296141429,
+        "podium": 0.035259687439628117,
+        "points": 0.04446887415730525
+      },
+      "curves": {
+        "win": [
+          {
+            "low": 0.0,
+            "high": 0.1,
+            "forecast": 0.016577738937853415,
+            "observed": 0.0068762278978389,
+            "count": 1018
+          },
+          {
+            "low": 0.1,
+            "high": 0.2,
+            "forecast": 0.13245733985104663,
+            "observed": 0.1,
+            "count": 60
+          },
+          {
+            "low": 0.2,
+            "high": 0.30000000000000004,
+            "forecast": 0.20844818773334114,
+            "observed": 0.23333333333333334,
+            "count": 60
+          },
+          {
+            "low": 0.30000000000000004,
+            "high": 0.4,
+            "forecast": 0.31266986630037985,
+            "observed": 0.55,
+            "count": 60
+          }
+        ],
+        "podium": [
+          {
+            "low": 0.0,
+            "high": 0.1,
+            "forecast": 0.02758487419056841,
+            "observed": 0.014138817480719794,
+            "count": 778
+          },
+          {
+            "low": 0.1,
+            "high": 0.2,
+            "forecast": 0.14597523608891075,
+            "observed": 0.08333333333333333,
+            "count": 120
+          },
+          {
+            "low": 0.2,
+            "high": 0.30000000000000004,
+            "forecast": 0.2507953889465051,
+            "observed": 0.23333333333333334,
+            "count": 60
+          },
+          {
+            "low": 0.30000000000000004,
+            "high": 0.4,
+            "forecast": 0.3489518339723639,
+            "observed": 0.38333333333333336,
+            "count": 60
+          },
+          {
+            "low": 0.4,
+            "high": 0.5,
+            "forecast": 0.4585281320722478,
+            "observed": 0.48333333333333334,
+            "count": 60
+          },
+          {
+            "low": 0.5,
+            "high": 0.6000000000000001,
+            "forecast": 0.577981607206091,
+            "observed": 0.75,
+            "count": 60
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.7000000000000001,
+            "forecast": 0.6442830640000863,
+            "observed": 0.8,
+            "count": 60
+          }
+        ],
+        "points": [
+          {
+            "low": 0.1,
+            "high": 0.2,
+            "forecast": 0.16292259578469498,
+            "observed": 0.1557377049180328,
+            "count": 244
+          },
+          {
+            "low": 0.2,
+            "high": 0.30000000000000004,
+            "forecast": 0.24338722121771778,
+            "observed": 0.2138728323699422,
+            "count": 173
+          },
+          {
+            "low": 0.30000000000000004,
+            "high": 0.4,
+            "forecast": 0.3565390821094708,
+            "observed": 0.2376237623762376,
+            "count": 101
+          },
+          {
+            "low": 0.4,
+            "high": 0.5,
+            "forecast": 0.44721866865314774,
+            "observed": 0.3375,
+            "count": 80
+          },
+          {
+            "low": 0.5,
+            "high": 0.6000000000000001,
+            "forecast": 0.5561558246392698,
+            "observed": 0.5619047619047619,
+            "count": 105
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.7000000000000001,
+            "forecast": 0.6470716761508479,
+            "observed": 0.6933333333333334,
+            "count": 75
+          },
+          {
+            "low": 0.7000000000000001,
+            "high": 0.8,
+            "forecast": 0.7531214380554612,
+            "observed": 0.7702702702702703,
+            "count": 148
+          },
+          {
+            "low": 0.8,
+            "high": 0.9,
+            "forecast": 0.8453019494176454,
+            "observed": 0.915129151291513,
+            "count": 271
+          },
+          {
+            "low": 0.9,
+            "high": 1.0,
+            "forecast": 0.9077937641603702,
+            "observed": 1.0,
+            "count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "standings",
+      "rows": 1198,
+      "races": 60,
+      "log_loss": {
+        "value": 2.7033177440357075,
+        "low": 2.659933183853524,
+        "high": 2.744994945135158,
+        "draws": 2000
+      },
+      "brier": {
+        "value": 0.9191110224193327,
+        "low": 0.9144298311005133,
+        "high": 0.9235709018577283,
+        "draws": 2000
+      },
+      "calibration": {
+        "win": 0.012594346577356759,
+        "podium": 0.027383106323212454,
+        "points": 0.03558153955311362
+      },
+      "curves": {
+        "win": [
+          {
+            "low": 0.0,
+            "high": 0.1,
+            "forecast": 0.01685705071319789,
+            "observed": 0.012757605495583905,
+            "count": 1019
+          },
+          {
+            "low": 0.1,
+            "high": 0.2,
+            "forecast": 0.129504471043495,
+            "observed": 0.1774193548387097,
+            "count": 62
+          },
+          {
+            "low": 0.2,
+            "high": 0.30000000000000004,
+            "forecast": 0.22682267622541452,
+            "observed": 0.20833333333333334,
+            "count": 72
+          },
+          {
+            "low": 0.30000000000000004,
+            "high": 0.4,
+            "forecast": 0.3198058435690758,
+            "observed": 0.4666666666666667,
+            "count": 45
+          }
+        ],
+        "podium": [
+          {
+            "low": 0.0,
+            "high": 0.1,
+            "forecast": 0.02481696857063215,
+            "observed": 0.013888888888888888,
+            "count": 720
+          },
+          {
+            "low": 0.1,
+            "high": 0.2,
+            "forecast": 0.14995473672156553,
+            "observed": 0.19327731092436976,
+            "count": 119
+          },
+          {
+            "low": 0.2,
+            "high": 0.30000000000000004,
+            "forecast": 0.25030819805669,
+            "observed": 0.20833333333333334,
+            "count": 120
+          },
+          {
+            "low": 0.30000000000000004,
+            "high": 0.4,
+            "forecast": 0.34872209260421544,
+            "observed": 0.3333333333333333,
+            "count": 63
+          },
+          {
+            "low": 0.4,
+            "high": 0.5,
+            "forecast": 0.4459773447219395,
+            "observed": 0.5104166666666666,
+            "count": 96
+          },
+          {
+            "low": 0.5,
+            "high": 0.6000000000000001,
+            "forecast": 0.5635933620576828,
+            "observed": 0.6578947368421053,
+            "count": 76
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.7000000000000001,
+            "forecast": 0.6054506707603462,
+            "observed": 0.5,
+            "count": 4
+          }
+        ],
+        "points": [
+          {
+            "low": 0.1,
+            "high": 0.2,
+            "forecast": 0.17200518010359406,
+            "observed": 0.189873417721519,
+            "count": 237
+          },
+          {
+            "low": 0.2,
+            "high": 0.30000000000000004,
+            "forecast": 0.24169675663401052,
+            "observed": 0.23036649214659685,
+            "count": 191
+          },
+          {
+            "low": 0.30000000000000004,
+            "high": 0.4,
+            "forecast": 0.353110687907438,
+            "observed": 0.3392857142857143,
+            "count": 112
+          },
+          {
+            "low": 0.4,
+            "high": 0.5,
+            "forecast": 0.4528849232382506,
+            "observed": 0.4411764705882353,
+            "count": 68
+          },
+          {
+            "low": 0.5,
+            "high": 0.6000000000000001,
+            "forecast": 0.5500763796238473,
+            "observed": 0.44339622641509435,
+            "count": 106
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.7000000000000001,
+            "forecast": 0.6535225356718282,
+            "observed": 0.6,
+            "count": 65
+          },
+          {
+            "low": 0.7000000000000001,
+            "high": 0.8,
+            "forecast": 0.763071705867898,
+            "observed": 0.7783783783783784,
+            "count": 185
+          },
+          {
+            "low": 0.8,
+            "high": 0.9,
+            "forecast": 0.8404514745641108,
+            "observed": 0.9098712446351931,
+            "count": 233
+          },
+          {
+            "low": 0.9,
+            "high": 1.0,
+            "forecast": 0.9103421735458864,
+            "observed": 1.0,
+            "count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "last_race",
+      "rows": 1198,
+      "races": 60,
+      "log_loss": {
+        "value": 2.7922836816650425,
+        "low": 2.76117801311726,
+        "high": 2.825013567080096,
+        "draws": 2000
+      },
+      "brier": {
+        "value": 0.92856706292326,
+        "low": 0.9249791101479728,
+        "high": 0.9323031954678613,
+        "draws": 2000
+      },
+      "calibration": {
+        "win": 0.009701427678144553,
+        "podium": 0.022131859986505745,
+        "points": 0.038620139380017904
+      },
+      "curves": {
+        "win": [
+          {
+            "low": 0.0,
+            "high": 0.1,
+            "forecast": 0.021018571358375388,
+            "observed": 0.016983016983016984,
+            "count": 1001
+          },
+          {
+            "low": 0.1,
+            "high": 0.2,
+            "forecast": 0.14650806068843228,
+            "observed": 0.15328467153284672,
+            "count": 137
+          },
+          {
+            "low": 0.2,
+            "high": 0.30000000000000004,
+            "forecast": 0.2652622340982584,
+            "observed": 0.3728813559322034,
+            "count": 59
+          },
+          {
+            "low": 0.30000000000000004,
+            "high": 0.4,
+            "forecast": 0.3047965547958773,
+            "observed": 0.0,
+            "count": 1
+          }
+        ],
+        "podium": [
+          {
+            "low": 0.0,
+            "high": 0.1,
+            "forecast": 0.041674868269815334,
+            "observed": 0.034818941504178275,
+            "count": 718
+          },
+          {
+            "low": 0.1,
+            "high": 0.2,
+            "forecast": 0.14143433401266126,
+            "observed": 0.0958904109589041,
+            "count": 146
+          },
+          {
+            "low": 0.2,
+            "high": 0.30000000000000004,
+            "forecast": 0.2482887014551448,
+            "observed": 0.2872340425531915,
+            "count": 94
+          },
+          {
+            "low": 0.30000000000000004,
+            "high": 0.4,
+            "forecast": 0.3613132207096982,
+            "observed": 0.37815126050420167,
+            "count": 119
+          },
+          {
+            "low": 0.4,
+            "high": 0.5,
+            "forecast": 0.45931930563036305,
+            "observed": 0.47540983606557374,
+            "count": 61
+          },
+          {
+            "low": 0.5,
+            "high": 0.6000000000000001,
+            "forecast": 0.5284018512508705,
+            "observed": 0.6666666666666666,
+            "count": 60
+          }
+        ],
+        "points": [
+          {
+            "low": 0.2,
+            "high": 0.30000000000000004,
+            "forecast": 0.27275641191426186,
+            "observed": 0.24663677130044842,
+            "count": 223
+          },
+          {
+            "low": 0.30000000000000004,
+            "high": 0.4,
+            "forecast": 0.3362248584867273,
+            "observed": 0.33121019108280253,
+            "count": 314
+          },
+          {
+            "low": 0.4,
+            "high": 0.5,
+            "forecast": 0.4509532155012966,
+            "observed": 0.42168674698795183,
+            "count": 166
+          },
+          {
+            "low": 0.5,
+            "high": 0.6000000000000001,
+            "forecast": 0.5546241331917651,
+            "observed": 0.4266666666666667,
+            "count": 75
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.7000000000000001,
+            "forecast": 0.6512897239922082,
+            "observed": 0.6470588235294118,
+            "count": 119
+          },
+          {
+            "low": 0.7000000000000001,
+            "high": 0.8,
+            "forecast": 0.7629213164015577,
+            "observed": 0.88125,
+            "count": 160
+          },
+          {
+            "low": 0.8,
+            "high": 0.9,
+            "forecast": 0.822861480410443,
+            "observed": 0.8581560283687943,
+            "count": 141
+          }
+        ]
+      }
+    }
+  ],
+  "paired": [
+    {
+      "baseline": "grid",
+      "log_loss_gain": {
+        "value": 0.01365017501615906,
+        "low": -0.01840488418611754,
+        "high": 0.047153470841528516,
+        "draws": 2000
+      },
+      "brier_gain": {
+        "value": 0.0056217433681032825,
+        "low": 0.001108847027551735,
+        "high": 0.00977879907975434,
+        "draws": 2000
+      }
+    },
+    {
+      "baseline": "standings",
+      "log_loss_gain": {
+        "value": 0.11523913436887279,
+        "low": 0.07484688006743645,
+        "high": 0.1578603516812177,
+        "draws": 2000
+      },
+      "brier_gain": {
+        "value": 0.021227007304900014,
+        "low": 0.014638386808191767,
+        "high": 0.028406514058134404,
+        "draws": 2000
+      }
+    },
+    {
+      "baseline": "last_race",
+      "log_loss_gain": {
+        "value": 0.2042050719982078,
+        "low": 0.1651369058522345,
+        "high": 0.24550175963352447,
+        "draws": 2000
+      },
+      "brier_gain": {
+        "value": 0.030683047808827246,
+        "low": 0.02359749933712967,
+        "high": 0.03790801827964052,
+        "draws": 2000
+      }
+    }
+  ],
+  "per_race": [
+    {
+      "season": 2023,
+      "round": 11,
+      "circuit_id": "hungaroring",
+      "race_date": "2023-07-23",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5329787686381025,
+        "grid": 2.825491285374093,
+        "standings": 2.6813003815755314,
+        "last_race": 2.5309617291921596
+      }
+    },
+    {
+      "season": 2023,
+      "round": 12,
+      "circuit_id": "spa",
+      "race_date": "2023-07-30",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5400038084279086,
+        "grid": 2.526956027320441,
+        "standings": 2.463171599844764,
+        "last_race": 2.704983765221232
+      }
+    },
+    {
+      "season": 2023,
+      "round": 13,
+      "circuit_id": "zandvoort",
+      "race_date": "2023-08-27",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.646778408394848,
+        "grid": 2.761884140395394,
+        "standings": 2.7040605171365684,
+        "last_race": 2.811771927907441
+      }
+    },
+    {
+      "season": 2023,
+      "round": 14,
+      "circuit_id": "monza",
+      "race_date": "2023-09-03",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.499684380111965,
+        "grid": 2.4566180505903485,
+        "standings": 2.708232692696846,
+        "last_race": 2.8160640478252312
+      }
+    },
+    {
+      "season": 2023,
+      "round": 15,
+      "circuit_id": "marina_bay",
+      "race_date": "2023-09-17",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.8171008797836157,
+        "grid": 2.81453836531809,
+        "standings": 2.9608930929038415,
+        "last_race": 2.894270638943295
+      }
+    },
+    {
+      "season": 2023,
+      "round": 16,
+      "circuit_id": "suzuka",
+      "race_date": "2023-09-24",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5948630242219664,
+        "grid": 2.4249770256438636,
+        "standings": 2.707005373997295,
+        "last_race": 2.7631456333979107
+      }
+    },
+    {
+      "season": 2023,
+      "round": 17,
+      "circuit_id": "losail",
+      "race_date": "2023-10-08",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.666677192785812,
+        "grid": 2.7495987341681793,
+        "standings": 2.7651483532495282,
+        "last_race": 2.6566758893198186
+      }
+    },
+    {
+      "season": 2023,
+      "round": 18,
+      "circuit_id": "americas",
+      "race_date": "2023-10-22",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.7805817987915615,
+        "grid": 2.8139387795965183,
+        "standings": 2.8377639418859917,
+        "last_race": 2.9641266678770193
+      }
+    },
+    {
+      "season": 2023,
+      "round": 19,
+      "circuit_id": "rodriguez",
+      "race_date": "2023-10-29",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.778108739235275,
+        "grid": 2.71312237142085,
+        "standings": 2.591419011479141,
+        "last_race": 2.853517045625418
+      }
+    },
+    {
+      "season": 2023,
+      "round": 20,
+      "circuit_id": "interlagos",
+      "race_date": "2023-11-05",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.642403582945552,
+        "grid": 2.8193911112875965,
+        "standings": 2.7408528725029777,
+        "last_race": 2.890653534726294
+      }
+    },
+    {
+      "season": 2023,
+      "round": 21,
+      "circuit_id": "vegas",
+      "race_date": "2023-11-19",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.8915846306200508,
+        "grid": 3.2390067040796127,
+        "standings": 2.706280710776246,
+        "last_race": 2.735040289525895
+      }
+    },
+    {
+      "season": 2023,
+      "round": 22,
+      "circuit_id": "yas_marina",
+      "race_date": "2023-11-26",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.4586981323039856,
+        "grid": 2.4519947942628066,
+        "standings": 2.669260491613776,
+        "last_race": 2.785179228735199
+      }
+    },
+    {
+      "season": 2024,
+      "round": 1,
+      "circuit_id": "bahrain",
+      "race_date": "2024-03-02",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.4995544973783823,
+        "grid": 2.525197592249488,
+        "standings": 2.563202368569544,
+        "last_race": 2.6532570463263583
+      }
+    },
+    {
+      "season": 2024,
+      "round": 2,
+      "circuit_id": "jeddah",
+      "race_date": "2024-03-09",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.4776526476578487,
+        "grid": 2.4168400400964893,
+        "standings": 2.507765863649147,
+        "last_race": 2.691756914328159
+      }
+    },
+    {
+      "season": 2024,
+      "round": 3,
+      "circuit_id": "albert_park",
+      "race_date": "2024-03-24",
+      "starters": 19,
+      "log_loss": {
+        "simulation": 2.7339569905221714,
+        "grid": 2.5551001784623275,
+        "standings": 2.784915213097204,
+        "last_race": 2.762749865546268
+      }
+    },
+    {
+      "season": 2024,
+      "round": 4,
+      "circuit_id": "suzuka",
+      "race_date": "2024-04-07",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.476923314339458,
+        "grid": 2.434716828244128,
+        "standings": 2.4339845947892016,
+        "last_race": 2.887528837725431
+      }
+    },
+    {
+      "season": 2024,
+      "round": 5,
+      "circuit_id": "shanghai",
+      "race_date": "2024-04-21",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.432309220781165,
+        "grid": 2.5464407649580467,
+        "standings": 2.532676424860706,
+        "last_race": 2.5443535427692208
+      }
+    },
+    {
+      "season": 2024,
+      "round": 6,
+      "circuit_id": "miami",
+      "race_date": "2024-05-05",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5892315767292517,
+        "grid": 2.6418369604897554,
+        "standings": 2.602482381786,
+        "last_race": 2.6062536952087134
+      }
+    },
+    {
+      "season": 2024,
+      "round": 7,
+      "circuit_id": "imola",
+      "race_date": "2024-05-19",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5409718152598355,
+        "grid": 2.418709398053759,
+        "standings": 2.4345898769858225,
+        "last_race": 2.645369626649045
+      }
+    },
+    {
+      "season": 2024,
+      "round": 8,
+      "circuit_id": "monaco",
+      "race_date": "2024-05-26",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.4669154124667196,
+        "grid": 2.318135583663767,
+        "standings": 2.631081373935457,
+        "last_race": 2.7283655271686755
+      }
+    },
+    {
+      "season": 2024,
+      "round": 9,
+      "circuit_id": "villeneuve",
+      "race_date": "2024-06-09",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.7178089297145616,
+        "grid": 2.6619619087040545,
+        "standings": 2.6654903982241507,
+        "last_race": 2.8839643762801694
+      }
+    },
+    {
+      "season": 2024,
+      "round": 10,
+      "circuit_id": "catalunya",
+      "race_date": "2024-06-23",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.3749029090550557,
+        "grid": 2.4028271344036853,
+        "standings": 2.484995454074629,
+        "last_race": 2.718864156245845
+      }
+    },
+    {
+      "season": 2024,
+      "round": 11,
+      "circuit_id": "red_bull_ring",
+      "race_date": "2024-06-30",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.7481709406828685,
+        "grid": 2.6347199212209396,
+        "standings": 2.93637403634967,
+        "last_race": 2.7936839565983336
+      }
+    },
+    {
+      "season": 2024,
+      "round": 12,
+      "circuit_id": "silverstone",
+      "race_date": "2024-07-07",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.38266860863871,
+        "grid": 2.358043927720251,
+        "standings": 2.863506135983319,
+        "last_race": 2.8132324204509884
+      }
+    },
+    {
+      "season": 2024,
+      "round": 13,
+      "circuit_id": "hungaroring",
+      "race_date": "2024-07-21",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5151707275749655,
+        "grid": 2.708081456482007,
+        "standings": 2.5299632258524984,
+        "last_race": 2.786314314394193
+      }
+    },
+    {
+      "season": 2024,
+      "round": 14,
+      "circuit_id": "spa",
+      "race_date": "2024-07-28",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.500472713364137,
+        "grid": 2.523813813941051,
+        "standings": 2.67211667098275,
+        "last_race": 2.639888193902453
+      }
+    },
+    {
+      "season": 2024,
+      "round": 15,
+      "circuit_id": "zandvoort",
+      "race_date": "2024-08-25",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5036858364957673,
+        "grid": 2.4719219139964865,
+        "standings": 2.404442082671753,
+        "last_race": 2.7867549057164216
+      }
+    },
+    {
+      "season": 2024,
+      "round": 16,
+      "circuit_id": "monza",
+      "race_date": "2024-09-01",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.454001917450626,
+        "grid": 2.3789746853745086,
+        "standings": 2.543670263061485,
+        "last_race": 2.656482119841772
+      }
+    },
+    {
+      "season": 2024,
+      "round": 17,
+      "circuit_id": "baku",
+      "race_date": "2024-09-15",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.8420833187546948,
+        "grid": 2.6978542711569418,
+        "standings": 2.7704272118057096,
+        "last_race": 2.7146548088799114
+      }
+    },
+    {
+      "season": 2024,
+      "round": 18,
+      "circuit_id": "marina_bay",
+      "race_date": "2024-09-22",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.3444015845818735,
+        "grid": 2.4385351434931914,
+        "standings": 2.5100161791304023,
+        "last_race": 2.714451570560797
+      }
+    },
+    {
+      "season": 2024,
+      "round": 19,
+      "circuit_id": "americas",
+      "race_date": "2024-10-20",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.586217706405465,
+        "grid": 2.856725291786428,
+        "standings": 2.670758617291701,
+        "last_race": 2.7861579947921666
+      }
+    },
+    {
+      "season": 2024,
+      "round": 20,
+      "circuit_id": "rodriguez",
+      "race_date": "2024-10-27",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.6250973252034844,
+        "grid": 2.5708078522884072,
+        "standings": 2.6769395721044225,
+        "last_race": 2.7149681601849167
+      }
+    },
+    {
+      "season": 2024,
+      "round": 21,
+      "circuit_id": "interlagos",
+      "race_date": "2024-11-03",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.794811706830178,
+        "grid": 2.9893605805638055,
+        "standings": 3.1638865655296895,
+        "last_race": 3.199983339375618
+      }
+    },
+    {
+      "season": 2024,
+      "round": 22,
+      "circuit_id": "vegas",
+      "race_date": "2024-11-23",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5019763664915073,
+        "grid": 2.537857058512485,
+        "standings": 2.6170965221371274,
+        "last_race": 2.9578302728553307
+      }
+    },
+    {
+      "season": 2024,
+      "round": 23,
+      "circuit_id": "losail",
+      "race_date": "2024-12-01",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.7485166809763695,
+        "grid": 2.5901136523131547,
+        "standings": 2.8216192003078353,
+        "last_race": 2.963026282049838
+      }
+    },
+    {
+      "season": 2024,
+      "round": 24,
+      "circuit_id": "yas_marina",
+      "race_date": "2024-12-08",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5750376813590377,
+        "grid": 2.8888305229026807,
+        "standings": 2.5282063824279257,
+        "last_race": 2.967599911123332
+      }
+    },
+    {
+      "season": 2025,
+      "round": 1,
+      "circuit_id": "albert_park",
+      "race_date": "2025-03-16",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.633730142795499,
+        "grid": 2.8973984140181934,
+        "standings": 3.0155236754965746,
+        "last_race": 2.823242755788644
+      }
+    },
+    {
+      "season": 2025,
+      "round": 2,
+      "circuit_id": "shanghai",
+      "race_date": "2025-03-23",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.7309882056284613,
+        "grid": 2.781647437881773,
+        "standings": 2.983199397820463,
+        "last_race": 2.8984136543058994
+      }
+    },
+    {
+      "season": 2025,
+      "round": 3,
+      "circuit_id": "suzuka",
+      "race_date": "2025-04-06",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.3930693520813167,
+        "grid": 2.282004376594539,
+        "standings": 2.704602701824059,
+        "last_race": 2.7792063686205277
+      }
+    },
+    {
+      "season": 2025,
+      "round": 4,
+      "circuit_id": "bahrain",
+      "race_date": "2025-04-13",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.539186395160807,
+        "grid": 2.5783084284960314,
+        "standings": 2.8515382987543036,
+        "last_race": 2.6755240391528625
+      }
+    },
+    {
+      "season": 2025,
+      "round": 5,
+      "circuit_id": "jeddah",
+      "race_date": "2025-04-20",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5566917880280116,
+        "grid": 2.430680381430912,
+        "standings": 2.650384681734063,
+        "last_race": 2.674863094672644
+      }
+    },
+    {
+      "season": 2025,
+      "round": 6,
+      "circuit_id": "miami",
+      "race_date": "2025-05-04",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.6214538446034488,
+        "grid": 2.5166412114763705,
+        "standings": 2.516323975476378,
+        "last_race": 2.5634288350199474
+      }
+    },
+    {
+      "season": 2025,
+      "round": 7,
+      "circuit_id": "imola",
+      "race_date": "2025-05-18",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.6987193820648328,
+        "grid": 2.7051851261855937,
+        "standings": 2.5822100329719238,
+        "last_race": 2.705840160951007
+      }
+    },
+    {
+      "season": 2025,
+      "round": 8,
+      "circuit_id": "monaco",
+      "race_date": "2025-05-25",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.407074742127673,
+        "grid": 2.4125876507885113,
+        "standings": 2.7308642359356488,
+        "last_race": 2.67962186200027
+      }
+    },
+    {
+      "season": 2025,
+      "round": 9,
+      "circuit_id": "catalunya",
+      "race_date": "2025-06-01",
+      "starters": 19,
+      "log_loss": {
+        "simulation": 2.6265217934758773,
+        "grid": 2.5586065415208488,
+        "standings": 2.734720376145678,
+        "last_race": 2.8041007851665913
+      }
+    },
+    {
+      "season": 2025,
+      "round": 10,
+      "circuit_id": "villeneuve",
+      "race_date": "2025-06-15",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5059955110436247,
+        "grid": 2.4752068087462193,
+        "standings": 2.7121547443371017,
+        "last_race": 2.9009824236476263
+      }
+    },
+    {
+      "season": 2025,
+      "round": 11,
+      "circuit_id": "red_bull_ring",
+      "race_date": "2025-06-29",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5124179541330336,
+        "grid": 2.4736503278658453,
+        "standings": 2.7311752917576113,
+        "last_race": 2.8685684754995044
+      }
+    },
+    {
+      "season": 2025,
+      "round": 12,
+      "circuit_id": "silverstone",
+      "race_date": "2025-07-06",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.94768138757886,
+        "grid": 3.01868078047902,
+        "standings": 2.9136508954830997,
+        "last_race": 2.956134603244598
+      }
+    },
+    {
+      "season": 2025,
+      "round": 13,
+      "circuit_id": "spa",
+      "race_date": "2025-07-27",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.4540658414827528,
+        "grid": 2.4794847479619886,
+        "standings": 2.6435810713012007,
+        "last_race": 2.9228725572562593
+      }
+    },
+    {
+      "season": 2025,
+      "round": 14,
+      "circuit_id": "hungaroring",
+      "race_date": "2025-08-03",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5584090332537563,
+        "grid": 2.3851582869935077,
+        "standings": 2.9381738678999128,
+        "last_race": 2.7827447306847635
+      }
+    },
+    {
+      "season": 2025,
+      "round": 15,
+      "circuit_id": "zandvoort",
+      "race_date": "2025-08-31",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.8752863211333377,
+        "grid": 2.9879774905337433,
+        "standings": 2.9242740366177506,
+        "last_race": 3.0560258114248238
+      }
+    },
+    {
+      "season": 2025,
+      "round": 16,
+      "circuit_id": "monza",
+      "race_date": "2025-09-07",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.452257110911465,
+        "grid": 2.506982759743599,
+        "standings": 2.5441644244804666,
+        "last_race": 3.002933561291317
+      }
+    },
+    {
+      "season": 2025,
+      "round": 17,
+      "circuit_id": "baku",
+      "race_date": "2025-09-21",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5218386553112175,
+        "grid": 2.42761865402453,
+        "standings": 3.1672478376827873,
+        "last_race": 2.946863713530999
+      }
+    },
+    {
+      "season": 2025,
+      "round": 18,
+      "circuit_id": "marina_bay",
+      "race_date": "2025-10-05",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.3788661683804824,
+        "grid": 2.4066713272423046,
+        "standings": 2.6381485676751173,
+        "last_race": 2.7575354477239142
+      }
+    },
+    {
+      "season": 2025,
+      "round": 19,
+      "circuit_id": "americas",
+      "race_date": "2025-10-19",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.3609392328132826,
+        "grid": 2.4325554451632287,
+        "standings": 2.6959783938805617,
+        "last_race": 2.7206279619219993
+      }
+    },
+    {
+      "season": 2025,
+      "round": 20,
+      "circuit_id": "rodriguez",
+      "race_date": "2025-10-26",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.5278661675521876,
+        "grid": 2.5262791033428367,
+        "standings": 2.811486396199249,
+        "last_race": 2.7379273098038324
+      }
+    },
+    {
+      "season": 2025,
+      "round": 21,
+      "circuit_id": "interlagos",
+      "race_date": "2025-11-09",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.6632698758958187,
+        "grid": 2.5652093707241104,
+        "standings": 2.6346769060025976,
+        "last_race": 2.768181569808951
+      }
+    },
+    {
+      "season": 2025,
+      "round": 22,
+      "circuit_id": "vegas",
+      "race_date": "2025-11-23",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.810267635380966,
+        "grid": 2.9666011542585826,
+        "standings": 2.722408854645179,
+        "last_race": 2.823230789692959
+      }
+    },
+    {
+      "season": 2025,
+      "round": 23,
+      "circuit_id": "losail",
+      "race_date": "2025-11-30",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.703412593058812,
+        "grid": 2.5756144901355538,
+        "standings": 2.739186557965223,
+        "last_race": 2.8218838810668543
+      }
+    },
+    {
+      "season": 2025,
+      "round": 24,
+      "circuit_id": "yas_marina",
+      "race_date": "2025-12-07",
+      "starters": 20,
+      "log_loss": {
+        "simulation": 2.531919749373006,
+        "grid": 2.543565352366994,
+        "standings": 2.733443769843405,
+        "last_race": 2.8414984347240178
+      }
+    }
+  ],
+  "beats_baselines": true,
+  "separated_from": [
+    "standings",
+    "last_race"
+  ],
+  "assumptions": [
+    {
+      "name": "laps",
+      "value": 70.0,
+      "detail": "race distance the simulation runs"
+    },
+    {
+      "name": "reference_lap_millis",
+      "value": 81425.43751328274,
+      "detail": "dry benchmark the percentage ratings are scaled against"
+    },
+    {
+      "name": "degradation_millis_per_lap",
+      "value": 48.86999322194747,
+      "detail": "shrunk from 54 races, field 46"
+    },
+    {
+      "name": "pit_loss_millis",
+      "value": 23648.86740958217,
+      "detail": "in-lap plus out-lap against the driver's own green pace"
+    },
+    {
+      "name": "safety_car_per_green_lap",
+      "value": 0.011373915053506746,
+      "detail": "field rate 0.0150, period 4.6 laps"
+    },
+    {
+      "name": "pass_probability_at_parity",
+      "value": 0.13330284051194594,
+      "detail": "within 143 weighted attempts inside striking range, slope 1.02 per percent"
+    },
+    {
+      "name": "dirty_air_millis",
+      "value": 735.2476807796119,
+      "detail": "what a lap inside the following gap costs against the driver's own clean pace, field 978"
+    },
+    {
+      "name": "race_day_sd_percent",
+      "value": 0.5924846426678868,
+      "detail": "how far a driver's Sunday drifts from his own rating"
+    }
+  ]
+}
