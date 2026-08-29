@@ -224,8 +224,8 @@ def reliability_frame(results: pl.DataFrame, events: pl.DataFrame) -> pl.DataFra
     ).select(reliability.COLUMNS)
 
 
-def _weather(
-    store: ObjectStore, context: EventContext, layer: Layer
+def weather_for(
+    store: ObjectStore, context: EventContext, layer: Layer = Layer.BRONZE
 ) -> wet_weather.ScenarioWeights | None:
     if context.start_utc is None:
         return None
@@ -289,7 +289,7 @@ def assemble(
         form=form.fit(dry.select(form.COLUMNS), cutoff),
         quali=quali_race.trend(stacked, cutoff),
         track=track_fit.fit(team_frame(pace), context.circuit_id, cutoff),
-        weather=_weather(store, context, layer),
+        weather=weather_for(store, context, layer),
         wet=wet_weather.wet_form(pace.select(wet_weather.COLUMNS), cutoff),
         reliability=reliability.fit(reliability_frame(results, events), cutoff),
     )
