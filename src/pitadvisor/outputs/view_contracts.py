@@ -132,7 +132,9 @@ def view_key(name: str) -> str:
 def emit(store: ObjectStore, view: BaseModel) -> str:
     payload: dict[str, Any] = view.model_dump(mode="json")
     name = str(payload.get("view") or "view")
-    return store.put(view_key(name), json.dumps(payload, indent=2).encode())
+    # NaN is not JSON and the browser refuses to parse it, so a number that went non-finite
+    # upstream fails here rather than blanking a page
+    return store.put(view_key(name), json.dumps(payload, indent=2, allow_nan=False).encode())
 
 
 class Estimate(BaseModel, frozen=True):
@@ -514,6 +516,28 @@ class ScenarioDriver(BaseModel, frozen=True):
     points: float
 
 
+class Bounds(BaseModel, frozen=True):
+    """A score with the interval the race-level bootstrap gave it. One race cannot be
+    resampled, so the bounds are allowed to be absent rather than faked as zero width."""
+
+    value: float
+    low: float | None
+    high: float | None
+    races: int
+    draws: int
+
+
+def _bounds(interval: backtest.Interval, races: int) -> Bounds:
+    finite = math.isfinite(interval.low) and math.isfinite(interval.high)
+    return Bounds(
+        value=interval.value,
+        low=interval.low if finite else None,
+        high=interval.high if finite else None,
+        races=races,
+        draws=interval.draws,
+    )
+
+
 class Evidence(BaseModel, frozen=True):
     """What the backtest said about this forecast, carried next to it. A probability with no
     score attached is the thing this project exists not to ship."""
@@ -521,9 +545,10 @@ class Evidence(BaseModel, frozen=True):
     holdout: int
     races: int
     from_season: int
-    log_loss: dict[str, Estimate]
-    brier: dict[str, Estimate]
+    log_loss: dict[str, Bounds]
+    brier: dict[str, Bounds]
     beats_baselines: bool
+    separated_from: list[str]
 
 
 class ForecastView(BaseModel, frozen=True):
@@ -623,10 +648,19 @@ class ScoredModel(BaseModel, frozen=True):
     name: str
     rows: int
     races: int
-    log_loss: Estimate
-    brier: Estimate
+    log_loss: Bounds
+    brier: Bounds
     calibration: dict[str, float]
     curves: dict[str, list[CurvePoint]]
+
+
+class PairedGain(BaseModel, frozen=True):
+    """How much better than one baseline, resampled over the same races. Two marginal
+    intervals that overlap say nothing about a difference measured on the same events."""
+
+    baseline: str
+    log_loss_gain: Bounds
+    brier_gain: Bounds
 
 
 class RaceLoss(BaseModel, frozen=True):
@@ -653,6 +687,8 @@ class CalibrationView(BaseModel, frozen=True):
     scored: list[ScoredModel]
     per_race: list[RaceLoss]
     beats_baselines: bool
+    separated_from: list[str]
+    paired: list[PairedGain]
     assumptions: list[Assumption]
 
 
@@ -674,18 +710,8 @@ def calibration_view(
                 name=item.name,
                 rows=item.rows,
                 races=item.races,
-                log_loss=Estimate(
-                    value=item.log_loss.value,
-                    low=item.log_loss.low,
-                    high=item.log_loss.high,
-                    samples=item.races,
-                ),
-                brier=Estimate(
-                    value=item.brier.value,
-                    low=item.brier.low,
-                    high=item.brier.high,
-                    samples=item.races,
-                ),
+                log_loss=_bounds(item.log_loss, item.races),
+                brier=_bounds(item.brier, item.races),
                 calibration=item.calibration,
                 curves={
                     event: [CurvePoint(**point.model_dump()) for point in bins]
@@ -696,6 +722,15 @@ def calibration_view(
         ],
         per_race=[RaceLoss(**item.model_dump()) for item in report.per_race],
         beats_baselines=report.beats_baselines,
+        separated_from=report.separated_from,
+        paired=[
+            PairedGain(
+                baseline=item.baseline,
+                log_loss_gain=_bounds(item.log_loss_gain, len(report.per_race)),
+                brier_gain=_bounds(item.brier_gain, len(report.per_race)),
+            )
+            for item in report.paired
+        ],
         assumptions=report.assumptions,
     )
 
@@ -706,23 +741,8 @@ def evidence_from(report: backtest.Report) -> Evidence:
         holdout=report.holdout,
         races=ours.races,
         from_season=report.from_season,
-        log_loss={
-            item.name: Estimate(
-                value=item.log_loss.value,
-                low=item.log_loss.low,
-                high=item.log_loss.high,
-                samples=item.races,
-            )
-            for item in report.scored
-        },
-        brier={
-            item.name: Estimate(
-                value=item.brier.value,
-                low=item.brier.low,
-                high=item.brier.high,
-                samples=item.races,
-            )
-            for item in report.scored
-        },
+        log_loss={item.name: _bounds(item.log_loss, item.races) for item in report.scored},
+        brier={item.name: _bounds(item.brier, item.races) for item in report.scored},
         beats_baselines=report.beats_baselines,
+        separated_from=report.separated_from,
     )

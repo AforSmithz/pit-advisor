@@ -736,6 +736,9 @@ class Report(BaseModel, frozen=True):
     paired: list[Paired]
     per_race: list[RaceScore]
     beats_baselines: bool
+    # a lower point estimate is not a result. these are the baselines whose paired interval
+    # clears zero, which is the only list that says the holdout actually separated them
+    separated_from: list[str]
     assumptions: list[Assumption]
 
 
@@ -843,6 +846,11 @@ def run(
         _paired(name, mine, np.vstack(grids[name]), outcome, race_of, rng)
         for name in baselines.FEATURES
     ]
+    separated = [
+        item.baseline
+        for item in paired
+        if np.isfinite(item.log_loss_gain.low) and item.log_loss_gain.low > 0.0
+    ]
     return Report(
         generated_at=generated_at or datetime.now(UTC),
         run_id=run_id,
@@ -855,6 +863,7 @@ def run(
         paired=paired,
         per_race=per_race,
         beats_baselines=beats,
+        separated_from=separated,
         assumptions=assumptions,
     )
 

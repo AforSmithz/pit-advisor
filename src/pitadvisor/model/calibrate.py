@@ -129,6 +129,11 @@ def summarise(report: Report) -> str:
         f"the simulation beats {', '.join(beaten) if beaten else 'no baseline'} on log loss"
         + (f" and loses to {', '.join(lost)}" if lost else "")
     )
+    lines.append(
+        "this holdout separates it from "
+        + (", ".join(report.separated_from) if report.separated_from else "no baseline at all")
+        + ", the rest are inside bootstrap noise"
+    )
     lines.append("")
     lines.append("how much better than each baseline, resampled over the same races. an")
     lines.append("interval that straddles zero means the two are not separated by this holdout")
