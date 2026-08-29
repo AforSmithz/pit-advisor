@@ -294,7 +294,9 @@ class TransformStack(Stack):
                 )
             )
             .next(self._step("CheckLineage", "pitadv lineage --check"))
-            .next(self._step("EmitViews", "pitadv emit-views"))
+            .next(
+                self._step("EmitViews", "pitadv emit-views --views pipeline,weekend,driver,track")
+            )
         )
 
         self.state_machine = sfn.StateMachine(

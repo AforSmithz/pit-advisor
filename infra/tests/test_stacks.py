@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 import aws_cdk as cdk
@@ -411,6 +412,13 @@ def test_the_pipeline_builds_bronze_then_silver_then_views(transform_template: T
     assert "pitadv ingest --source jolpica --season $SEASON --round $ROUND" in definition
 
 
+def test_the_pipeline_emits_every_view_the_dashboard_reads(transform_template: Template) -> None:
+    definition = weekend_definition(transform_template)
+    # the default is pipeline only, which leaves the dashboard republishing stale numbers
+    assert "pitadv emit-views --views pipeline,weekend,driver,track" in definition
+    assert definition.index("CheckLineage") < definition.index("EmitViews")
+
+
 def test_a_step_cannot_overwrite_the_season_and_round(transform_template: Template) -> None:
     definition = weekend_definition(transform_template)
     assert definition.count('"ResultPath":"$.lastTask"') == 8
@@ -531,3 +539,48 @@ def test_the_site_carries_a_content_security_policy(web_template: Template) -> N
     headers = policy["Properties"]["ResponseHeadersPolicyConfig"]["SecurityHeadersConfig"]
     assert headers["ContentSecurityPolicy"]["ContentSecurityPolicy"].startswith("default-src")
     assert headers["StrictTransportSecurity"]["AccessControlMaxAgeSec"] == 31536000
+
+
+def test_the_publish_role_trusts_one_repo_and_one_branch(web_template: Template) -> None:
+    roles = web_template.find_resources("AWS::IAM::Role")
+    assert len(roles) == 1
+    trust = next(iter(roles.values()))["Properties"]["AssumeRolePolicyDocument"]["Statement"][0]
+    assert trust["Action"] == "sts:AssumeRoleWithWebIdentity"
+    conditions = trust["Condition"]["StringEquals"]
+    assert conditions["token.actions.githubusercontent.com:aud"] == "sts.amazonaws.com"
+    subject = conditions["token.actions.githubusercontent.com:sub"]
+    assert subject.endswith(":ref:refs/heads/main")
+    assert subject.startswith("repo:")
+
+
+def test_the_publish_role_cannot_write_to_the_lake(web_template: Template) -> None:
+    policies = web_template.find_resources("AWS::IAM::Policy")
+    writes = [
+        statement
+        for policy in policies.values()
+        for statement in policy["Properties"]["PolicyDocument"]["Statement"]
+        for action in (
+            statement["Action"] if isinstance(statement["Action"], list) else [statement["Action"]]
+        )
+        if action in {"s3:PutObject", "s3:DeleteObject"}
+    ]
+    rendered = json.dumps(writes)
+    assert "pit-advisor-data" not in rendered
+    assert writes, "the role has to be able to write the site itself"
+
+
+def test_the_views_grant_is_read_only(data_template: Template) -> None:
+    policies = data_template.find_resources(
+        "AWS::IAM::ManagedPolicy",
+        {"Properties": {"ManagedPolicyName": f"pitadvisor-views-read-{ENV_NAME}"}},
+    )
+    assert len(policies) == 1
+    actions = {
+        action
+        for policy in policies.values()
+        for statement in policy["Properties"]["PolicyDocument"]["Statement"]
+        for action in (
+            statement["Action"] if isinstance(statement["Action"], list) else [statement["Action"]]
+        )
+    }
+    assert actions == {"s3:ListBucket", "s3:GetObject"}
