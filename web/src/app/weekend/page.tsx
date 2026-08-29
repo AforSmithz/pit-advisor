@@ -6,6 +6,8 @@ import { TrackGroup, type Row } from "@/components/track-group";
 import { isoDate, label, percentOf } from "@/lib/format";
 import { loadWeekend } from "@/lib/load";
 
+export const metadata = { title: "Weekend · Pit Advisor" };
+
 export default async function WeekendPage() {
   const view = await loadWeekend();
   // the lake rates every driver it has ever seen, so the field this season leads and the rest
