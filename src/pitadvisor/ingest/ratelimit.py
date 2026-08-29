@@ -13,7 +13,13 @@ from pydantic import BaseModel
 JOLPICA_HOURLY_CAP = 200
 # open-meteo publishes a daily free-tier budget rather than an hourly one, this is well under it
 OPEN_METEO_HOURLY_CAP = 600
-HOURLY_CAPS: dict[str, int] = {"jolpica": JOLPICA_HOURLY_CAP, "open_meteo": OPEN_METEO_HOURLY_CAP}
+# wikipedia asks for a descriptive user agent and courtesy rather than a published number
+WIKIPEDIA_HOURLY_CAP = 500
+HOURLY_CAPS: dict[str, int] = {
+    "jolpica": JOLPICA_HOURLY_CAP,
+    "open_meteo": OPEN_METEO_HOURLY_CAP,
+    "wikipedia": WIKIPEDIA_HOURLY_CAP,
+}
 LEDGER_TTL = timedelta(days=30)
 MAX_CONTENTION_RETRIES = 6
 

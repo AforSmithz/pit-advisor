@@ -37,6 +37,7 @@ def test_source_values():
         "fastf1",
         "open_meteo",
         "fia_docs",
+        "wikipedia",
         "curated",
     }
 

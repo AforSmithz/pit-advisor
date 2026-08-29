@@ -20,6 +20,7 @@ class Source(StrEnum):
     FASTF1 = "fastf1"
     OPEN_METEO = "open_meteo"
     FIA_DOCS = "fia_docs"
+    WIKIPEDIA = "wikipedia"
     CURATED = "curated"
 
 
