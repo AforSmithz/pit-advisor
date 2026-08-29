@@ -13,6 +13,7 @@ from pitadvisor import cli
 from pitadvisor.config import Settings
 from pitadvisor.ingest.raw_store import LocalObjectStore
 from pitadvisor.quality import catalog
+from pitadvisor.types import EventKey
 
 REGION = "ap-southeast-1"
 
@@ -461,7 +462,7 @@ def test_emit_views_writes_the_pipeline_view(lake, offline):
 
 
 def test_emit_views_rejects_an_unknown_view(lake, offline):
-    result = CliRunner().invoke(cli.app, ["emit-views", "--views", "forecast", "--local"])
+    result = CliRunner().invoke(cli.app, ["emit-views", "--views", "standings", "--local"])
     assert result.exit_code != 0
     assert "no emitter yet" in plain(result.stderr)
 
@@ -650,3 +651,105 @@ def test_metrics_says_what_is_missing_when_the_lake_has_no_session_laps(lake, of
     result = CliRunner().invoke(cli.app, ["metrics", "--local"])
     assert result.exit_code == 1
     assert "no fastf1 session_laps" in plain(result.stderr)
+
+
+def test_backtest_scores_the_simulation_and_writes_the_report(lake, seed_lake, tmp_path):
+    seeded_local(lake, seed_lake)
+    result = CliRunner().invoke(
+        cli.app,
+        ["backtest", "--from", "2024", "--holdout", "3", "--paths", "150", "--local"],
+    )
+    assert result.exit_code == 0, result.stdout
+    written = json.loads((tmp_path / "results" / "backtest" / "backtest.json").read_text())
+    assert {item["name"] for item in written["scored"]} >= {"simulation", "grid"}
+    assert "log loss" in result.stdout
+
+
+def test_backtest_with_nothing_to_hold_out_exits_non_zero(lake, seed_lake):
+    seeded_local(lake, seed_lake)
+    result = CliRunner().invoke(
+        cli.app, ["backtest", "--from", "2099", "--holdout", "5", "--local"]
+    )
+    assert result.exit_code == 1
+    assert "hold out" in plain(result.stderr)
+
+
+def test_calibration_report_needs_a_backtest_first(lake, seed_lake):
+    seeded_local(lake, seed_lake)
+    result = CliRunner().invoke(cli.app, ["calibration-report"])
+    assert result.exit_code == 1
+    assert "run 'pitadv backtest' first" in plain(result.stderr)
+
+
+def test_calibration_report_draws_the_curve_and_writes_the_summary(lake, seed_lake, tmp_path):
+    seeded_local(lake, seed_lake)
+    CliRunner().invoke(
+        cli.app,
+        ["backtest", "--from", "2024", "--holdout", "3", "--paths", "150", "--local"],
+    )
+    result = CliRunner().invoke(cli.app, ["calibration-report"])
+    assert result.exit_code == 0, result.stdout
+    output = tmp_path / "results" / "backtest"
+    assert (output / "reliability.png").stat().st_size > 5_000
+    assert "log loss" in (output / "summary.txt").read_text()
+
+
+def test_emit_views_writes_the_forecast_and_the_calibration_view(lake, seed_lake, tmp_path):
+    seeded_local(lake, seed_lake)
+    CliRunner().invoke(
+        cli.app,
+        ["backtest", "--from", "2024", "--holdout", "3", "--paths", "150", "--local"],
+    )
+    result = CliRunner().invoke(
+        cli.app,
+        ["emit-views", "--views", "forecast,calibration", "--paths", "200", "--local"],
+    )
+    assert result.exit_code == 0, result.stdout
+    forecast = json.loads((lake / "views" / "forecast_view.json").read_text())
+    calibration = json.loads((lake / "views" / "calibration_view.json").read_text())
+    assert forecast["view"] == "forecast_view"
+    assert forecast["evidence"]["beats_baselines"] in (True, False)
+    assert calibration["view"] == "calibration_view"
+    assert calibration["per_race"]
+
+
+def test_the_forecast_view_does_not_read_an_archive_as_a_forecast(lake, seed_lake):
+    """Archived weather says what happened. Only a real forecast is allowed to weight the
+    scenarios, or the simulation would know whether it rained before predicting the race."""
+    from datetime import UTC, datetime, timedelta
+
+    from pitadvisor.ingest.raw_store import write_bronze
+    from pitadvisor.quality.contracts import WeatherRow
+
+    built = seeded_local(lake, seed_lake)
+    store = LocalObjectStore(lake)
+    key = EventKey(season=2024, round=6)
+    start = datetime.combine(built.held(2024, 6), datetime.min.time(), tzinfo=UTC).replace(hour=13)
+    write_bronze(
+        store,
+        "weather",
+        key,
+        [
+            WeatherRow(
+                run_id="run-1",
+                ingested_at=datetime(2025, 1, 1, tzinfo=UTC),
+                season=2024,
+                round=6,
+                circuit_id="suzuka",
+                observed_at=start + timedelta(hours=hour),
+                is_forecast=False,
+                temperature_c=22.0,
+                precipitation_mm=0.0,
+                precipitation_probability=None,
+                wind_speed_kph=8.0,
+                relative_humidity=55.0,
+            )
+            for hour in range(3)
+        ],
+    )
+    result = CliRunner().invoke(
+        cli.app, ["emit-views", "--views", "forecast", "--paths", "150", "--local"]
+    )
+    assert result.exit_code == 0, result.stdout
+    view = json.loads((lake / "views" / "forecast_view.json").read_text())
+    assert view["weights_are_forecast"] is False

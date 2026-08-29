@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Annotated, Any, cast
 from uuid import uuid4
 
+import numpy as np
 import typer
 from boto3.session import Session
 from botocore.exceptions import BotoCoreError, ClientError
@@ -32,9 +33,16 @@ from pitadvisor.ingest.raw_store import LocalObjectStore, ObjectStore, RawStore,
 from pitadvisor.ingest.rebuild import rebuild_bronze
 from pitadvisor.ingest.weather import Circuit, WeatherClient, event_circuits
 from pitadvisor.ingest.weather import ingest_event as weather_ingest_event
+from pitadvisor.model import backtest as forecast_model
+from pitadvisor.model import calibrate
 from pitadvisor.outputs.view_contracts import (
+    Evidence,
+    ForecastView,
+    calibration_view,
     driver_view,
     emit,
+    evidence_from,
+    forecast_view,
     pipeline_view,
     track_view,
     weekend_view,
@@ -437,6 +445,8 @@ def quality_report(
 
 
 EVENT_VIEWS = {"weekend": weekend_view, "driver": driver_view, "track": track_view}
+SIM_VIEWS = ("forecast", "calibration")
+RESULTS = Path("results/backtest")
 
 
 def _assembled(store: ObjectStore, event: str) -> feature_assemble.Assembled:
@@ -461,12 +471,15 @@ def _event(store: ObjectStore, event: str) -> feature_assemble.EventContext:
 def emit_views(
     views: Annotated[str, typer.Option(help="Comma separated view names.")] = "pipeline",
     event: Annotated[str, typer.Option(help="'next' or 'season:round'.")] = "next",
+    paths: Annotated[int, typer.Option(help="Simulated races behind the forecast view.")] = 4000,
+    seed: Annotated[int, typer.Option(help="Seed, so the view reproduces.")] = 11,
+    results: Annotated[Path, typer.Option(help="Where backtest.json lives.")] = RESULTS,
     local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
 ) -> None:
     settings = get_settings()
     store, _, bucket_for = _runtime(local, settings)
     wanted = [name.strip() for name in views.split(",") if name.strip()]
-    unknown = set(wanted) - {"pipeline"} - set(EVENT_VIEWS)
+    unknown = set(wanted) - {"pipeline"} - set(EVENT_VIEWS) - set(SIM_VIEWS)
     if unknown:
         raise typer.BadParameter(f"no emitter yet for {', '.join(sorted(unknown))}")
     if "pipeline" in wanted:
@@ -474,12 +487,66 @@ def emit_views(
         quota = [bucket_for(name).state() for name in HOURLY_CAPS]
         typer.echo(emit(store, pipeline_view(report, _run_id(), quota)))
     needed = [name for name in wanted if name in EVENT_VIEWS]
-    if not needed:
-        return
-    # every event view comes off one assembly, which is the expensive part
-    assembled = _assembled(store, event)
-    for name in needed:
-        typer.echo(emit(store, EVENT_VIEWS[name](assembled)))
+    if needed:
+        # every event view comes off one assembly, which is the expensive part
+        assembled = _assembled(store, event)
+        for name in needed:
+            typer.echo(emit(store, EVENT_VIEWS[name](assembled)))
+    if "calibration" in wanted:
+        typer.echo(emit(store, calibration_view(_report(results))))
+    if "forecast" in wanted:
+        typer.echo(emit(store, _forecast(store, event, paths, seed, results)))
+
+
+def _report(results: Path) -> forecast_model.Report:
+    source = results / calibrate.REPORT
+    if not source.exists():
+        typer.echo(f"{source} is not there, run 'pitadv backtest' first", err=True)
+        raise typer.Exit(1)
+    return forecast_model.Report.model_validate_json(source.read_text())
+
+
+def _evidence(results: Path) -> Evidence | None:
+    source = results / calibrate.REPORT
+    if not source.exists():
+        return None
+    return evidence_from(forecast_model.Report.model_validate_json(source.read_text()))
+
+
+def _forecast(store: ObjectStore, event: str, paths: int, seed: int, results: Path) -> ForecastView:
+    pane = _panel(store)
+    context = _event(store, event)
+    # the archived weather of a race that has already run is what happened, not a forecast.
+    # taking it would tell the simulation whether it rained, so only a real forecast is used
+    observed = feature_assemble.weather_for(store, context)
+    ahead = observed is not None and observed.is_forecast
+    mix = (
+        {"dry": observed.dry, "mixed": observed.mixed, "wet": observed.wet}
+        if ahead and observed is not None
+        else None
+    )
+    try:
+        predicted = forecast_model.forecast(
+            pane,
+            context,
+            context.race_date,
+            np.random.default_rng(seed),
+            paths=paths,
+            weights=mix,
+            weights_are_forecast=ahead,
+        )
+    except forecast_model.NoForecastError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    seats, _ = forecast_model.seats_for(pane, context, context.race_date)
+    return forecast_view(
+        predicted,
+        context,
+        _run_id(),
+        seats,
+        forecast_model.grid_for(pane, context, predicted.outcome.driver_code),
+        _evidence(results),
+    )
 
 
 @app.command(help="Fit the feature stack for one event and print what it stands on.")
@@ -545,6 +612,68 @@ def _render_metrics(metrics: feature_assemble.EventMetrics, explain: bool) -> No
     for reason, count in coverage.exclusions.items():
         share = count / coverage.total_laps if coverage.total_laps else 0.0
         typer.echo(f"  {reason:<18} {count:>7}  {share:>6.1%}")
+
+
+def _panel(store: ObjectStore) -> forecast_model.Panel:
+    try:
+        return forecast_model.panel(store)
+    except feature_assemble.NoEventError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
+
+@app.command(help="Walk the calendar forward, score the simulation against every baseline.")
+def backtest(
+    from_season: Annotated[
+        int, typer.Option("--from", help="Earliest season the holdout may reach back to.")
+    ] = 2021,
+    holdout: Annotated[int, typer.Option(help="How many of the most recent races to score.")] = 60,
+    paths: Annotated[int, typer.Option(help="Simulated races per event.")] = 4000,
+    seed: Annotated[int, typer.Option(help="Seed, so the report reproduces.")] = 11,
+    output: Annotated[Path, typer.Option(help="Where the artifacts land.")] = RESULTS,
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+) -> None:
+    store, _, _ = _runtime(local, get_settings())
+    pane = _panel(store)
+    try:
+        report = forecast_model.run(
+            pane,
+            from_season,
+            holdout,
+            np.random.default_rng(seed),
+            _run_id(),
+            paths=paths,
+            seed=seed,
+        )
+    except forecast_model.NoForecastError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    output.mkdir(parents=True, exist_ok=True)
+    (output / calibrate.REPORT).write_text(report.model_dump_json(indent=2))
+    typer.echo(calibrate.summarise(report), nl=False)
+    typer.echo(f"\nwrote {output / calibrate.REPORT}")
+
+
+@app.command(name="calibration-report", help="Reliability curves and the summary, from a backtest.")
+def calibration_report(
+    output: Annotated[
+        Path, typer.Option(help="Where backtest.json is and the plot goes.")
+    ] = RESULTS,
+) -> None:
+    source = output / calibrate.REPORT
+    if not source.exists():
+        typer.echo(f"{source} is not there, run 'pitadv backtest' first", err=True)
+        raise typer.Exit(1)
+    report = forecast_model.Report.model_validate_json(source.read_text())
+    try:
+        figure = calibrate.render(report, output)
+    except calibrate.MissingPlotterError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    summary = output / calibrate.SUMMARY
+    summary.write_text(calibrate.summarise(report))
+    typer.echo(calibrate.summarise(report), nl=False)
+    typer.echo(f"\nwrote {figure} and {summary}")
 
 
 @app.command(name="catalog-sync", help="Point the Glue catalog at the bronze tables.")
