@@ -8,12 +8,18 @@ import { loadDriver } from "@/lib/load";
 export default async function DriverIndex() {
   const view = await loadDriver();
   const drivers = [...view.drivers].sort(
-    (a, b) => (a.form?.value ?? Infinity) - (b.form?.value ?? Infinity),
+    (a, b) =>
+      Number(b.last_season === view.event.season) - Number(a.last_season === view.event.season) ||
+      (a.form?.value ?? Infinity) - (b.form?.value ?? Infinity),
   );
 
   const rows: Row[] = drivers.map((driver) => ({
     name: driver.driver_code,
     sub: `${label(driver.constructor_id)} · ${driver.pace.length}`,
+    group:
+      driver.last_season === view.event.season
+        ? `the ${view.event.season} field`
+        : "raced earlier, still rated",
     estimate: driver.form,
     missing: driver.form_component === null ? "no shared car lineage" : "no fit",
     href: `/driver/${driver.driver_code}/`,

@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import { Ruler, Track } from "./track";
 import { ScaleLock } from "./scale-lock";
 import { scaleFor } from "@/lib/scale";
@@ -11,6 +12,7 @@ export type Row = {
   estimate: Estimate | null;
   missing?: string;
   href?: string;
+  group?: string;
 };
 
 export function TrackGroup({
@@ -28,18 +30,24 @@ export function TrackGroup({
   return (
     <ScaleLock>
       <Ruler scale={scale} unit={unit} />
-      {rows.map((row) => (
-        <Track
-          key={row.name}
-          name={row.name}
-          sub={row.sub}
-          estimate={row.estimate}
-          missing={row.missing}
-          href={row.href}
-          scale={scale}
-          digits={digits}
-          signedValue={signedValue}
-        />
+      {rows.map((row, index) => (
+        <Fragment key={row.name}>
+          {row.group && row.group !== rows[index - 1]?.group && (
+            <p className="engraved border-t border-engrave-lit pt-3 pb-1 text-lume-dim">
+              {row.group}
+            </p>
+          )}
+          <Track
+            name={row.name}
+            sub={row.sub}
+            estimate={row.estimate}
+            missing={row.missing}
+            href={row.href}
+            scale={scale}
+            digits={digits}
+            signedValue={signedValue}
+          />
+        </Fragment>
       ))}
     </ScaleLock>
   );

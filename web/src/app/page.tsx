@@ -8,7 +8,17 @@ import { loadWeekend } from "@/lib/load";
 
 export default async function WeekendPage() {
   const view = await loadWeekend();
-  const drivers = [...view.drivers].sort((a, b) => rank(a.form?.value) - rank(b.form?.value));
+  // the lake rates every driver it has ever seen, so the field this season leads and the rest
+  // follow under their own rule rather than being dropped
+  const drivers = [...view.drivers].sort(
+    (a, b) =>
+      Number(b.last_season === view.event.season) - Number(a.last_season === view.event.season) ||
+      rank(a.form?.value) - rank(b.form?.value),
+  );
+  const group = (driver: (typeof view.drivers)[number]) =>
+    driver.last_season === view.event.season
+      ? `the ${view.event.season} field`
+      : "raced earlier, still rated";
   const teams = [...view.teams].sort(
     (a, b) => rank(a.track_fit_regression?.value) - rank(b.track_fit_regression?.value),
   );
@@ -16,6 +26,7 @@ export default async function WeekendPage() {
   const formRows: Row[] = drivers.map((driver) => ({
     name: driver.driver_code,
     sub: label(driver.constructor_id),
+    group: group(driver),
     estimate: driver.form,
     missing: driver.form_component === null ? "no shared car lineage" : "no fit",
     href: `/driver/${driver.driver_code}/`,
@@ -24,6 +35,7 @@ export default async function WeekendPage() {
   const qualiRows: Row[] = drivers.map((driver) => ({
     name: driver.driver_code,
     sub: label(driver.constructor_id),
+    group: group(driver),
     estimate: driver.quali_race,
     missing: "no quali-race pairs",
     href: `/driver/${driver.driver_code}/`,
@@ -74,7 +86,7 @@ export default async function WeekendPage() {
                 stands={`fitted from ${view.coverage.sessions_fitted} sessions of clean-air race pace`}
               />
             }
-            note="Teammate-normalised clean-air race pace, time-decayed. Negative is faster than the reference. Every driver the lake has ever rated appears here, not the current entry list."
+            note="Teammate-normalised clean-air race pace, time-decayed. Negative is faster than the reference. Drivers who have not raced this season keep their rating and sit below the field, on the same scale."
           >
             <TrackGroup rows={formRows} unit="% off benchmark" />
           </Plate>

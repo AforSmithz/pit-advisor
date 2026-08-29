@@ -84,6 +84,8 @@ export const weekendView = z
       z.object({
         driver_code: z.string(),
         constructor_id: z.string(),
+        last_season: z.number().int(),
+        last_race_date: z.string(),
         form: nullableEstimate,
         form_component: z.number().int().nullable(),
         quali_race: nullableEstimate,
@@ -117,6 +119,8 @@ export const driverView = z
       z.object({
         driver_code: z.string(),
         constructor_id: z.string(),
+        last_season: z.number().int(),
+        last_race_date: z.string(),
         form: nullableEstimate,
         form_component: z.number().int().nullable(),
         quali_race: nullableEstimate,

@@ -8,7 +8,7 @@ import { useScaleLock } from "./scale-lock";
 export function Ruler({ scale, unit }: { scale: Scale; unit: string }) {
   const lock = useScaleLock();
   return (
-    <div className="grid grid-cols-[7.5rem_1fr_5.5rem] items-end gap-x-4">
+    <div className="grid grid-cols-[9rem_1fr_5.5rem] items-end gap-x-4">
       <div className="engraved pb-1">{unit}</div>
       <div className="relative h-6">
         <div className="absolute inset-x-0 bottom-0 h-px bg-engrave-lit" />
@@ -65,7 +65,7 @@ export function Track({
 
   if (!estimate) {
     return (
-      <div className="grid grid-cols-[7.5rem_1fr_5.5rem] items-center gap-x-4 border-t border-engrave py-2">
+      <div className="grid grid-cols-[9rem_1fr_5.5rem] items-center gap-x-4 border-t border-engrave py-2">
         <TrackName name={name} sub={sub} href={href} />
         <div className="cut-face flex h-7 items-center px-3">
           <span className="engraved text-lume-dim">{missing ?? "no fit"}</span>
@@ -81,7 +81,7 @@ export function Track({
 
   return (
     <div
-      className="group grid cursor-crosshair grid-cols-[7.5rem_1fr_5.5rem] items-center gap-x-4 border-t border-engrave py-2 outline-offset-4 hover:bg-subplate"
+      className="group grid cursor-crosshair grid-cols-[9rem_1fr_5.5rem] items-center gap-x-4 border-t border-engrave py-2 outline-offset-4 hover:bg-subplate"
       tabIndex={0}
       role="button"
       aria-pressed={locked}
