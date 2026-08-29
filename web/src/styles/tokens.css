@@ -14,6 +14,7 @@
 
   --font-plate: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
   --font-figure: var(--font-chivo-mono), ui-monospace, "SF Mono", monospace;
+  --font-legend: var(--font-saira-condensed), "Archivo Narrow", sans-serif;
 
   --text-engraved: 0.6875rem;
   --text-engraved--line-height: 1rem;
@@ -75,6 +76,16 @@ body {
 .figure {
   font-family: var(--font-figure);
   font-variant-numeric: tabular-nums;
+}
+
+/* the legend stamped across the top of a plate. condensed because a grand prix name is long
+   and it has to hold one line next to the round numeral */
+.legend {
+  font-family: var(--font-legend);
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .engraved {

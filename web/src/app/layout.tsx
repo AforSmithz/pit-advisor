@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Archivo, Chivo_Mono } from "next/font/google";
+import { Archivo, Chivo_Mono, Saira_Condensed } from "next/font/google";
 import { Rail } from "@/components/rail";
 import { loadWeekend } from "@/lib/load";
 import "@/styles/tokens.css";
@@ -8,6 +8,12 @@ const archivo = Archivo({ subsets: ["latin"], variable: "--font-archivo", displa
 const chivoMono = Chivo_Mono({
   subsets: ["latin"],
   variable: "--font-chivo-mono",
+  display: "swap",
+});
+const sairaCondensed = Saira_Condensed({
+  subsets: ["latin"],
+  weight: "500",
+  variable: "--font-saira-condensed",
   display: "swap",
 });
 
@@ -22,8 +28,9 @@ THESIS: every figure is engraved on its own calibrated track, so a number cannot
 without the scale and interval it came with. Refuses the tiled KPI dashboard and the
 broadcast timing tower.
 OWN-WORLD: matte dial black, lume cream, engraved steel hairlines, one split-second red.
-Archivo for labels, Chivo Mono for figures. No cards, no shadows, no gauges: rows sit on
-hairlines and a missing fit is a hatched cut face carrying its reason.
+Saira Condensed for the legend a plate is titled with, Archivo for labels, Chivo Mono for
+figures, all three Omnibus-Type. No cards, no shadows, no gauges: rows sit on hairlines and
+a missing fit is a hatched cut face carrying its reason.
 STORY: the reader arrives days before a race, reads form, quali-race delta, track fit and
 reliability, and can tell a real signal from a thin sample without leaving the page.
 FIRST VIEWPORT: chapter ring across the top carrying event, as-of and run; route rail left;
@@ -38,7 +45,7 @@ the verdict, DESIGN.md, and every shipping raster carrying its provenance.
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const weekend = await loadWeekend();
   return (
-    <html lang="en" className={`${archivo.variable} ${chivoMono.variable}`}>
+    <html lang="en" className={`${archivo.variable} ${chivoMono.variable} ${sairaCondensed.variable}`}>
       <body className="min-h-dvh">
         <div hidden aria-hidden="true" dangerouslySetInnerHTML={{ __html: CONTRACT }} />
         <div className="lg:flex">
