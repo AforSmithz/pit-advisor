@@ -138,6 +138,27 @@ def test_the_weekend_view_covers_every_driver_and_team(seeded):
     assert [team.constructor_id for team in view.teams] == sorted(built.teams)
 
 
+def test_every_driver_says_when_he_was_last_in_a_car(seeded):
+    built = seeded()
+    view = weekend_view(assembled_for(built))
+    for driver in view.drivers:
+        assert driver.last_season >= 2021
+        assert driver.last_race_date <= built.held(2024, 6)
+
+
+def test_a_driver_who_stopped_racing_keeps_his_older_last_season(seeded):
+    built = seeded()
+    assembled = assembled_for(built)
+    latest = assembled.pace.filter(
+        assembled.pace["driver_code"] == assembled.pace["driver_code"][0]
+    )
+    retired = str(latest["driver_code"][0])
+    seen = {driver.driver_code: driver for driver in weekend_view(assembled).drivers}
+    rows = assembled.pace.filter(assembled.pace["driver_code"] == retired).sort("race_date")
+    assert seen[retired].last_season == int(rows["season"][-1])
+    assert seen[retired].last_race_date == rows["race_date"][-1]
+
+
 def test_the_weekend_view_carries_the_track_fit_from_both_estimators(seeded):
     view = weekend_view(assembled_for(seeded()))
     for team in view.teams:

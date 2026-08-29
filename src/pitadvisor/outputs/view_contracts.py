@@ -145,6 +145,10 @@ class Estimate(BaseModel, frozen=True):
 class WeekendDriver(BaseModel, frozen=True):
     driver_code: str
     constructor_id: str
+    # the lake holds five seasons of drivers, so a weekend page has to be able to say which of
+    # them is still in a car without the frontend guessing from a name it recognises
+    last_season: int
+    last_race_date: date
     form: Estimate | None
     # two drivers with no shared car lineage are not comparable, whatever their effects say
     form_component: int | None
@@ -199,6 +203,8 @@ class TeammateSample(BaseModel, frozen=True):
 class DriverHistory(BaseModel, frozen=True):
     driver_code: str
     constructor_id: str
+    last_season: int
+    last_race_date: date
     form: Estimate | None
     form_component: int | None
     quali_race: Estimate | None
@@ -254,9 +260,18 @@ def _seats(pace: pl.DataFrame) -> dict[str, str]:
     }
 
 
+def _last_seen(pace: pl.DataFrame) -> dict[str, tuple[int, date]]:
+    ordered = pace.sort("race_date")
+    return {
+        str(row["driver_code"]): (int(row["season"]), row["race_date"])
+        for row in ordered.select("driver_code", "season", "race_date").iter_rows(named=True)
+    }
+
+
 def weekend_view(assembled: Assembled) -> WeekendView:
     metrics = assembled.metrics
     seats = _seats(assembled.pace)
+    last_seen = _last_seen(assembled.pace)
     form_by = {item.driver_code: item for item in metrics.form.drivers}
     quali_by = {item.driver_code: item for item in metrics.quali.drivers}
     wet_driver = {item.key: item for item in metrics.wet.drivers}
@@ -271,6 +286,8 @@ def weekend_view(assembled: Assembled) -> WeekendView:
         WeekendDriver(
             driver_code=code,
             constructor_id=seats[code],
+            last_season=last_seen[code][0],
+            last_race_date=last_seen[code][1],
             form=(
                 _estimate(item.effect, item.interval_low, item.interval_high, item.events)
                 if (item := form_by.get(code))
@@ -360,6 +377,7 @@ def driver_view(assembled: Assembled) -> DriverView:
     metrics = assembled.metrics
     history = assembled.pace.filter(pl.col("race_date") < metrics.as_of)
     seats = _seats(history)
+    last_seen = _last_seen(history)
     form_by = {item.driver_code: item for item in metrics.form.drivers}
     quali_by = {item.driver_code: item for item in metrics.quali.drivers}
     wet_by = {item.key: item for item in metrics.wet.drivers}
@@ -369,6 +387,8 @@ def driver_view(assembled: Assembled) -> DriverView:
         DriverHistory(
             driver_code=code,
             constructor_id=seats[code],
+            last_season=last_seen[code][0],
+            last_race_date=last_seen[code][1],
             form=(
                 _estimate(item.effect, item.interval_low, item.interval_high, item.events)
                 if (item := form_by.get(code))
