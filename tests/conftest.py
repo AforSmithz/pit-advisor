@@ -292,7 +292,7 @@ class Lake:
         return held(season, round_)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def seed_lake():
     def build(store, wet_rounds=(), seasons=SEASONS):
         seed(store, wet_rounds=wet_rounds, seasons=seasons)
