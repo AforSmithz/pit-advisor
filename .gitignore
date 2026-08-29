@@ -5,6 +5,7 @@
 # working notes, kept locally
 docs/
 .claude/
+.github/skills/
 .impeccable/
 .playwright-mcp/
 
