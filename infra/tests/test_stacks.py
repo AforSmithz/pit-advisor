@@ -669,15 +669,27 @@ def test_the_guardrail_denies_staking_advice(agent_template: Template) -> None:
     guardrail = sole(agent_template, "AWS::Bedrock::Guardrail")["Properties"]
     topic = guardrail["TopicPolicyConfig"]["TopicsConfig"][0]
     assert topic["Type"] == "DENY"
-    assert "staking" in topic["Definition"].lower()
+    assert "wager" in topic["Definition"].lower()
+    # bedrock caps a topic definition at 200 characters and says so only at deploy time
+    assert len(topic["Definition"]) <= 200
     assert topic["Examples"]
 
 
-def test_the_guardrail_checks_grounding_and_relevance(agent_template: Template) -> None:
+def test_the_guardrail_leaves_grounding_to_the_code_that_can_check_it(
+    agent_template: Template,
+) -> None:
+    # a contextual grounding filter scores the answer against grounding source blocks the
+    # request never sends, and as configured it blocked correct refusals. the figure check in
+    # agent/runtime.py is what enforces the rule
     guardrail = sole(agent_template, "AWS::Bedrock::Guardrail")["Properties"]
-    filters = guardrail["ContextualGroundingPolicyConfig"]["FiltersConfig"]
-    assert {item["Type"] for item in filters} == {"GROUNDING", "RELEVANCE"}
-    assert all(item["Threshold"] > 0 for item in filters)
+    assert "ContextualGroundingPolicyConfig" not in guardrail
+
+
+def test_the_denied_topic_does_not_swallow_the_forecast(agent_template: Template) -> None:
+    guardrail = sole(agent_template, "AWS::Bedrock::Guardrail")["Properties"]
+    definition = guardrail["TopicPolicyConfig"]["TopicsConfig"][0]["Definition"].lower()
+    assert "wager" in definition
+    assert "not forecast probabilities" in definition
 
 
 def test_both_functions_run_on_arm_with_an_explicit_timeout(agent_template: Template) -> None:

@@ -100,9 +100,12 @@ NO_VPC = (
     "no inbound network surface and their IAM is scoped per resource. Accepted risk."
 )
 
+# narrow on purpose: it is about the reader's money, not about probabilities. an earlier and
+# broader wording classified "who is favourite and with what win probability" as betting and
+# blocked the question this system exists to answer
 GUARDRAIL_TOPIC = (
-    "Advice on betting, gambling, staking, bet sizing, bankroll management or which wager to "
-    "place on a motorsport event, including any request for odds, value bets or a stake."
+    "Recommending or sizing a wager: how much to stake, bankroll management, which bet is "
+    "value, or supplying bookmaker odds. Not forecast probabilities or who a model favours."
 )
 
 
@@ -250,9 +253,7 @@ class AgentStack(Stack):
             name=f"pitadvisor-{env_name}",
             description="Denies staking advice and checks that answers stay on the sources.",
             blocked_input_messaging="This system forecasts races. It does not advise on betting.",
-            blocked_outputs_messaging=(
-                "Withheld: the answer left the material the tools returned."
-            ),
+            blocked_outputs_messaging="Withheld: that is not something this system answers.",
             topic_policy_config=bedrock.CfnGuardrail.TopicPolicyConfigProperty(
                 topics_config=[
                     bedrock.CfnGuardrail.TopicConfigProperty(
@@ -261,23 +262,12 @@ class AgentStack(Stack):
                         type="DENY",
                         examples=[
                             "How much should I put on the favourite?",
-                            "What are the best odds for this race?",
+                            "What are the best bookmaker odds for this race?",
                             "Give me a betting tip for the grand prix.",
+                            "Is there value backing Norris each way?",
                         ],
                     )
                 ]
-            ),
-            contextual_grounding_policy_config=(
-                bedrock.CfnGuardrail.ContextualGroundingPolicyConfigProperty(
-                    filters_config=[
-                        bedrock.CfnGuardrail.ContextualGroundingFilterConfigProperty(
-                            type="GROUNDING", threshold=0.7
-                        ),
-                        bedrock.CfnGuardrail.ContextualGroundingFilterConfigProperty(
-                            type="RELEVANCE", threshold=0.7
-                        ),
-                    ]
-                )
             ),
         )
 
