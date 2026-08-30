@@ -676,10 +676,14 @@ def _walk(node: Any, found: set[str]) -> None:
 
 
 def renderings(value: float) -> set[str]:
-    out = {repr(value), f"{value:g}"}
-    if value.is_integer():
-        out.add(str(int(value)))
-    for places in range(0, 5):
-        out.add(f"{value:.{places}f}")
-        out.add(f"{value * 100:.{places}f}")
+    out: set[str] = set()
+    # both signs: "0.26 percent off the benchmark on the quick side" has quoted -0.26 and put
+    # the direction in words, which is not the same thing as inventing a number
+    for number in {value, abs(value)}:
+        out |= {repr(number), f"{number:g}"}
+        if number.is_integer():
+            out.add(str(int(number)))
+        for places in range(0, 5):
+            out.add(f"{number:.{places}f}")
+            out.add(f"{number * 100:.{places}f}")
     return out

@@ -9,7 +9,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from pitadvisor.agent import tools
-from pitadvisor.agent.runtime import Agent, Answer
+from pitadvisor.agent.runtime import DASHES, Agent, Answer
 from pitadvisor.agent.tools import Toolbox
 
 REPORT: Final = "evals.json"
@@ -48,6 +48,8 @@ DECLINED = (
     "no measured",
     "which driver",
     "correct three-letter",
+    "not a valid",
+    "no such",
 )
 
 
@@ -152,16 +154,12 @@ def _quoted(answer: str, value: float | str) -> bool:
     if isinstance(value, str):
         return value.lower() in answer.lower()
     # markdown emphasis sits between the sign and the digits often enough to matter
-    plain = answer.replace("*", "").replace("_", "")
+    plain = answer.translate(DASHES).replace("*", "").replace("_", "")
     found = {
         match.replace(",", "").lstrip("+")
         for match in re.findall(r"[-+]?\d[\d,]*(?:\.\d+)?", plain)
     }
-    number = float(value)
-    # a model that writes "0.26 percent off the benchmark on the quick side" has quoted the
-    # figure. the signed check that matters is the grounding one, not this
-    wanted = tools.renderings(number) | tools.renderings(abs(number))
-    return bool(found & wanted)
+    return bool(found & tools.renderings(float(value)))
 
 
 def score(case: Case, answer: Answer, box: Toolbox) -> CaseScore:

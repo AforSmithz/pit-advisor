@@ -13,6 +13,9 @@ HAIKU: Final = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
 MAX_ITERATIONS: Final = 6
 MAX_TOKENS: Final = 1024
 FIGURE = re.compile(r"[-+]?\d[\d,]*(?:\.\d+)?")
+# the model writes a minus as U+2212 about half the time, which is not the character the
+# regex above is looking for, and a figure whose sign went missing looks invented
+DASHES = str.maketrans({"\u2212": "-", "\u2013": "-", "\u2014": "-"})
 # a year or a round number in the question is the asker's, not a figure the model invented
 SAFE = re.compile(r"\b(19|20)\d{2}s?\b")
 MONTHS = "January|February|March|April|May|June|July|August|September|October|November|December"
@@ -193,7 +196,7 @@ def ungrounded(
     text: str, question: str, calls: list[ToolCall], results: list[ToolResult]
 ) -> list[str]:
     allowed = grounding_set(question, calls, results)
-    scanned = NOT_A_FIGURE.sub(" ", text)
+    scanned = NOT_A_FIGURE.sub(" ", text.translate(DASHES))
     years = {match.group(0).rstrip("s") for match in SAFE.finditer(scanned)}
     loose: list[str] = []
     for raw in FIGURE.findall(scanned):

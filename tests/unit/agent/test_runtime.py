@@ -192,3 +192,24 @@ def test_a_negative_figure_from_a_tool_is_recognised():
 )
 def test_text_that_only_looks_numeric_is_not_an_invented_figure(box, text):
     assert Agent(FakeBedrock(said(text)), box).ask("tell me").grounded
+
+
+def test_a_minus_the_model_typed_as_a_dash_is_still_a_minus():
+    call = ToolCall(name="get_driver_form", arguments={}, ok=True)
+    result = tools.ToolResult(tool="get_driver_form", ok=True, payload={"trend": -0.008})
+    minus = "\u2212"
+    assert ungrounded(f"the trend is {minus}0.008", "how is he", [call], [result]) == []
+
+
+def test_a_figure_quoted_without_its_sign_is_not_an_invention():
+    call = ToolCall(name="get_pace_profile", arguments={}, ok=True)
+    result = tools.ToolResult(tool="get_pace_profile", ok=True, payload={"off": -0.2645})
+    assert ungrounded("0.26 percent off, on the quick side", "how quick", [call], [result]) == []
+
+
+def test_arithmetic_on_a_tool_result_is_still_caught():
+    call = ToolCall(name="get_driver_form", arguments={}, ok=True)
+    result = tools.ToolResult(
+        tool="get_driver_form", ok=True, payload={"low": -0.87, "high": -0.42}
+    )
+    assert ungrounded("the interval is 0.45 wide", "how wide", [call], [result]) == ["0.45"]
