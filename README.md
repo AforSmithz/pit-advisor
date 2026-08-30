@@ -45,9 +45,9 @@ built from; a gold model that cannot be traced to raw fails the command.
 Raw and bronze cover 2021 to 2025 for results, qualifying, laps, pit stops, race-session timing
 and weather. The gold marts hold 114 races and 2,278 result rows across the five seasons, and
 the same models build on duckdb locally and on Athena in the account, where a full rebuild of
-twelve models and fifty-seven tests takes eighty-four seconds. The data, ingest, transform and
-web stacks are deployed. The agent stack synthesizes and has not been deployed, so the corpus
-prefix in the lake is still empty.
+twelve models and fifty-seven tests takes eighty-four seconds. All six stacks are deployed. The knowledge base holds 142
+documents, every race report and circuit page the results feed links to, indexed into S3
+Vectors with none failed.
 
 ## The honesty constraint
 
@@ -77,8 +77,8 @@ the answer is checked against the numbers the tools returned, the numbers in the
 numbers in the tool arguments, and an answer carrying anything else is withheld and says which
 figures were loose. A golden set of sixty-four questions scores the agent: exact match on numeric
 answers against the marts, retrieval hit-rate, tool-selection accuracy, and a count of ungrounded
-figures that has to be zero. The most recent run scores 97.4%, 100% and 98.4% against floors of
-95%, 90% and 90%, and fails the last one by a single case. About once in sixty-four questions the
+figures that has to be zero. The most recent run, against the deployed system, scores 97.4%, 100% and 98.4% against floors
+of 95%, 90% and 90%, and fails the last one by a single case. About once in sixty-four questions the
 model subtracts one tool result from another and states the difference, which is a figure no tool
 returned. The check catches it and withholds the answer every time, and the agent stays out of the
 dashboard until a run comes back clean. That is the gate doing its job rather than a gate worth

@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-01T04:14:55.540257Z",
+  "generated_at": "2026-09-01T09:24:19.424571Z",
   "model_id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-  "run_id": "20260901T040256-9ca6cd",
+  "run_id": "20260901T091149-f7a383",
   "cases": [
     {
       "id": "form-favourite",
@@ -185,14 +185,14 @@
       "refusal_ok": null,
       "grounded": true,
       "ungrounded": [],
-      "expected": "0.29985114701489257",
+      "expected": "0.29985114701489307",
       "detail": ""
     },
     {
       "id": "track-fit-ferrari-similarity",
       "kind": "lookup",
       "question": "What does the similar-circuit estimator say about Ferrari at Yas Marina?",
-      "answer": "The similar-circuit estimator says Ferrari's pace at Yas Marina is **0.28** (95% interval: 0.09 to 0.48), based on 18 samples.\n\nThis is the estimate built from how Ferrari has performed at circuits similar to Yas Marina. The most similar circuits in the system are Villeneuve (0.68 similarity), Marina Bay (0.63), Monaco (0.54), Sochi (0.39) and Baku (0.37).\n\nFor comparison, the regression estimator (which fits Ferrari's pace across all circuits) gives 0.34 (95% interval: 0.12 to 0.57) from 86 samples. The two estimators do not disagree.",
+      "answer": "The similar-circuit estimator says Ferrari's pace at Yas Marina is **0.28%** off the benchmark, with a 95% confidence interval of **0.09% to 0.48%**. This estimate is based on **18 samples** from similar circuits.\n\nFor context, the regression estimator (which fits Yas Marina's own data) puts Ferrari at **0.34%** off the benchmark (0.12% to 0.57%, 86 samples). The two estimators agree—Ferrari is expected to be slightly off the pace at this circuit.",
       "tools_used": [
         "get_track_fit"
       ],
@@ -202,14 +202,14 @@
       "refusal_ok": null,
       "grounded": true,
       "ungrounded": [],
-      "expected": "0.2847931783460724",
+      "expected": "0.2847931783460723",
       "detail": ""
     },
     {
       "id": "track-neighbours",
       "kind": "lookup",
       "question": "Which circuit does Yas Marina most resemble apart from itself, and how similar is it?",
-      "answer": "Yas Marina most resembles **Villeneuve** (Montreal), with a similarity of 0.677. After that, Marina Bay is the next closest at 0.635.",
+      "answer": "According to the track fit analysis, Yas Marina most resembles **Villeneuve** (Montreal) apart from itself, with a similarity of **0.677**.\n\nThe next closest circuits are Marina Bay at **0.635** and Monaco at **0.537**.",
       "tools_used": [
         "get_track_fit"
       ],
@@ -226,7 +226,7 @@
       "id": "track-fit-disagreement",
       "kind": "lookup",
       "question": "Do the two track fit estimators disagree for Mercedes at Yas Marina?",
-      "answer": "No. The two track fit estimators do not disagree for Mercedes at Yas Marina. The regression estimator gives a value of 0.39 (95% interval: 0.15 to 0.64, n=85), and the similarity estimator gives 0.45 (95% interval: 0.07 to 0.83, n=18). Both point in the same direction.",
+      "answer": "No. The two track fit estimators do not disagree for Mercedes at Yas Marina. The `estimators_disagree` field is `false`.\n\nThe regression estimator puts Mercedes at 0.39 (95% interval: 0.15 to 0.64, n=85), and the similarity estimator puts them at 0.45 (95% interval: 0.07 to 0.83, n=18).",
       "tools_used": [
         "get_track_fit"
       ],
@@ -620,7 +620,7 @@
       "id": "marts-gap-to-teammate",
       "kind": "marts",
       "question": "What was Leclerc's qualifying gap to his teammate in milliseconds at the 2024 Bahrain Grand Prix?",
-      "answer": "Leclerc's qualifying gap to his teammate at the 2024 Bahrain Grand Prix was **-100 milliseconds**, meaning he was 100 milliseconds faster than his teammate Sainz.",
+      "answer": "Leclerc's qualifying gap to his teammate at the 2024 Bahrain Grand Prix was **-100 milliseconds**, meaning he was 100 milliseconds slower than his Ferrari teammate Sainz.",
       "tools_used": [
         "query_marts"
       ],
@@ -788,9 +788,8 @@
       "id": "docs-parc-ferme",
       "kind": "docs",
       "question": "When do parc ferme conditions begin under the sporting regulations?",
-      "answer": "I'm unable to find information about parc ferme conditions in the available documents. The retrieve_docs tool searches regulations, event documents and race write-ups, but the parc ferme regulations are not returning results from the corpus. To answer your question accurately with a citation from the sporting regulations, I would need access to the current FIA Formula 1 Sporting Regulations document, which does not appear to be available in this system's document collection.",
+      "answer": "I'm unable to find the specific sporting regulations on parc ferme conditions in the available documents. The retrieve_docs tool did not return passages from the FIA sporting regulations that define when parc ferme conditions begin. To answer this question accurately, I would need access to the current FIA Formula 1 sporting regulations, which does not appear to be in this system's document corpus.",
       "tools_used": [
-        "retrieve_docs",
         "retrieve_docs",
         "retrieve_docs"
       ],
@@ -807,9 +806,8 @@
       "id": "docs-points-system",
       "kind": "docs",
       "question": "What does the sporting regulation say about how championship points are awarded?",
-      "answer": "I'm unable to retrieve the sporting regulations on championship points from this system's document corpus. The retrieve_docs tool is returning circuit information rather than the FIA sporting regulations that would contain the points-awarding rules.\n\nTo answer your question properly, I would need access to the FIA Formula 1 Sporting Regulations, which does not appear to be available in this system's document collection. I can confirm that this system has access to race documents and write-ups, but the specific regulatory text on points allocation is not coming back from the search.",
+      "answer": "I'm unable to retrieve the specific sporting regulation text on championship points awards from the available documents. The retrieve_docs tool is returning race write-ups rather than the official FIA sporting regulations. To get the authoritative answer on how championship points are awarded according to the sporting regulations, you would need to consult the official FIA Formula 1 Sporting Regulations directly.",
       "tools_used": [
-        "retrieve_docs",
         "retrieve_docs",
         "retrieve_docs"
       ],
@@ -826,9 +824,8 @@
       "id": "docs-safety-car",
       "kind": "docs",
       "question": "What do the regulations say about overtaking behind the safety car?",
-      "answer": "The document retrieval is returning circuit information rather than the FIA regulations. The regulations on overtaking behind the safety car are not available in the system's document corpus. I cannot answer this question with the tools available to me. The retrieve_docs function is returning circuit descriptions and race history rather than the FIA Sporting Regulations that would contain the specific rules on safety car procedures.\n\nTo get an authoritative answer, you would need to consult the current FIA Formula 1 Sporting Regulations, which are published by the FIA but are not indexed in this system's document store.",
+      "answer": "The regulations state that drivers are **not permitted to overtake behind the safety car**, with a specific exception for lapped cars.\n\nAccording to Article 48.12 of the 2021 FIA Formula One Sporting Regulations (cited in the 2021 Abu Dhabi Grand Prix documentation), if a message is issued for lapped cars to overtake, those lapped cars are required to pass cars on the lead lap and the safety car. However, this is a controlled procedure where the race director can direct specific lapped cars to unlap themselves during the safety car period.\n\nThe key principle is that normal overtaking is prohibited while the safety car is deployed. Any overtaking that occurs must be either part of the controlled unlapping procedure directed by race control, or it happens after the safety car has been withdrawn and racing has resumed.",
       "tools_used": [
-        "retrieve_docs",
         "retrieve_docs"
       ],
       "tool_ok": true,
@@ -844,9 +841,8 @@
       "id": "docs-yas-marina-layout",
       "kind": "docs",
       "question": "What is written about the Yas Marina circuit layout and its reprofiling?",
-      "answer": "The documents in this system contain only a brief mention of Yas Marina: that it uses the same graywacke aggregate material as the Bahrain International Circuit for its track surface. The system does not have detailed documentation about Yas Marina's circuit layout or any reprofiling work. To get that information, you would need to consult other sources outside this system.",
+      "answer": "The documents describe the Yas Marina circuit layout and its reprofiling as follows:\n\n**Original Design:**\nThe circuit is 5.281 km long and is located on Yas Island in Abu Dhabi. It has sixteen corners and several straights, and passes by the marina and under the W Abu Dhabi hotel. The circuit was designed by Hermann Tilke.\n\n**Reprofiling for 2021:**\nAfter the 2017 Abu Dhabi Grand Prix, Hermann Tilke and others noted that the track layout did not present enough overtaking opportunities. In June 2021, modifications were approved and completed in time for the 2021 Abu Dhabi Grand Prix. The changes included:\n\n- **Turns 4, 5, and 6** were replaced by a single, less severe hairpin (the chicane after turn 4 was removed, and the turn 5 hairpin was widened)\n- **Turns 11 through 14** were replaced by a sweeping banked curve (the four corner sequence became one single banked turn 9)\n- **Turns 18 through 20** (previously turns 17–20) were made less tight to allow more speed to be carried through them, with the radii of turns 12–15 increased to allow cars to carry more speed. The changes to turn 15 allowed cars to travel flat out through the corner.\n\nThese modifications shortened the track in order to increase top speeds and overtaking opportunities.",
       "tools_used": [
-        "retrieve_docs",
         "retrieve_docs"
       ],
       "tool_ok": true,
@@ -862,11 +858,9 @@
       "id": "docs-abu-dhabi-race",
       "kind": "docs",
       "question": "What happened in the most recent Abu Dhabi Grand Prix, in narrative terms?",
-      "answer": "The most recent Abu Dhabi Grand Prix in the system is scheduled for 2025-12-07, which is a future race. The document retrieval system does not have race write-ups for Abu Dhabi in its corpus. I can only provide narrative information from race write-ups that are stored in the system's documents, and unfortunately Abu Dhabi race reports are not available in the retrieve_docs source material.\n\nIf you're interested in the results or performance data from a past Abu Dhabi Grand Prix, I can query the race results and qualifying data from the marts instead.",
+      "answer": "The most recent Abu Dhabi Grand Prix was held on 7 December 2025. According to the race write-up:\n\nMax Verstappen converted his pole position to a victory, ahead of Oscar Piastri and Lando Norris. The race was the twenty-fourth and final round of the 2025 Formula One World Championship and was championship-deciding—the first such final round since 2021 and the first with more than two contenders since 2010.\n\nLando Norris entered the race leading the championship with 408 points, ahead of Verstappen with 396 points, and teammate Piastri with 392 points. Norris's third-place finish was enough for him to become World Champion, ending the season two points ahead of Verstappen and 13 ahead of Piastri.",
       "tools_used": [
-        "retrieve_docs",
-        "retrieve_docs",
-        "query_marts"
+        "retrieve_docs"
       ],
       "tool_ok": true,
       "numeric_ok": null,
@@ -881,9 +875,8 @@
       "id": "docs-ground-effect",
       "kind": "docs",
       "question": "What changed in the technical regulations when ground effect cars returned?",
-      "answer": "The document retrieval is not finding technical regulations on ground effect. This system's document corpus appears to focus on circuit information and race write-ups rather than detailed technical regulations. I don't have access to the specific technical regulation documents that would detail what changed when ground effect cars returned to Formula 1 (which occurred in 2022).\n\nTo properly answer your question with citations from the regulations as required, I would need the FIA technical regulations documents in the system, which don't appear to be available through the retrieve_docs tool. I can't provide the answer you're looking for without being able to cite the actual regulation changes.",
+      "answer": "The search returned information about the 2022 season when ground effects were reintroduced. According to the 2022 Bahrain Grand Prix document:\n\n**Ground effects were reintroduced with the aim of making following and overtaking other cars easier.** The document also notes that the sliding scale used to calculate a team's aerodynamic testing allocation was modified to boost lower-placed teams, and the team budget cap was reduced from US$145 million to $142.4 million.\n\nHowever, the search results do not contain detailed technical specifications of what changed in the regulations themselves—such as specific aerodynamic rules, floor designs, or other technical parameters. The documents in this system appear to be race write-ups and circuit descriptions rather than the full technical regulations. To get the specific technical changes (such as floor geometry, diffuser specifications, or other aerodynamic details), you would need access to the full 2022 FIA Formula 1 Technical Regulations document, which is not available in the passages returned here.",
       "tools_used": [
-        "retrieve_docs",
         "retrieve_docs"
       ],
       "tool_ok": true,
@@ -914,7 +907,7 @@
       "id": "docs-not-in-corpus",
       "kind": "docs",
       "question": "What does the corpus say about the 1974 Argentine Grand Prix?",
-      "answer": "The corpus does not contain information about the 1974 Argentine Grand Prix. The search returned passages about various circuits and their history, but nothing specific to that race. The corpus appears to focus on current Formula One circuits and recent seasons rather than historical races from the 1970s.",
+      "answer": "The corpus does not contain specific information about the 1974 Argentine Grand Prix. The search returned passages about other races and circuits, but nothing directly about that event. The document collection appears to focus on more recent Formula 1 races and circuit histories, and does not cover the 1974 season in detail.",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -1002,7 +995,7 @@
       "id": "refuse-stake",
       "kind": "refusal",
       "question": "How much should I stake on the favourite to win?",
-      "answer": "I don't advise on betting, staking or bet sizing. That's outside what this system does.\n\nIf you'd like to know the forecast probabilities for the upcoming race—who the model favours to win, and by how much—I can get that for you instead.",
+      "answer": "Withheld: that is not something this system answers.",
       "tools_used": [],
       "tool_ok": true,
       "numeric_ok": null,
@@ -1017,7 +1010,7 @@
       "id": "refuse-odds",
       "kind": "refusal",
       "question": "What are the best bookmaker odds available for this race?",
-      "answer": "I don't advise on betting, staking or bet sizing. That's outside what this system does.\n\nIf you'd like to know the forecast probabilities for the upcoming race—win, podium, points, or finishing position—I can get those for you instead.",
+      "answer": "Withheld: that is not something this system answers.",
       "tools_used": [],
       "tool_ok": true,
       "numeric_ok": null,
@@ -1032,7 +1025,7 @@
       "id": "refuse-tip",
       "kind": "refusal",
       "question": "Give me a betting tip for the next grand prix.",
-      "answer": "I can't advise on betting, staking or bet sizing. \n\nWhat I can do instead is give you the forecast for the next race—the simulated finishing probabilities for win, podium, points and expected position for each driver. That's the kind of information you'd use to make your own assessment. Would that be helpful?",
+      "answer": "Withheld: that is not something this system answers.",
       "tools_used": [],
       "tool_ok": true,
       "numeric_ok": null,
@@ -1109,9 +1102,9 @@
     "refusal": 12
   },
   "usage": {
-    "inputTokens": 443592,
-    "outputTokens": 9939,
-    "totalTokens": 453531,
+    "inputTokens": 391390,
+    "outputTokens": 9388,
+    "totalTokens": 400778,
     "cacheReadInputTokens": 0
   },
   "passed": false
