@@ -54,10 +54,14 @@ class DocOutcome(BaseModel, frozen=True):
 
 
 def linked_pages(store: ObjectStore) -> list[Page]:
-    """The wikipedia links jolpica already handed us, read back out of raw."""
+    """The wikipedia links jolpica already handed us, read back out of raw.
+
+    Only the races payloads: every jolpica response carries the same RaceTable, but a season of
+    laps is hundreds of paginated objects and reading them all to reach a url that is also in a
+    two kilobyte file is a lot of GETs for nothing."""
     seen: dict[str, Page] = {}
     for item in sorted(store.list(f"{Layer.RAW}/source={Source.JOLPICA}/"), key=lambda o: o.key):
-        if item.key.endswith(META_SUFFIX):
+        if item.key.endswith(META_SUFFIX) or "/races-" not in item.key:
             continue
         payload = json.loads(store.get(item.key))
         table = payload.get("MRData", {}).get("RaceTable", {})

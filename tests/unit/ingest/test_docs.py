@@ -115,9 +115,19 @@ def test_a_link_that_is_not_wikipedia_is_ignored(store):
 def test_the_same_page_linked_from_two_races_is_fetched_once(store):
     land_raw(store)
     store.put(
-        "raw/source=jolpica/season=2024/round=01/results-20240101T000000000Z.json",
+        "raw/source=jolpica/season=2024/round=02/races-20240101T000000000Z.json",
         json.dumps(raw_payload()).encode(),
     )
+    assert len(docs.linked_pages(store)) == 2
+
+
+def test_a_season_of_lap_pages_is_not_downloaded_to_find_a_url(store):
+    land_raw(store)
+    for offset in range(0, 500, 100):
+        store.put(
+            f"raw/source=jolpica/season=2024/round=01/laps-offset{offset:04d}-2024.json",
+            b"not json, and never read",
+        )
     assert len(docs.linked_pages(store)) == 2
 
 
