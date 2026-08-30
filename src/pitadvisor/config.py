@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # haiku 4.5 is inference-profile only in ap-southeast-1, and the only profile is global
     bedrock_model: str = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
     knowledge_base_id: str = ""
+    data_source_id: str = ""
     guardrail_id: str = ""
     guardrail_version: str = "DRAFT"
 

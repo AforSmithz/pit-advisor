@@ -13,6 +13,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import BaseModel
 
 from pitadvisor.agent import evals as agent_evals
+from pitadvisor.agent import kb as agent_kb
 from pitadvisor.agent import tools as agent_tools
 from pitadvisor.agent.runtime import agent_for
 from pitadvisor.config import Settings, boto_session, get_settings
@@ -777,6 +778,9 @@ def evals(
 def docs_sync(
     limit: Annotated[int | None, typer.Option(help="Stop after this many pages.")] = None,
     local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+    index: Annotated[
+        bool, typer.Option("--index", help="Reindex the corpus into the knowledge base.")
+    ] = False,
     add: Annotated[Path | None, typer.Option(help="Drop one curated file into the corpus.")] = None,
     title: Annotated[str | None, typer.Option(help="Title for the curated file.")] = None,
     kind: Annotated[str, typer.Option(help="Kind for the curated file.")] = "regulation",
@@ -800,3 +804,24 @@ def docs_sync(
             typer.echo(f"ok    {outcome.title:<44} {outcome.characters} characters")
     written = [item for item in outcomes if item.key]
     typer.echo(f"{len(written)} documents, {len(doc_corpus.corpus(store))} in the corpus")
+    if index:
+        _reindex(settings)
+
+
+def _reindex(settings: Settings) -> None:
+    if not settings.knowledge_base_id or not settings.data_source_id:
+        typer.echo(
+            "PITADV_KNOWLEDGE_BASE_ID and PITADV_DATA_SOURCE_ID are not set, "
+            "so there is no knowledge base to reindex",
+            err=True,
+        )
+        raise typer.Exit(1)
+    client = _client(boto_session(settings), "bedrock-agent", settings.aws_region)
+    try:
+        job = agent_kb.start_ingestion(client, settings.knowledge_base_id, settings.data_source_id)
+    except agent_kb.IngestionError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(
+        f"{job.status.lower()}: {job.indexed} indexed of {job.scanned} scanned, {job.failed} failed"
+    )

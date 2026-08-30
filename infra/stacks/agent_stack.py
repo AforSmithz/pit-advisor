@@ -396,6 +396,7 @@ class AgentStack(Stack):
         self._acknowledge()
 
         CfnOutput(self, "KnowledgeBaseId", value=self.knowledge_base.attr_knowledge_base_id)
+        CfnOutput(self, "DataSourceId", value=self.data_source.attr_data_source_id)
         CfnOutput(self, "GuardrailId", value=self.guardrail.attr_guardrail_id)
         CfnOutput(self, "AskFunctionUrl", value=self.url.url)
         CfnOutput(self, "VectorIndexArn", value=self.index.attr_index_arn)

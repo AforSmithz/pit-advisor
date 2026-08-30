@@ -1,6 +1,14 @@
 import json
 
-from pitadvisor.agent.kb import KnowledgeBase, LocalCorpus, chunks
+import pytest
+
+from pitadvisor.agent.kb import (
+    IngestionError,
+    KnowledgeBase,
+    LocalCorpus,
+    chunks,
+    start_ingestion,
+)
 
 SPORTING = (
     "Parc ferme conditions begin when the car leaves the pit lane for qualifying. "
@@ -106,3 +114,63 @@ def test_without_a_filter_none_is_sent():
     client = FakeRetrieve()
     KnowledgeBase(client, "kb-1").retrieve("wing")
     assert "filter" not in client.calls[0]["retrievalConfiguration"]["vectorSearchConfiguration"]
+
+
+class FakeIngest:
+    def __init__(self, statuses=("STARTING", "COMPLETE")):
+        self.statuses = list(statuses)
+        self.calls = []
+
+    def _job(self):
+        return {
+            "ingestionJob": {
+                "ingestionJobId": "job-1",
+                "status": self.statuses.pop(0),
+                "statistics": {
+                    "numberOfDocumentsScanned": 12,
+                    "numberOfNewDocumentsIndexed": 12,
+                    "numberOfDocumentsFailed": 0,
+                },
+            }
+        }
+
+    def start_ingestion_job(self, **kwargs):
+        self.calls.append(("start", kwargs))
+        return self._job()
+
+    def get_ingestion_job(self, **kwargs):
+        self.calls.append(("get", kwargs))
+        return self._job()
+
+
+def test_an_ingestion_run_waits_for_the_job_and_reports_what_it_indexed():
+    job = start_ingestion(FakeIngest(), "kb-1", "ds-1", sleep=lambda _: None)
+    assert job.status == "COMPLETE"
+    assert job.indexed == 12
+
+
+def test_the_ingestion_names_both_ids():
+    client = FakeIngest()
+    start_ingestion(client, "kb-1", "ds-1", sleep=lambda _: None)
+    assert client.calls[0][1] == {"knowledgeBaseId": "kb-1", "dataSourceId": "ds-1"}
+
+
+def test_a_failed_ingestion_is_an_error_not_a_quiet_return():
+    with pytest.raises(IngestionError):
+        start_ingestion(FakeIngest(("STARTING", "FAILED")), "kb-1", "ds-1", sleep=lambda _: None)
+
+
+def test_a_job_that_never_finishes_times_out():
+    with pytest.raises(IngestionError):
+        start_ingestion(
+            FakeIngest(("IN_PROGRESS",) * 40),
+            "kb-1",
+            "ds-1",
+            timeout_seconds=0.0,
+            sleep=lambda _: None,
+        )
+
+
+def test_the_caller_can_start_a_job_without_waiting():
+    job = start_ingestion(FakeIngest(("STARTING",)), "kb-1", "ds-1", wait=False)
+    assert job.status == "STARTING"

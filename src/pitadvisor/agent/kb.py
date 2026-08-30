@@ -1,9 +1,13 @@
 import json
 import math
 import re
+import time
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Final, cast
+
+from pydantic import BaseModel
 
 from pitadvisor.ingest.docs import METADATA_SUFFIX
 from pitadvisor.ingest.raw_store import ObjectStore
@@ -89,6 +93,61 @@ def _passage(item: dict[str, Any]) -> Passage:
         uri=str(location.get("uri", "")),
         score=float(item.get("score", 0.0)),
         metadata={str(key): value for key, value in item.get("metadata", {}).items()},
+    )
+
+
+class IngestionError(RuntimeError):
+    pass
+
+
+class Ingestion(BaseModel, frozen=True):
+    job_id: str
+    status: str
+    scanned: int = 0
+    indexed: int = 0
+    failed: int = 0
+
+
+def start_ingestion(
+    client: Any,
+    knowledge_base_id: str,
+    data_source_id: str,
+    wait: bool = True,
+    timeout_seconds: float = 900.0,
+    sleep: Callable[[float], None] = time.sleep,
+) -> Ingestion:
+    """Tell bedrock to reindex docs/. Nothing else does: writing a document to the lake does
+    not put it in the vector index."""
+    started: dict[str, Any] = client.start_ingestion_job(
+        knowledgeBaseId=knowledge_base_id, dataSourceId=data_source_id
+    )
+    job = started["ingestionJob"]
+    if not wait:
+        return _ingestion(job)
+    deadline = time.monotonic() + timeout_seconds
+    while str(job["status"]) in {"STARTING", "IN_PROGRESS"}:
+        if time.monotonic() > deadline:
+            raise IngestionError(f"ingestion job {job['ingestionJobId']} has not finished")
+        sleep(5.0)
+        job = client.get_ingestion_job(
+            knowledgeBaseId=knowledge_base_id,
+            dataSourceId=data_source_id,
+            ingestionJobId=job["ingestionJobId"],
+        )["ingestionJob"]
+    result = _ingestion(job)
+    if result.status != "COMPLETE":
+        raise IngestionError(f"ingestion finished as {result.status}")
+    return result
+
+
+def _ingestion(job: dict[str, Any]) -> Ingestion:
+    statistics = job.get("statistics", {})
+    return Ingestion(
+        job_id=str(job["ingestionJobId"]),
+        status=str(job["status"]),
+        scanned=int(statistics.get("numberOfDocumentsScanned", 0)),
+        indexed=int(statistics.get("numberOfNewDocumentsIndexed", 0)),
+        failed=int(statistics.get("numberOfDocumentsFailed", 0)),
     )
 
 
