@@ -749,6 +749,7 @@ def evals(
     report: Annotated[Path, typer.Option(help="Where the artifacts land.")] = EVAL_RESULTS,
     local: Annotated[bool, typer.Option("--local", help="Local lake and local corpus.")] = False,
     only: Annotated[str | None, typer.Option(help="Comma separated case ids or kinds.")] = None,
+    pace: Annotated[float, typer.Option(help="Seconds between cases, for the model quota.")] = 2.0,
 ) -> None:
     settings = get_settings()
     store, _, _ = _runtime(local, settings)
@@ -764,7 +765,18 @@ def evals(
             raise typer.BadParameter(f"nothing in the suite matches {only}")
         loaded = loaded.model_copy(update={"cases": cases})
     box = agent_tools.toolbox(settings, store, local)
-    result = agent_evals.run(agent_for(settings, box, strict=False), box, loaded, _run_id())
+
+    def announce(case: agent_evals.CaseScore) -> None:
+        typer.echo(f"{'ok  ' if not agent_evals.failed(case) else 'FAIL'}  {case.id}")
+
+    result = agent_evals.run(
+        agent_for(settings, box, strict=False),
+        box,
+        loaded,
+        _run_id(),
+        pace_seconds=pace,
+        on_case=announce,
+    )
     report.mkdir(parents=True, exist_ok=True)
     (report / agent_evals.REPORT).write_text(result.model_dump_json(indent=2))
     (report / agent_evals.SUMMARY).write_text(agent_evals.summarise(result))

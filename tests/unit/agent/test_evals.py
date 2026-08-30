@@ -195,3 +195,42 @@ def test_the_summary_names_the_cases_that_failed(box):
     text = evals.summarise(report)
     assert "stake" in text
     assert "did not pass the gate" in text
+
+
+def test_a_case_the_model_could_not_answer_does_not_lose_the_rest(box):
+    class Angry:
+        model_id = "test"
+
+        def __init__(self):
+            self.asked = 0
+
+        def ask(self, question):
+            self.asked += 1
+            if self.asked == 1:
+                raise RuntimeError("ThrottlingException: too many requests")
+            return answer("We do not have that.")
+
+    suite = Suite(
+        cases=[
+            Case(id="first", question="q", refuse=True),
+            Case(id="second", question="q", refuse=True),
+        ]
+    )
+    report = evals.run(Angry(), box, suite, "run-1", pace_seconds=0.0)
+    assert [item.id for item in report.cases] == ["first", "second"]
+    assert "ThrottlingException" in report.cases[0].detail
+    assert report.cases[1].refusal_ok
+
+
+def test_the_run_paces_itself_between_cases(box):
+    waits = []
+
+    class Quiet:
+        model_id = "test"
+
+        def ask(self, question):
+            return answer("We do not have that.")
+
+    suite = Suite(cases=[Case(id=f"c{n}", question="q", refuse=True) for n in range(3)])
+    evals.run(Quiet(), box, suite, "run-1", pace_seconds=1.5, sleep=waits.append)
+    assert waits == [1.5, 1.5]

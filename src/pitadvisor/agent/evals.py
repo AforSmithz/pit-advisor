@@ -1,4 +1,6 @@
 import re
+import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
@@ -172,15 +174,52 @@ def _rate(values: list[bool]) -> float:
     return sum(values) / len(values) if values else 1.0
 
 
-def run(agent: Agent, box: Toolbox, suite: Suite, run_id: str) -> Report:
+def run(
+    agent: Agent,
+    box: Toolbox,
+    suite: Suite,
+    run_id: str,
+    pace_seconds: float = 2.0,
+    sleep: Callable[[float], None] = time.sleep,
+    on_case: Callable[[CaseScore], None] | None = None,
+) -> Report:
     scores: list[CaseScore] = []
     usage: dict[str, int] = {}
-    for case in suite.cases:
-        answer = agent.ask(case.question)
+    for index, case in enumerate(suite.cases):
+        if index and pace_seconds:
+            # the model quota is per minute and a golden set is a burst, so the run paces
+            # itself rather than relying on the retry to absorb the whole thing
+            sleep(pace_seconds)
+        try:
+            answer = agent.ask(case.question)
+        except Exception as exc:
+            scores.append(_unanswered(case, exc))
+            if on_case is not None:
+                on_case(scores[-1])
+            continue
         for key, value in answer.usage.items():
             usage[key] = usage.get(key, 0) + value
         scores.append(score(case, answer, box))
+        if on_case is not None:
+            on_case(scores[-1])
     return report_of(scores, suite, agent.model_id, run_id, usage)
+
+
+def _unanswered(case: Case, exc: Exception) -> CaseScore:
+    return CaseScore(
+        id=case.id,
+        kind=case.kind,
+        question=case.question,
+        answer="",
+        tools_used=[],
+        tool_ok=False,
+        numeric_ok=False if case.numeric else None,
+        citation_ok=False if case.must_cite else None,
+        refusal_ok=False if case.refuse else None,
+        grounded=True,
+        ungrounded=[],
+        detail=f"{type(exc).__name__}: {exc}",
+    )
 
 
 def report_of(
@@ -248,18 +287,18 @@ def summarise(report: Report) -> str:
         mark = "ok  " if floor is None or value >= floor else "FAIL"
         target = f"  (needs {floor:.0%})" if floor is not None else ""
         lines.append(f"{mark}  {name:<20} {value:.1%}{target}")
-    failed = [item for item in report.cases if _failed(item)]
-    if failed:
+    unmet = [item for item in report.cases if failed(item)]
+    if unmet:
         lines.append("")
         lines.append("failed cases")
-        for item in failed:
+        for item in unmet:
             lines.append(f"  {item.id:<16} {item.detail or _why(item)}")
     lines.append("")
     lines.append("passed" if report.passed else "did not pass the gate")
     return "\n".join(lines) + "\n"
 
 
-def _failed(item: CaseScore) -> bool:
+def failed(item: CaseScore) -> bool:
     return (
         not item.tool_ok
         or item.numeric_ok is False

@@ -2,6 +2,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Final, cast
 
+from botocore.config import Config
 from pydantic import BaseModel
 
 from pitadvisor.agent import prompts, tools
@@ -201,7 +202,13 @@ def _normalised(raw: str) -> str:
 def agent_for(settings: Settings, box: Toolbox, strict: bool = True) -> Agent:
     session = cast(Any, boto_session(settings))
     return Agent(
-        client=session.client("bedrock-runtime", region_name=settings.aws_region),
+        client=session.client(
+            "bedrock-runtime",
+            region_name=settings.aws_region,
+            # adaptive, because a run of the golden set is a burst against a per-minute quota
+            # and the default standard mode gives up after four tries
+            config=Config(retries={"max_attempts": 8, "mode": "adaptive"}),
+        ),
         toolbox=box,
         model_id=settings.bedrock_model,
         guardrail=(
