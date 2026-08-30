@@ -178,3 +178,17 @@ def test_a_negative_figure_from_a_tool_is_recognised():
     call = ToolCall(name="get_driver_form", arguments={}, ok=True)
     result = tools.ToolResult(tool="get_driver_form", ok=True, payload={"form": -0.645})
     assert ungrounded("rated at -0.645", "how is he", [call], [result]) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The snapshot was taken on 2026-08-30 at 07:03:53 UTC.",
+        "The race is on December 7, 2025.",
+        "See the FIA Formula 1 Sporting Regulations.",
+        "That changed in the 1970s.",
+        "Two things:\n1) the pace fit\n2) the grid",
+    ],
+)
+def test_text_that_only_looks_numeric_is_not_an_invented_figure(box, text):
+    assert Agent(FakeBedrock(said(text)), box).ask("tell me").grounded

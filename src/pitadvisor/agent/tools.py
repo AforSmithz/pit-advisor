@@ -522,7 +522,9 @@ def _bind(
 TOOLS: Final[tuple[Tool, ...]] = (
     Tool(
         "get_driver_form",
-        "Teammate-normalised, time-decayed form for one driver, with the recent races behind it.",
+        "Teammate-normalised, time-decayed form for one driver: the rating and its interval, "
+        "the qualifying-to-race trend, the wet delta, the decay half life, and the recent races "
+        "and teammate deltas behind it.",
         DriverForm,
         _bind(Toolbox.get_driver_form),
     ),
@@ -535,13 +537,16 @@ TOOLS: Final[tuple[Tool, ...]] = (
     ),
     Tool(
         "get_track_fit",
-        "How each team's pace fits one circuit, by regression and by similar-circuit history.",
+        "How each team's pace fits one circuit, by regression and by similar-circuit history, "
+        "with the circuit's own profile and the circuits it most resembles.",
         TrackFit,
         _bind(Toolbox.get_track_fit),
     ),
     Tool(
         "get_weather",
-        "Dry, mixed and wet scenario weights for the event window.",
+        "What the weather feature makes of the event window: dry, mixed and wet weights, "
+        "expected rainfall, and whether it is a real forecast or an archived observation. For "
+        "the weights the simulation actually blended over, use get_forecast.",
         Weather,
         _bind(Toolbox.get_weather),
     ),

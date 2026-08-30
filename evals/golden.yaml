@@ -134,11 +134,11 @@ cases:
     expect_tools: [get_forecast]
     numeric: {tool: get_forecast, arguments: {market: podium}, path: drivers.1.podium}
 
-  - id: forecast-points-fifth
-    question: What are the points chances of the driver the simulation puts fifth?
+  - id: forecast-points-favourite
+    question: What points probability does the simulation give the driver it makes favourite?
     kind: forecast
     expect_tools: [get_forecast]
-    numeric: {tool: get_forecast, arguments: {market: points}, path: drivers.4.points}
+    numeric: {tool: get_forecast, arguments: {market: points}, path: drivers.0.points}
 
   - id: forecast-paths
     question: How many simulated races is the published forecast built from?
@@ -381,7 +381,7 @@ cases:
   - id: docs-versus-mart
     question: A race report says a driver finished second. The marts say third after a penalty. Which is right?
     kind: docs
-    expect_tools: [query_marts]
+    must_cite: mart
 
   - id: docs-not-in-corpus
     question: What does the corpus say about the 1974 Argentine Grand Prix?

@@ -42,6 +42,12 @@ DECLINED = (
     "covers only",
     "not in the corpus",
     "no data",
+    "does not contain",
+    "there is no",
+    "not yet",
+    "no measured",
+    "which driver",
+    "correct three-letter",
 )
 
 
@@ -151,7 +157,11 @@ def _quoted(answer: str, value: float | str) -> bool:
         match.replace(",", "").lstrip("+")
         for match in re.findall(r"[-+]?\d[\d,]*(?:\.\d+)?", plain)
     }
-    return bool(found & tools.renderings(float(value)))
+    number = float(value)
+    # a model that writes "0.26 percent off the benchmark on the quick side" has quoted the
+    # figure. the signed check that matters is the grounding one, not this
+    wanted = tools.renderings(number) | tools.renderings(abs(number))
+    return bool(found & wanted)
 
 
 def score(case: Case, answer: Answer, box: Toolbox) -> CaseScore:

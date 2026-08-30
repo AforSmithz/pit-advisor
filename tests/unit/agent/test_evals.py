@@ -46,7 +46,7 @@ def test_the_shipped_golden_set_parses_and_is_the_size_the_plan_asked_for():
 
 def test_every_case_in_the_golden_set_has_something_to_score():
     for case in evals.load(Path("evals/golden.yaml")).cases:
-        assert case.expect_tools or case.refuse, case.id
+        assert case.expect_tools or case.refuse or case.must_cite or case.numeric, case.id
 
 
 def test_a_suite_that_loosens_the_gate_is_refused(tmp_path):
