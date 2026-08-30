@@ -42,12 +42,12 @@ cannot drift from the schema. `pitadv lineage --check` reads the dbt manifest an
 gold model back through silver to the bronze sources and on to the raw objects each one was
 built from; a gold model that cannot be traced to raw fails the command.
 
-Raw and bronze now cover 2021 to 2025 for results, qualifying, laps, pit stops, race-session
-timing and weather. A local dbt build of the same models produces 2,278 result rows across the
-five seasons; the copy in Athena holds 2024 only, because that is what the pipeline has been
-run for, so a question about 2022 is answerable on the laptop and not yet in the account. The
-data, ingest, transform and web stacks are deployed. The agent stack synthesizes and has not
-been deployed.
+Raw and bronze cover 2021 to 2025 for results, qualifying, laps, pit stops, race-session timing
+and weather. The gold marts hold 114 races and 2,278 result rows across the five seasons, and
+the same models build on duckdb locally and on Athena in the account, where a full rebuild of
+twelve models and fifty-seven tests takes eighty-four seconds. The data, ingest, transform and
+web stacks are deployed. The agent stack synthesizes and has not been deployed, so the corpus
+prefix in the lake is still empty.
 
 ## The honesty constraint
 
