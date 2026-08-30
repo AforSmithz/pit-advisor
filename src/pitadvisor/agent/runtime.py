@@ -96,8 +96,10 @@ class Agent:
         request: dict[str, Any] = {
             "modelId": self.model_id,
             "messages": messages,
-            # the system prompt and the tool schemas are identical on every turn, so they are
-            # the whole reason prompt caching pays for itself here
+            # cache points on the two static blocks. haiku 4.5 wants 4096 tokens before a
+            # checkpoint does anything and this prompt is well under it, so today they are
+            # inert; they cost nothing and start working if the prompt grows or the model
+            # changes to one with a lower floor
             "system": [{"text": self.system}, {"cachePoint": {"type": "default"}}],
             "toolConfig": {"tools": [*self._specs, {"cachePoint": {"type": "default"}}]},
             "inferenceConfig": {"maxTokens": self.max_tokens, "temperature": 0.0},

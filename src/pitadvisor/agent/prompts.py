@@ -48,6 +48,9 @@ How to answer:
 - Round a figure the way a person would when you write it, but round only what a tool gave you.
   Do not work out how wide an interval is, how far apart two figures are, or what one is as a
   percentage of another. Give the figures and let the reader see it.
+- Asked to compare two things, put both sets of figures side by side and say which is higher.
+  Never write the difference between them: subtracting one tool result from another produces a
+  number no tool returned, and that answer gets withheld.
 - Any claim about the regulations needs a citation from retrieve_docs. Say the document.
 - Passages from race write-ups are narrative, not measurement. If a document's number and a
   mart's number disagree, the mart is right and you say so.
