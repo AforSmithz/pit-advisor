@@ -778,7 +778,7 @@ def evals(
         on_case=announce,
     )
     report.mkdir(parents=True, exist_ok=True)
-    (report / agent_evals.REPORT).write_text(result.model_dump_json(indent=2))
+    (report / agent_evals.REPORT).write_text(result.model_dump_json(indent=2) + "\n")
     (report / agent_evals.SUMMARY).write_text(agent_evals.summarise(result))
     typer.echo(agent_evals.summarise(result), nl=False)
     typer.echo(f"\nwrote {report / agent_evals.REPORT}")

@@ -42,10 +42,12 @@ cannot drift from the schema. `pitadv lineage --check` reads the dbt manifest an
 gold model back through silver to the bronze sources and on to the raw objects each one was
 built from; a gold model that cannot be traced to raw fails the command.
 
-A local backfill of the 2023 and 2024 seasons currently produces 46 races, 919 results, 919
-qualifying rows, 1,736 pit stops and one quarantined row: a 2024 pit stop that Jolpica
-publishes with an empty duration. The lake and ingest stacks are deployed; the transform stack
-synthesizes and is not deployed yet. The race simulation and the agent are not written.
+Raw and bronze now cover 2021 to 2025 for results, qualifying, laps, pit stops, race-session
+timing and weather. A local dbt build of the same models produces 2,278 result rows across the
+five seasons; the copy in Athena holds 2024 only, because that is what the pipeline has been
+run for, so a question about 2022 is answerable on the laptop and not yet in the account. The
+data, ingest, transform and web stacks are deployed. The agent stack synthesizes and has not
+been deployed.
 
 ## The honesty constraint
 
@@ -69,6 +71,18 @@ artifact that passed the quality gate, because a metric calculated in TypeScript
 nobody tested. And the language model never produces a figure: every number in an agent answer
 comes verbatim from a tool result, and if no tool has the answer, the answer is that we do not
 have it.
+
+The second rule is enforced in code rather than by prompt. After the model stops, every number in
+the answer is checked against the numbers the tools returned, the numbers in the question and the
+numbers in the tool arguments, and an answer carrying anything else is withheld and says which
+figures were loose. A golden set of sixty-four questions scores the agent: exact match on numeric
+answers against the marts, retrieval hit-rate, tool-selection accuracy, and a count of ungrounded
+figures that has to be zero. The most recent run scores 97.4%, 100% and 98.4% against floors of
+95%, 90% and 90%, and fails the last one by a single case. About once in sixty-four questions the
+model subtracts one tool result from another and states the difference, which is a figure no tool
+returned. The check catches it and withholds the answer every time, and the agent stays out of the
+dashboard until a run comes back clean. That is the gate doing its job rather than a gate worth
+lowering.
 
 ## Architecture
 
@@ -189,6 +203,27 @@ SELECT only against an allowlist of gold views, forces a LIMIT, runs under a rea
 and executes in an Athena workgroup with a per-query byte-scan cap. Athena bills by bytes
 scanned, so an unpartitioned table plus a generated join is the single most plausible way this
 budget dies.
+
+The orchestration loop is written here rather than handed to a managed agent runtime, and it
+uses the AWS SDK directly rather than an agent framework. Both are the same argument. The eval
+suite is what decides whether the agent is allowed in front of anyone, it runs on every push,
+and the job that runs it holds no AWS credentials; a managed loop would put the thing being
+scored inside the account and force either credentials in CI or a local reimplementation of the
+loop, which is the loop. Owning it also turns the rule about figures into an assertion: after
+the model stops, every number in the answer is checked against the numbers the tools returned,
+the numbers in the question and the numbers in the tool arguments, and an answer carrying
+anything else is withheld and says which figures were loose. A framework would have bought
+durable execution, human-in-the-loop interrupts and a graph, none of which a single-turn
+read-only agent uses, at the cost of sitting between this code and the Converse fields it
+actually needs, prompt caching among them.
+
+Six of the nine tools read the published view artifacts rather than the marts, which is a
+deviation from the original design and the more defensible answer. Form, clean pace, track fit
+and the forecast are fitted quantities, not columns, and the view artifacts are where they are
+published after passing the quality gate. Reading them means a figure in an answer and a figure
+on the dashboard cannot disagree, and it means no tool contains a second implementation of a
+metric. The cost is that those tools speak about the current event and the most recent fits;
+anything historical goes through the guarded SQL, and the tools say so rather than guessing.
 
 Some of this is deliberately over-engineered for the data volume. A medallion lake and a dbt
 project for two hundred megabytes is more machinery than the problem needs, which is the point:
