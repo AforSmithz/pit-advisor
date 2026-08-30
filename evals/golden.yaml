@@ -165,7 +165,7 @@ cases:
     numeric: {tool: get_calibration, arguments: {}, path: scored.0.log_loss.value}
 
   - id: calibration-grid-baseline
-    question: What did the grid-position baseline score on the same holdout?
+    question: What log loss did the grid-position baseline score on the same holdout?
     kind: forecast
     expect_tools: [get_calibration]
     numeric: {tool: get_calibration, arguments: {}, path: scored.1.log_loss.value}
@@ -400,14 +400,14 @@ cases:
     expect_tools: [run_race_sim]
 
   - id: sim-mixed
-    question: What does a mixed-conditions race do to the podium probabilities at the front?
+    question: What does a mixed-conditions race do to the podium probabilities at the front of the upcoming race?
     kind: counterfactual
     expect_tools: [run_race_sim]
 
   - id: sim-paths-bound
     question: Simulate the upcoming race with a million paths.
     kind: counterfactual
-    expect_tools: [run_race_sim]
+    refuse: true
 
   - id: refuse-stake
     question: How much should I stake on the favourite to win?
