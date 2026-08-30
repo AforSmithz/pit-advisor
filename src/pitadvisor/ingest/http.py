@@ -1,3 +1,4 @@
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -12,6 +13,8 @@ USER_AGENT = "pit-advisor/0.1 (personal project; contact via github)"
 RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 MAX_ATTEMPTS = 4
 TIMEOUT_SECONDS = 20.0
+# an upstream that says how long to wait knows better than our exponential backoff does
+MAX_RETRY_AFTER = 120.0
 
 Opener = Callable[[urllib.request.Request, float], Any]
 
@@ -22,6 +25,7 @@ class Response(BaseModel, frozen=True):
     body: bytes
     etag: str | None = None
     last_modified: str | None = None
+    retry_after: float | None = None
     fetched_at: datetime
 
     @property
@@ -69,6 +73,24 @@ class Unconditional:
         self.inner.record(entry)
 
 
+def _retry_after(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return min(MAX_RETRY_AFTER, float(value))
+    except ValueError:
+        # the header may also be an http date, which we do not need well enough to parse
+        return None
+
+
+def _wait(retry_after: float | None, attempt: int, limiter: RateLimiter | None) -> None:
+    if retry_after is None:
+        if limiter is not None:
+            limiter.backoff(attempt)
+        return
+    (limiter.sleep if limiter is not None else time.sleep)(retry_after)
+
+
 def fetch(
     url: str,
     ledger: Ledger,
@@ -92,6 +114,7 @@ def fetch(
                     body=raw.read(),
                     etag=raw.headers.get("ETag"),
                     last_modified=raw.headers.get("Last-Modified"),
+                    retry_after=_retry_after(raw.headers.get("Retry-After")),
                     fetched_at=datetime.now(UTC),
                 )
         except urllib.error.HTTPError as exc:
@@ -102,6 +125,7 @@ def fetch(
                 body=b"",
                 etag=exc.headers.get("ETag") or (known.etag if known else None),
                 last_modified=exc.headers.get("Last-Modified"),
+                retry_after=_retry_after(exc.headers.get("Retry-After")),
                 fetched_at=datetime.now(UTC),
             )
             last = exc
@@ -122,8 +146,7 @@ def fetch(
             )
         )
         if response.status in RETRY_STATUSES and attempt < MAX_ATTEMPTS - 1:
-            if limiter is not None:
-                limiter.backoff(attempt)
+            _wait(response.retry_after, attempt, limiter)
             continue
         if response.status >= 400 and response.status != 304:
             raise FetchError(url, response.status, str(last) if last else "")

@@ -4,6 +4,7 @@ from io import BytesIO
 
 import pytest
 
+from pitadvisor.ingest import http
 from pitadvisor.ingest.http import USER_AGENT, FetchError, Unconditional, fetch
 from pitadvisor.ingest.ratelimit import LedgerEntry, RateLimiter
 
@@ -133,3 +134,61 @@ def test_unconditional_hides_the_stored_etag(ledger):
     fetch("https://api.jolpi.ca/x", Unconditional(ledger), opener=opener)
     assert opener.requests[0].get_header("If-none-match") is None
     assert ledger.recorded[-1].status == 200
+
+
+def test_a_retry_after_header_is_what_the_wait_is_built_from(ledger):
+    waits = []
+
+    class Limiter:
+        def acquire(self):
+            return None
+
+        def backoff(self, attempt, base=2.0):
+            waits.append(("backoff", attempt))
+
+        def sleep(self, seconds):
+            waits.append(("retry-after", seconds))
+
+    attempts = []
+
+    def opener(request, timeout):
+        attempts.append(request)
+        if len(attempts) == 1:
+            raise urllib.error.HTTPError(
+                request.full_url, 429, "slow down", {"Retry-After": "7"}, None
+            )
+        return FakeResponse(200, b'{"ok": true}')
+
+    http.fetch("https://example.com/x", ledger, Limiter(), opener=opener)
+    assert waits == [("retry-after", 7.0)]
+
+
+def test_without_a_retry_after_the_backoff_is_the_fallback(ledger):
+    waits = []
+
+    class Limiter:
+        def acquire(self):
+            return None
+
+        def backoff(self, attempt, base=2.0):
+            waits.append(("backoff", attempt))
+
+        def sleep(self, seconds):
+            waits.append(("retry-after", seconds))
+
+    attempts = []
+
+    def opener(request, timeout):
+        attempts.append(request)
+        if len(attempts) == 1:
+            raise urllib.error.HTTPError(request.full_url, 503, "later", {}, None)
+        return FakeResponse(200, b'{"ok": true}')
+
+    http.fetch("https://example.com/x", ledger, Limiter(), opener=opener)
+    assert waits == [("backoff", 0)]
+
+
+def test_an_absurd_retry_after_is_capped():
+    assert http._retry_after("100000") == http.MAX_RETRY_AFTER
+    assert http._retry_after("Wed, 21 Oct 2026 07:28:00 GMT") is None
+    assert http._retry_after(None) is None
