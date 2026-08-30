@@ -231,3 +231,13 @@ def test_a_figure_in_no_passage_is_still_an_invention():
         tool="retrieve_docs", ok=True, payload={"passages": [{"text": "turns 11 to 14"}]}
     )
     assert ungrounded("turn 19 was removed", "what changed", [call], [result]) == ["19"]
+
+
+def test_a_range_of_corner_numbers_is_two_numbers_not_a_negative_one():
+    call = ToolCall(name="retrieve_docs", arguments={}, ok=True)
+    result = tools.ToolResult(
+        tool="retrieve_docs",
+        ok=True,
+        payload={"passages": [{"text": "reprofiled at turns 11 to 14 and 17 to 20"}]},
+    )
+    assert ungrounded("turns 11-14 and 17-20 changed", "what changed", [call], [result]) == []

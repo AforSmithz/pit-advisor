@@ -198,7 +198,7 @@ def ungrounded(
     text: str, question: str, calls: list[ToolCall], results: list[ToolResult]
 ) -> list[str]:
     allowed = grounding_set(question, calls, results)
-    scanned = NOT_A_FIGURE.sub(" ", text.translate(DASHES))
+    scanned = tools.RANGE.sub(" ", NOT_A_FIGURE.sub(" ", text.translate(DASHES)))
     years = {match.group(0).rstrip("s") for match in SAFE.finditer(scanned)}
     loose: list[str] = []
     for raw in FIGURE.findall(scanned):

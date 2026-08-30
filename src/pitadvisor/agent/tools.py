@@ -27,6 +27,8 @@ MAX_SIM_PATHS: Final = 2000
 INTERVAL_LEVEL: Final = 0.95
 # a passage a tool returned is a tool result, and a figure quoted out of one came from a tool
 IN_TEXT = re.compile(r"[-+]?\d[\d,]*(?:\.\d+)?")
+# "turns 11-14" is two numbers and a range, not eleven and minus fourteen
+RANGE = re.compile(r"(?<=\d)\s*[-\u2013\u2014\u2212]\s*(?=\d)")
 MARKETS: Final = ("win", "podium", "points", "finish", "expected_position")
 LOCAL_MARTS: Final = Path("data/local/pitadvisor.duckdb")
 
@@ -670,7 +672,7 @@ def _walk(node: Any, found: set[str]) -> None:
         found.update(renderings(float(node)))
         return
     if isinstance(node, str):
-        for token in IN_TEXT.findall(node):
+        for token in IN_TEXT.findall(RANGE.sub(" ", node)):
             try:
                 found.update(renderings(float(token.replace(",", ""))))
             except ValueError:
