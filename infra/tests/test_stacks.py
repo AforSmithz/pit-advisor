@@ -618,6 +618,14 @@ def test_the_vector_index_matches_the_embedding_model(agent_template: Template) 
     assert index["DataType"] == "float32"
 
 
+def test_the_index_points_at_the_bucket_by_arn_not_by_a_ref_that_is_one(
+    agent_template: Template,
+) -> None:
+    index = sole(agent_template, "AWS::S3Vectors::Index")["Properties"]
+    assert "VectorBucketName" not in index
+    assert index["VectorBucketArn"]
+
+
 def test_bedrocks_own_metadata_is_kept_out_of_the_filterable_budget(
     agent_template: Template,
 ) -> None:

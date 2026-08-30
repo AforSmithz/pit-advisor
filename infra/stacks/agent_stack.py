@@ -141,7 +141,8 @@ class AgentStack(Stack):
             self,
             "CorpusIndex",
             index_name=f"pitadvisor-corpus-{env_name}",
-            vector_bucket_name=self.vector_bucket.ref,
+            # ref on a vector bucket is its arn, not its name, and the name field caps at 63
+            vector_bucket_arn=self.vector_bucket.attr_vector_bucket_arn,
             data_type="float32",
             dimension=EMBEDDING_DIMENSION,
             distance_metric="cosine",
