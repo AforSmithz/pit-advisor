@@ -1,3 +1,4 @@
+import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -24,6 +25,8 @@ MAX_SIM_PATHS: Final = 2000
 # every interval in the project is a 95% one: z of 1.96 in the feature fits, t at 0.975 in the
 # pace fit, and 0.95 in the metrics. the tools say so, so an answer that says so is grounded
 INTERVAL_LEVEL: Final = 0.95
+# a passage a tool returned is a tool result, and a figure quoted out of one came from a tool
+IN_TEXT = re.compile(r"[-+]?\d[\d,]*(?:\.\d+)?")
 MARKETS: Final = ("win", "podium", "points", "finish", "expected_position")
 LOCAL_MARTS: Final = Path("data/local/pitadvisor.duckdb")
 
@@ -665,6 +668,13 @@ def _walk(node: Any, found: set[str]) -> None:
         return
     if isinstance(node, int | float):
         found.update(renderings(float(node)))
+        return
+    if isinstance(node, str):
+        for token in IN_TEXT.findall(node):
+            try:
+                found.update(renderings(float(token.replace(",", ""))))
+            except ValueError:
+                continue
         return
     if isinstance(node, dict):
         for value in cast(dict[str, Any], node).values():

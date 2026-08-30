@@ -213,3 +213,21 @@ def test_arithmetic_on_a_tool_result_is_still_caught():
         tool="get_driver_form", ok=True, payload={"low": -0.87, "high": -0.42}
     )
     assert ungrounded("the interval is 0.45 wide", "how wide", [call], [result]) == ["0.45"]
+
+
+def test_a_figure_quoted_out_of_a_retrieved_passage_came_from_a_tool():
+    call = ToolCall(name="retrieve_docs", arguments={}, ok=True)
+    result = tools.ToolResult(
+        tool="retrieve_docs",
+        ok=True,
+        payload={"passages": [{"text": "The circuit was reprofiled at turns 11 to 14 in 2021."}]},
+    )
+    assert ungrounded("turns 11 to 14 were reprofiled", "what changed", [call], [result]) == []
+
+
+def test_a_figure_in_no_passage_is_still_an_invention():
+    call = ToolCall(name="retrieve_docs", arguments={}, ok=True)
+    result = tools.ToolResult(
+        tool="retrieve_docs", ok=True, payload={"passages": [{"text": "turns 11 to 14"}]}
+    )
+    assert ungrounded("turn 19 was removed", "what changed", [call], [result]) == ["19"]
