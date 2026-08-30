@@ -21,6 +21,9 @@ from pitadvisor.outputs.view_contracts import (
 )
 
 MAX_SIM_PATHS: Final = 2000
+# every interval in the project is a 95% one: z of 1.96 in the feature fits, t at 0.975 in the
+# pace fit, and 0.95 in the metrics. the tools say so, so an answer that says so is grounded
+INTERVAL_LEVEL: Final = 0.95
 MARKETS: Final = ("win", "podium", "points", "finish", "expected_position")
 LOCAL_MARTS: Final = Path("data/local/pitadvisor.duckdb")
 
@@ -205,6 +208,7 @@ class Toolbox:
                 "constructor_id": driver.constructor_id,
                 "as_of": view.as_of.isoformat(),
                 "half_life_events": view.half_life_events,
+                "interval_level": INTERVAL_LEVEL,
                 "form": _dump(driver.form),
                 "form_component": driver.form_component,
                 "quali_race": _dump(driver.quali_race),
@@ -269,6 +273,7 @@ class Toolbox:
             "get_track_fit",
             {
                 "circuit_id": view.profile.circuit_id,
+                "interval_level": INTERVAL_LEVEL,
                 "profile": view.profile.model_dump(mode="json"),
                 "neighbours": [item.model_dump(mode="json") for item in view.neighbours],
                 "teams": [
@@ -337,6 +342,7 @@ class Toolbox:
             {
                 "holdout": view.holdout,
                 "from_season": view.from_season,
+                "interval_level": INTERVAL_LEVEL,
                 "beats_baselines": view.beats_baselines,
                 "separated_from": view.separated_from,
                 "scored": [
@@ -522,7 +528,8 @@ TOOLS: Final[tuple[Tool, ...]] = (
     ),
     Tool(
         "get_pace_profile",
-        "Clean-air race pace for every driver at one event, as a percentage off the benchmark.",
+        "Measured clean-air race pace for every driver at a race that has already run, as a "
+        "percentage off the benchmark. Defaults to the most recent race with a fit.",
         PaceProfile,
         _bind(Toolbox.get_pace_profile),
     ),
@@ -540,7 +547,9 @@ TOOLS: Final[tuple[Tool, ...]] = (
     ),
     Tool(
         "get_forecast",
-        "Simulated finishing probabilities for the event, with the backtest evidence beside them.",
+        "Simulated finishing probabilities for the upcoming event: win, podium, points, finish "
+        "and expected position, plus the path count, the scenario weights and the backtest "
+        "evidence the forecast was judged by.",
         Forecast,
         _bind(Toolbox.get_forecast),
     ),

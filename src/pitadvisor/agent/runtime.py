@@ -15,6 +15,10 @@ MAX_TOKENS: Final = 1024
 FIGURE = re.compile(r"[-+]?\d[\d,]*(?:\.\d+)?")
 # a year or a round number in the question is the asker's, not a figure the model invented
 SAFE = re.compile(r"\b(19|20)\d{2}\b")
+# a timestamp is a date, not a measurement, and splitting one into pieces invents five figures
+STAMPS = re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z?)?")
+# "1." at the start of a line is a list, not a number the model is claiming
+LIST_MARKER = re.compile(r"^\s*\d+[.)]\s", re.MULTILINE)
 
 
 class ToolCall(BaseModel, frozen=True):
@@ -181,9 +185,10 @@ def ungrounded(
     text: str, question: str, calls: list[ToolCall], results: list[ToolResult]
 ) -> list[str]:
     allowed = grounding_set(question, calls, results)
-    years = {match.group(0) for match in SAFE.finditer(text)}
+    scanned = LIST_MARKER.sub(" ", STAMPS.sub(" ", text))
+    years = {match.group(0) for match in SAFE.finditer(scanned)}
     loose: list[str] = []
-    for raw in FIGURE.findall(text):
+    for raw in FIGURE.findall(scanned):
         cleaned = _normalised(raw)
         if cleaned in allowed or cleaned in years:
             continue

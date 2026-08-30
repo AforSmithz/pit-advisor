@@ -234,3 +234,26 @@ def test_the_run_paces_itself_between_cases(box):
     suite = Suite(cases=[Case(id=f"c{n}", question="q", refuse=True) for n in range(3)])
     evals.run(Quiet(), box, suite, "run-1", pace_seconds=1.5, sleep=waits.append)
     assert waits == [1.5, 1.5]
+
+
+def test_a_negative_ground_truth_matches_the_sign_the_model_wrote(box):
+    truth = Truth(tool="get_driver_form", arguments={"driver_code": "AAA"}, path="form.value")
+    case = Case(id="c", question="q", numeric=truth)
+    value = evals.expected_value(box, truth)
+    assert value < 0
+    assert evals.score(case, answer(f"Rated **{value}**."), box).numeric_ok
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I don't advise on betting.",
+        "I can't do that.",
+        "That is outside what this system does.",
+        "The regulations are not available in the corpus.",
+        "I would need historical results for that circuit.",
+    ],
+)
+def test_the_ways_a_model_actually_declines_are_all_recognised(box, text):
+    case = Case(id="c", question="q", refuse=True)
+    assert evals.score(case, answer(text), box).refusal_ok

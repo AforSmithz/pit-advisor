@@ -21,7 +21,28 @@ GATE: Final = {
     "tool_selection": 0.90,
     "ungrounded_figures": 0.0,
 }
-DECLINED = ("do not have", "don't have", "cannot", "will not", "does not advise", "no tool")
+DECLINED = (
+    "do not have",
+    "don't have",
+    "not have",
+    "cannot",
+    "can't",
+    "will not",
+    "won't",
+    "do not advise",
+    "don't advise",
+    "does not advise",
+    "not available",
+    "no tool",
+    "not something",
+    "outside what",
+    "outside the",
+    "would need",
+    "is not in the",
+    "covers only",
+    "not in the corpus",
+    "no data",
+)
 
 
 class SuiteError(RuntimeError):
@@ -124,7 +145,12 @@ def _at(payload: Any, path: str) -> Any:
 def _quoted(answer: str, value: float | str) -> bool:
     if isinstance(value, str):
         return value.lower() in answer.lower()
-    found = {match.replace(",", "") for match in re.findall(r"\d[\d,]*(?:\.\d+)?", answer)}
+    # markdown emphasis sits between the sign and the digits often enough to matter
+    plain = answer.replace("*", "").replace("_", "")
+    found = {
+        match.replace(",", "").lstrip("+")
+        for match in re.findall(r"[-+]?\d[\d,]*(?:\.\d+)?", plain)
+    }
     return bool(found & tools.renderings(float(value)))
 
 
@@ -166,7 +192,7 @@ def _cited(answer: Answer, wanted: str) -> bool:
 
 
 def _declined(answer: Answer) -> bool:
-    lowered = answer.text.lower()
+    lowered = answer.text.lower().replace("\u2019", "'")
     return any(marker in lowered for marker in DECLINED) or answer.refused
 
 

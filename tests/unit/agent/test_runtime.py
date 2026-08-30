@@ -162,3 +162,19 @@ def test_a_percentage_the_tool_gave_as_a_fraction_reads_either_way():
     assert ungrounded("32.5% chance", "who wins", [call], [result]) == []
     assert ungrounded("0.325 chance", "who wins", [call], [result]) == []
     assert ungrounded("33.1% chance", "who wins", [call], [result]) == ["33.1"]
+
+
+def test_a_timestamp_is_not_five_invented_figures(box):
+    client = FakeBedrock(said("The snapshot was taken at 2026-08-30T07:03:53Z."))
+    assert Agent(client, box).ask("when was the weather snapshot taken").grounded
+
+
+def test_a_numbered_list_is_not_a_claim(box):
+    client = FakeBedrock(said("Two things:\n1. the pace fit\n2. the grid\n"))
+    assert Agent(client, box).ask("what drives it").grounded
+
+
+def test_a_negative_figure_from_a_tool_is_recognised():
+    call = ToolCall(name="get_driver_form", arguments={}, ok=True)
+    result = tools.ToolResult(tool="get_driver_form", ok=True, payload={"form": -0.645})
+    assert ungrounded("rated at -0.645", "how is he", [call], [result]) == []
