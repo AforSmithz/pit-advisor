@@ -64,8 +64,11 @@ catalog-check:
 image tag="latest":
     aws ecr get-login-password --profile {{AWS_PROFILE}} --region {{AWS_REGION}} \
       | docker login --username AWS --password-stdin {{account}}.dkr.ecr.{{AWS_REGION}}.amazonaws.com
-    # --push streams to the registry, a local copy of the image needs several gb of disk
-    docker buildx build --platform linux/arm64 --push \
+    # --push streams to the registry, a local copy of the image needs several gb of disk.
+    # provenance off and docker media types on: buildx defaults to an oci index with an
+    # attestation manifest, which fargate takes and lambda rejects as an unsupported media type
+    docker buildx build --platform linux/arm64 --provenance=false \
+      --output type=image,oci-mediatypes=false,push=true \
       -f infra/docker/pipeline.Dockerfile \
       -t {{account}}.dkr.ecr.{{AWS_REGION}}.amazonaws.com/pitadvisor-pipeline-dev:{{tag}} .
     # the pipeline overrides the command exactly like this, and an entrypoint that swallows
