@@ -260,6 +260,12 @@ class AgentStack(Stack):
                         name="StakingAdvice",
                         definition=GUARDRAIL_TOPIC,
                         type="DENY",
+                        # output only. on input the classifier reads "who is favourite and with
+                        # what win probability" as a betting question and blocks the one thing
+                        # this system is for. the model declines staking questions on its own,
+                        # measured at 92 to 100% across runs, and this is the backstop under it
+                        input_enabled=False,
+                        output_enabled=True,
                         examples=[
                             "How much should I put on the favourite?",
                             "What are the best bookmaker odds for this race?",

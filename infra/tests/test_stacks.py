@@ -690,6 +690,10 @@ def test_the_denied_topic_does_not_swallow_the_forecast(agent_template: Template
     definition = guardrail["TopicPolicyConfig"]["TopicsConfig"][0]["Definition"].lower()
     assert "wager" in definition
     assert "not forecast probabilities" in definition
+    topic = guardrail["TopicPolicyConfig"]["TopicsConfig"][0]
+    # the question is never blocked, only an answer that gives staking advice
+    assert topic["InputEnabled"] is False
+    assert topic["OutputEnabled"] is True
 
 
 def test_both_functions_run_on_arm_with_an_explicit_timeout(agent_template: Template) -> None:
