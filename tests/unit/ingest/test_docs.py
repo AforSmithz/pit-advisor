@@ -5,6 +5,7 @@ import pytest
 
 from pitadvisor.ingest import docs
 from pitadvisor.ingest.docs import Curated, Page
+from pitadvisor.ingest.http import FetchError as HttpFetchError
 from pitadvisor.ingest.http import Response
 from pitadvisor.types import Source
 
@@ -210,3 +211,67 @@ def test_wikipedia_is_a_source_the_raw_layout_knows_about():
 @pytest.mark.parametrize("kind", ["race", "circuit"])
 def test_the_key_says_which_kind_of_page_it_is(kind):
     assert f"kind={kind}" in docs.doc_key(page(kind))
+
+
+class Refuses:
+    def __init__(self, fail_after=0):
+        self.fail_after = fail_after
+        self.calls = 0
+
+    def __call__(self, url, ledger, limiter=None, **_):
+        self.calls += 1
+        if self.calls > self.fail_after:
+            raise HttpFetchError(url, 429, "Too Many Requests")
+        return FakeWiki()(url, ledger, limiter)
+
+
+def test_a_page_already_in_the_corpus_is_not_fetched_again(store, raw, ledger):
+    land_raw(store)
+    fetch = FakeWiki()
+    docs.ingest_wikipedia(store, raw, ledger, "run-1", fetch=fetch, pause_seconds=0)
+    before = len(fetch.calls)
+    docs.ingest_wikipedia(store, raw, ledger, "run-2", fetch=fetch, pause_seconds=0)
+    assert len(fetch.calls) == before
+
+
+def test_refresh_refetches_what_is_already_there(store, raw, ledger):
+    land_raw(store)
+    fetch = FakeWiki()
+    docs.ingest_wikipedia(store, raw, ledger, "run-1", fetch=fetch, pause_seconds=0)
+    before = len(fetch.calls)
+    docs.ingest_wikipedia(store, raw, ledger, "run-2", fetch=fetch, refresh=True, pause_seconds=0)
+    assert len(fetch.calls) > before
+
+
+def test_one_refusal_is_recorded_and_the_walk_carries_on(store, raw, ledger):
+    pages = [page(), page("circuit")]
+    outcomes = docs.ingest_wikipedia(
+        store, raw, ledger, "run-1", pages=pages, fetch=Refuses(1), pause_seconds=0
+    )
+    assert outcomes[0].key is not None
+    assert "429" in str(outcomes[1].skipped)
+
+
+def test_three_refusals_in_a_row_stop_the_walk(store, raw, ledger):
+    pages = [page() for _ in range(10)]
+    outcomes = docs.ingest_wikipedia(
+        store, raw, ledger, "run-1", pages=pages, fetch=Refuses(0), pause_seconds=0
+    )
+    assert len(outcomes) < len(pages)
+    assert "run it again later" in str(outcomes[-1].skipped)
+
+
+def test_the_walk_spaces_itself_out(store, raw, ledger):
+    waits = []
+    pages = [page(), page("circuit")]
+    docs.ingest_wikipedia(
+        store,
+        raw,
+        ledger,
+        "run-1",
+        pages=pages,
+        fetch=FakeWiki(),
+        pause_seconds=2.0,
+        sleep=waits.append,
+    )
+    assert waits == [2.0]

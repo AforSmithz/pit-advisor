@@ -789,6 +789,10 @@ def evals(
 @app.command(name="docs-sync", help="Build the knowledge base corpus under docs/.")
 def docs_sync(
     limit: Annotated[int | None, typer.Option(help="Stop after this many pages.")] = None,
+    refresh: Annotated[
+        bool, typer.Option("--refresh", help="Refetch pages already in the corpus.")
+    ] = False,
+    pause: Annotated[float, typer.Option(help="Seconds between pages, for the upstream.")] = 1.0,
     local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
     index: Annotated[
         bool, typer.Option("--index", help="Reindex the corpus into the knowledge base.")
@@ -805,15 +809,25 @@ def docs_sync(
         item = doc_corpus.Curated(title=title, kind=kind)
         typer.echo(doc_corpus.add_curated(store, add, item))
         return
-    limiter = RateLimiter(bucket_for("wikipedia"))
-    outcomes = doc_corpus.ingest_wikipedia(
-        store, RawStore(store), ledger, _run_id(), limiter, limit=limit
-    )
-    for outcome in outcomes:
+
+    def announce(outcome: doc_corpus.DocOutcome) -> None:
         if outcome.skipped:
             typer.echo(f"skip  {outcome.title:<44} {outcome.skipped}")
         else:
             typer.echo(f"ok    {outcome.title:<44} {outcome.characters} characters")
+
+    limiter = RateLimiter(bucket_for("wikipedia"))
+    outcomes = doc_corpus.ingest_wikipedia(
+        store,
+        RawStore(store),
+        ledger,
+        _run_id(),
+        limiter,
+        limit=limit,
+        refresh=refresh,
+        pause_seconds=pause,
+        on_page=announce,
+    )
     written = [item for item in outcomes if item.key]
     typer.echo(f"{len(written)} documents, {len(doc_corpus.corpus(store))} in the corpus")
     if index:

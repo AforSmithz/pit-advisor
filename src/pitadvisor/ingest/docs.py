@@ -1,5 +1,6 @@
 import json
 import re
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final
@@ -31,6 +32,11 @@ DROPPED_SECTIONS: Final = (
     "entrants",
 )
 MIN_CHARACTERS: Final = 400
+# wikipedia answers 429 to a burst from an anonymous client however much hourly budget the
+# bucket thinks is left, so the walk spaces itself out on top of the token bucket
+PAUSE_SECONDS: Final = 1.0
+# three refusals in a row is the site telling us to come back later, not one bad page
+CONSECUTIVE_FAILURES: Final = 3
 
 
 class Page(BaseModel, frozen=True):
@@ -182,11 +188,40 @@ def ingest_wikipedia(
     pages: list[Page] | None = None,
     fetch: Callable[..., http.Response] = http.fetch,
     limit: int | None = None,
+    refresh: bool = False,
+    pause_seconds: float = PAUSE_SECONDS,
+    sleep: Callable[[float], None] = time.sleep,
+    on_page: Callable[[DocOutcome], None] | None = None,
 ) -> list[DocOutcome]:
     wanted = pages if pages is not None else linked_pages(store)
+    if not refresh:
+        wanted = [page for page in wanted if not store.exists(doc_key(page))]
     if limit is not None:
         wanted = wanted[:limit]
-    return [ingest_page(store, raw, page, ledger, run_id, limiter, fetch) for page in wanted]
+    outcomes: list[DocOutcome] = []
+    failures = 0
+    for index, page in enumerate(wanted):
+        if index and pause_seconds:
+            sleep(pause_seconds)
+        try:
+            outcome = ingest_page(store, raw, page, ledger, run_id, limiter, fetch)
+            failures = 0
+        except http.FetchError as exc:
+            failures += 1
+            outcome = DocOutcome(title=page.title, kind=page.kind, skipped=f"{exc}")
+        outcomes.append(outcome)
+        if on_page is not None:
+            on_page(outcome)
+        if failures >= CONSECUTIVE_FAILURES:
+            outcomes.append(
+                DocOutcome(
+                    title="-",
+                    kind="-",
+                    skipped=f"stopped after {failures} refusals in a row, run it again later",
+                )
+            )
+            break
+    return outcomes
 
 
 class Curated(BaseModel, frozen=True):
