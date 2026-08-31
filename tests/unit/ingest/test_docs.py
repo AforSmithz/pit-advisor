@@ -200,7 +200,7 @@ def test_a_hand_dropped_regulation_lands_with_its_metadata(store, tmp_path):
 
 def test_a_reissued_regulation_does_not_overwrite_the_earlier_one(store, tmp_path):
     source = tmp_path / "sporting.pdf"
-    source.write_bytes(b"%PDF-1.4")
+    source.write_bytes(one_page_pdf(["Article 1. The championship."]))
     keys = [
         docs.add_curated(
             store,
@@ -210,7 +210,7 @@ def test_a_reissued_regulation_does_not_overwrite_the_earlier_one(store, tmp_pat
         for issued in (date(2024, 2, 28), date(2024, 8, 16))
     ]
     assert keys[0] != keys[1]
-    assert keys[1].endswith("sporting-regulations-2024-08-16.pdf")
+    assert keys[1].endswith("sporting-regulations-2024-08-16.txt")
     attributes = json.loads(store.get(keys[1] + ".metadata.json"))["metadataAttributes"]
     assert attributes["issued"] == "2024-08-16"
     assert attributes["season"] == 2024
