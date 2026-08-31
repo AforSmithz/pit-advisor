@@ -36,10 +36,13 @@ class SessionKind(StrEnum):
     RACE = "race"
 
 
-class EventKey(BaseModel):
+class SeasonKey(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     season: int = Field(ge=1950, le=2100)
+
+
+class EventKey(SeasonKey):
     round: int = Field(ge=1, le=30)
 
 
@@ -65,13 +68,15 @@ class Provenance(BaseModel):
         return value
 
 
-def raw_key(source: Source, key: SessionKey | EventKey, filename: str) -> str:
+def raw_key(source: Source, key: SeasonKey, filename: str) -> str:
     parts: list[str] = [
         Layer.RAW,
         f"source={source}",
         f"season={key.season}",
-        f"round={key.round:02d}",
     ]
+    # the regulations are a season's document, they belong to no round
+    if isinstance(key, EventKey):
+        parts.append(f"round={key.round:02d}")
     if isinstance(key, SessionKey):
         parts.append(f"session={key.session}")
     parts.append(filename)

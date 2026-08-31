@@ -14,6 +14,7 @@ from pitadvisor.config import Settings, boto_session
 from pitadvisor.types import (
     EventKey,
     Provenance,
+    SeasonKey,
     SessionKey,
     Source,
     bronze_key,
@@ -137,7 +138,7 @@ class RawStore:
 
     def land(
         self,
-        key: SessionKey | EventKey,
+        key: SeasonKey,
         name: str,
         body: bytes,
         provenance: Provenance,
@@ -156,7 +157,7 @@ class RawStore:
         )
         return uri
 
-    def versions(self, source: Source, key: SessionKey | EventKey, name: str) -> list[str]:
+    def versions(self, source: Source, key: SeasonKey, name: str) -> list[str]:
         prefix = raw_key(source, key, name)
         return sorted(
             item.key
@@ -164,9 +165,7 @@ class RawStore:
             if not item.key.endswith(META_SUFFIX) and item.key.startswith(prefix)
         )
 
-    def latest(
-        self, source: Source, key: SessionKey | EventKey, name: str
-    ) -> tuple[bytes, Provenance] | None:
+    def latest(self, source: Source, key: SeasonKey, name: str) -> tuple[bytes, Provenance] | None:
         found = self.versions(source, key, name)
         if not found:
             return None
