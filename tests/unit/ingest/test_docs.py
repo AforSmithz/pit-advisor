@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -196,6 +196,24 @@ def test_a_hand_dropped_regulation_lands_with_its_metadata(store, tmp_path):
     )
     assert key == "docs/source=fia_docs/kind=regulation/sporting-regulations-2025.txt"
     assert json.loads(store.get(key + ".metadata.json"))["metadataAttributes"]["season"] == 2025
+
+
+def test_a_reissued_regulation_does_not_overwrite_the_earlier_one(store, tmp_path):
+    source = tmp_path / "sporting.pdf"
+    source.write_bytes(b"%PDF-1.4")
+    keys = [
+        docs.add_curated(
+            store,
+            source,
+            Curated(title="Sporting Regulations", kind="regulation", season=2024, issued=issued),
+        )
+        for issued in (date(2024, 2, 28), date(2024, 8, 16))
+    ]
+    assert keys[0] != keys[1]
+    assert keys[1].endswith("sporting-regulations-2024-08-16.pdf")
+    attributes = json.loads(store.get(keys[1] + ".metadata.json"))["metadataAttributes"]
+    assert attributes["issued"] == "2024-08-16"
+    assert attributes["season"] == 2024
 
 
 def test_the_corpus_listing_leaves_the_sidecars_out(store, raw, ledger):

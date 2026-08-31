@@ -2,6 +2,7 @@ import json
 import re
 import time
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 from typing import Any, Final
 from urllib.parse import quote, unquote
@@ -229,10 +230,14 @@ class Curated(BaseModel, frozen=True):
     kind: str
     source: Source = Source.FIA_DOCS
     season: int | None = None
+    issued: date | None = None
 
 
 def curated_key(item: Curated, suffix: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", item.title.lower()).strip("-")
+    # the regulations are reissued mid-season, so the issue date is part of the name or the
+    # august version silently overwrites the march one
+    name = item.title if item.issued is None else f"{item.title} {item.issued.isoformat()}"
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
     return f"{Layer.DOCS}/source={item.source}/kind={item.kind}/{slug}{suffix}"
 
 
@@ -247,6 +252,8 @@ def add_curated(store: ObjectStore, path: Path, item: Curated) -> str:
     }
     if item.season is not None:
         attributes["season"] = item.season
+    if item.issued is not None:
+        attributes["issued"] = item.issued.isoformat()
     store.put(
         key + METADATA_SUFFIX,
         json.dumps({"metadataAttributes": attributes}, indent=2).encode(),
