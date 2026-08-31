@@ -800,6 +800,9 @@ def docs_sync(
     regulations: Annotated[
         bool, typer.Option("--regulations", help="Fetch the FIA regulations the manifest lists.")
     ] = False,
+    methodology: Annotated[
+        bool, typer.Option("--methodology", help="Load our own notes on how the metrics work.")
+    ] = False,
     add: Annotated[Path | None, typer.Option(help="Drop one curated file into the corpus.")] = None,
     title: Annotated[str | None, typer.Option(help="Title for the curated file.")] = None,
     kind: Annotated[str, typer.Option(help="Kind for the curated file.")] = "regulation",
@@ -813,7 +816,13 @@ def docs_sync(
     if add is not None:
         if title is None:
             raise typer.BadParameter("--add needs --title")
-        item = doc_corpus.Curated(title=title, kind=kind, season=season, issued=_issued(issued))
+        item = doc_corpus.Curated(
+            title=title,
+            kind=kind,
+            source=doc_corpus.source_of(kind),
+            season=season,
+            issued=_issued(issued),
+        )
         typer.echo(doc_corpus.add_curated(store, add, item))
         if index:
             _reindex(settings)
@@ -824,6 +833,14 @@ def docs_sync(
             typer.echo(f"skip  {outcome.title:<52} {outcome.skipped}")
         else:
             typer.echo(f"ok    {outcome.title:<52} {outcome.characters} characters")
+
+    if methodology:
+        notes = doc_corpus.ingest_methodology(store, refresh=refresh, on_page=announce)
+        written = [item for item in notes if item.key]
+        typer.echo(f"{len(written)} documents, {len(doc_corpus.corpus(store))} in the corpus")
+        if index:
+            _reindex(settings)
+        return
 
     if regulations:
         outcomes = doc_corpus.ingest_regulations(
