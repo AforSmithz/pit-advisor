@@ -346,42 +346,42 @@ cases:
     question: When do parc ferme conditions begin under the sporting regulations?
     kind: docs
     expect_tools: [retrieve_docs]
-    must_cite: regulation
+    must_retrieve: sporting
 
   - id: docs-points-system
     question: What does the sporting regulation say about how championship points are awarded?
     kind: docs
     expect_tools: [retrieve_docs]
-    must_cite: regulation
+    must_retrieve: sporting
 
   - id: docs-safety-car
     question: What do the regulations say about overtaking behind the safety car?
     kind: docs
     expect_tools: [retrieve_docs]
-    must_cite: regulation
+    must_retrieve: sporting
 
   - id: docs-yas-marina-layout
     question: What is written about the Yas Marina circuit layout and its reprofiling?
     kind: docs
     expect_tools: [retrieve_docs]
-    must_cite: yas
+    must_retrieve: yas marina
 
   - id: docs-abu-dhabi-race
     question: What happened in the most recent Abu Dhabi Grand Prix, in narrative terms?
     kind: docs
     expect_tools: [retrieve_docs]
-    must_cite: abu dhabi
+    must_retrieve: abu dhabi
 
   - id: docs-ground-effect
     question: What changed in the technical regulations when ground effect cars returned?
     kind: docs
     expect_tools: [retrieve_docs]
-    must_cite: technical
+    must_retrieve: technical
 
   - id: docs-versus-mart
     question: A race report says a driver finished second. The marts say third after a penalty. Which is right?
     kind: docs
-    must_cite: mart
+    must_say: mart
 
   - id: docs-not-in-corpus
     question: What does the corpus say about the 1974 Argentine Grand Prix?
