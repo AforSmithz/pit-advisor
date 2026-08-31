@@ -72,7 +72,8 @@ class Case(BaseModel, frozen=True):
     kind: str = "lookup"
     expect_tools: list[str] = Field(default_factory=list)
     numeric: Truth | None = None
-    must_cite: str | None = None
+    must_retrieve: str | None = None
+    must_say: str | None = None
     refuse: bool = False
 
 
@@ -89,7 +90,8 @@ class CaseScore(BaseModel, frozen=True):
     tools_used: list[str]
     tool_ok: bool
     numeric_ok: bool | None
-    citation_ok: bool | None
+    retrieval_ok: bool | None
+    assertion_ok: bool | None
     refusal_ok: bool | None
     grounded: bool
     ungrounded: list[str]
@@ -176,7 +178,8 @@ def score(case: Case, answer: Answer, box: Toolbox) -> CaseScore:
         except SuiteError as exc:
             numeric_ok = False
             detail = str(exc)
-    citation_ok = None if case.must_cite is None else _cited(answer, case.must_cite)
+    retrieval_ok = None if case.must_retrieve is None else _retrieved(answer, case.must_retrieve)
+    assertion_ok = None if case.must_say is None else _said(answer, case.must_say)
     refusal_ok = None if not case.refuse else _declined(answer)
     return CaseScore(
         id=case.id,
@@ -186,7 +189,8 @@ def score(case: Case, answer: Answer, box: Toolbox) -> CaseScore:
         tools_used=used,
         tool_ok=tool_ok,
         numeric_ok=numeric_ok,
-        citation_ok=citation_ok,
+        retrieval_ok=retrieval_ok,
+        assertion_ok=assertion_ok,
         refusal_ok=refusal_ok,
         grounded=answer.grounded,
         ungrounded=answer.ungrounded,
@@ -195,7 +199,16 @@ def score(case: Case, answer: Answer, box: Toolbox) -> CaseScore:
     )
 
 
-def _cited(answer: Answer, wanted: str) -> bool:
+def _retrieved(answer: Answer, wanted: str) -> bool:
+    """What the retriever brought back, not what the answer says about it. Scoring the prose
+    passes a case whose answer is "I cannot find the regulations", because the word is in the
+    refusal."""
+    # citations are object keys and s3 uris, so a document name arrives slugged
+    cited = " ".join(answer.citations).lower().replace("-", " ").replace("_", " ")
+    return wanted.lower() in cited
+
+
+def _said(answer: Answer, wanted: str) -> bool:
     return wanted.lower() in answer.text.lower()
 
 
@@ -248,7 +261,8 @@ def _unanswered(case: Case, exc: Exception) -> CaseScore:
         tools_used=[],
         tool_ok=False,
         numeric_ok=False if case.numeric else None,
-        citation_ok=False if case.must_cite else None,
+        retrieval_ok=False if case.must_retrieve else None,
+        assertion_ok=False if case.must_say else None,
         refusal_ok=False if case.refuse else None,
         grounded=True,
         ungrounded=[],
@@ -268,16 +282,20 @@ def report_of(
             [item.numeric_ok for item in scores if item.numeric_ok is not None]
         ),
         "retrieval_hit_rate": _rate(
-            [item.citation_ok for item in scores if item.citation_ok is not None]
+            [item.retrieval_ok for item in scores if item.retrieval_ok is not None]
         ),
         "tool_selection": _rate([item.tool_ok for item in scores]),
+        "assertions": _rate(
+            [item.assertion_ok for item in scores if item.assertion_ok is not None]
+        ),
         "refusals": _rate([item.refusal_ok for item in scores if item.refusal_ok is not None]),
         "ungrounded_figures": float(sum(1 for item in scores if not item.grounded)),
     }
     counts = {
         "cases": len(scores),
         "numeric": sum(1 for item in scores if item.numeric_ok is not None),
-        "retrieval": sum(1 for item in scores if item.citation_ok is not None),
+        "retrieval": sum(1 for item in scores if item.retrieval_ok is not None),
+        "assertion": sum(1 for item in scores if item.assertion_ok is not None),
         "refusal": sum(1 for item in scores if item.refusal_ok is not None),
     }
     return Report(
@@ -336,7 +354,8 @@ def failed(item: CaseScore) -> bool:
     return (
         not item.tool_ok
         or item.numeric_ok is False
-        or item.citation_ok is False
+        or item.retrieval_ok is False
+        or item.assertion_ok is False
         or item.refusal_ok is False
         or not item.grounded
     )
@@ -347,8 +366,10 @@ def _why(item: CaseScore) -> str:
         return f"used {', '.join(item.tools_used) or 'no tool'}"
     if item.numeric_ok is False:
         return f"expected {item.expected} in the answer"
-    if item.citation_ok is False:
-        return "no citation"
+    if item.retrieval_ok is False:
+        return "the corpus returned no such document"
+    if item.assertion_ok is False:
+        return "the answer does not make the point the case asks for"
     if item.refusal_ok is False:
         return "answered a question it should have declined"
     return f"ungrounded figures: {', '.join(item.ungrounded)}"

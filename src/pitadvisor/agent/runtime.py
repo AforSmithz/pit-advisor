@@ -47,6 +47,7 @@ class Answer(BaseModel, frozen=True):
     iterations: int
     usage: dict[str, int]
     ungrounded: list[str] = []
+    citations: list[str] = []
     refused: bool = False
 
     @property
@@ -165,6 +166,7 @@ class Agent:
             iterations=iterations,
             usage=usage,
             ungrounded=loose,
+            citations=[cite for result in results if result.ok for cite in result.citations],
             refused=refused,
         )
 

@@ -22,7 +22,7 @@ def written(tmp_path, payload):
     return path
 
 
-def answer(text, calls=(), ungrounded=()):
+def answer(text, calls=(), ungrounded=(), citations=()):
     return Answer(
         text=text,
         question="q",
@@ -31,6 +31,7 @@ def answer(text, calls=(), ungrounded=()):
         iterations=1,
         usage={},
         ungrounded=list(ungrounded),
+        citations=list(citations),
     )
 
 
@@ -46,7 +47,9 @@ def test_the_shipped_golden_set_parses_and_is_the_size_the_plan_asked_for():
 
 def test_every_case_in_the_golden_set_has_something_to_score():
     for case in evals.load(Path("evals/golden.yaml")).cases:
-        assert case.expect_tools or case.refuse or case.must_cite or case.numeric, case.id
+        assert (
+            case.expect_tools or case.refuse or case.must_retrieve or case.must_say or case.numeric
+        ), case.id
 
 
 def test_a_suite_that_loosens_the_gate_is_refused(tmp_path):
@@ -129,11 +132,27 @@ def test_a_withheld_answer_counts_as_a_refusal(box):
     assert evals.score(case, withheld, box).refusal_ok
 
 
-def test_a_citation_case_wants_the_document_named_in_the_answer(box):
-    case = Case(id="c", question="q", expect_tools=["retrieve_docs"], must_cite="sporting")
-    good = answer("The Sporting Regulations say so.", [call("retrieve_docs")])
-    assert evals.score(case, good, box).citation_ok
-    assert not evals.score(case, answer("It just does.", [call("retrieve_docs")]), box).citation_ok
+def test_a_retrieval_case_is_scored_on_what_came_back(box):
+    case = Case(id="c", question="q", expect_tools=["retrieve_docs"], must_retrieve="sporting")
+    cited = ["s3://lake/docs/source=fia_docs/kind=regulation/2025-sporting-regulations.pdf"]
+    good = answer("Article 40 says so.", [call("retrieve_docs")], citations=cited)
+    assert evals.score(case, good, box).retrieval_ok
+
+
+def test_prose_about_the_regulations_is_not_a_retrieval_hit(box):
+    case = Case(id="c", question="q", expect_tools=["retrieve_docs"], must_retrieve="sporting")
+    missed = answer(
+        "I cannot find the sporting regulations in the corpus.",
+        [call("retrieve_docs")],
+        citations=["s3://lake/docs/source=wikipedia/kind=race/2021-abu-dhabi-grand-prix.txt"],
+    )
+    assert not evals.score(case, missed, box).retrieval_ok
+
+
+def test_an_assertion_case_is_scored_on_the_answer_text(box):
+    case = Case(id="c", question="q", must_say="mart")
+    assert evals.score(case, answer("The mart is right."), box).assertion_ok
+    assert not evals.score(case, answer("The race report is right."), box).assertion_ok
 
 
 def test_the_gate_fails_on_a_single_ungrounded_figure():
