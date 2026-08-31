@@ -15,10 +15,13 @@ JOLPICA_HOURLY_CAP = 200
 OPEN_METEO_HOURLY_CAP = 600
 # wikipedia asks for a descriptive user agent and courtesy rather than a published number
 WIKIPEDIA_HOURLY_CAP = 500
+# fia.com asks for ten seconds between requests, which is 360 an hour. this stays well under it
+FIA_HOURLY_CAP = 120
 HOURLY_CAPS: dict[str, int] = {
     "jolpica": JOLPICA_HOURLY_CAP,
     "open_meteo": OPEN_METEO_HOURLY_CAP,
     "wikipedia": WIKIPEDIA_HOURLY_CAP,
+    "fia_docs": FIA_HOURLY_CAP,
 }
 LEDGER_TTL = timedelta(days=30)
 MAX_CONTENTION_RETRIES = 6

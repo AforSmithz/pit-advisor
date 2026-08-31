@@ -44,8 +44,8 @@ def _open(request: urllib.request.Request, timeout: float) -> Any:
     return urllib.request.urlopen(request, timeout=timeout)
 
 
-def _headers(entry: LedgerEntry | None) -> dict[str, str]:
-    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+def _headers(entry: LedgerEntry | None, accept: str) -> dict[str, str]:
+    headers = {"User-Agent": USER_AGENT, "Accept": accept}
     if entry is None or entry.status not in (200, 304):
         return headers
     if entry.etag:
@@ -97,11 +97,12 @@ def fetch(
     limiter: RateLimiter | None = None,
     timeout: float = TIMEOUT_SECONDS,
     opener: Opener = _open,
+    accept: str = "application/json",
 ) -> Response:
     if not url.startswith("https://"):
         raise ValueError(f"refusing a non-https url: {url}")
     known = ledger.lookup(url)
-    request = urllib.request.Request(url, headers=_headers(known))
+    request = urllib.request.Request(url, headers=_headers(known, accept))
     last: BaseException | None = None
     for attempt in range(MAX_ATTEMPTS):
         if limiter is not None:
