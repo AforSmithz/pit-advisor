@@ -293,3 +293,98 @@ def test_the_walk_spaces_itself_out(store, raw, ledger):
         sleep=waits.append,
     )
     assert waits == [2.0]
+
+
+def one_page_pdf(lines):
+    body = "BT /F1 12 Tf 72 720 Td 14 TL\n"
+    body += "".join(f"({line}) Tj T*\n" for line in lines)
+    body += "ET"
+    stream = body.encode()
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+        b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for number, payload in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += str(number).encode() + b" 0 obj\n" + payload + b"\nendobj\n"
+    start = len(out)
+    out += b"xref\n0 " + str(len(objects) + 1).encode() + b"\n0000000000 65535 f \n"
+    for offset in offsets:
+        out += f"{offset:010d} 00000 n \n".encode()
+    out += b"trailer\n<< /Size " + str(len(objects) + 1).encode() + b" /Root 1 0 R >>\nstartxref\n"
+    out += str(start).encode() + b"\n%%EOF\n"
+    return bytes(out)
+
+
+SPORTING = one_page_pdf(
+    ["Article 40.1 The safety car may be deployed at the discretion of the race director."]
+    + [
+        f"Article 40.{number} Overtaking behind the safety car is not permitted."
+        for number in range(2, 12)
+    ]
+)
+
+REGULATION = docs.Regulation(
+    season=2024,
+    title="FIA 2024 Formula 1 Sporting Regulations, Issue 7",
+    issued=date(2024, 7, 31),
+    url="https://www.fia.com/sites/default/files/sporting.pdf",
+)
+
+
+class FakeFia:
+    def __init__(self, body=SPORTING, status=200):
+        self.body = body
+        self.status = status
+        self.calls = []
+
+    def __call__(self, url, ledger, limiter=None, **_):
+        self.calls.append(url)
+        return Response(url=url, status=self.status, body=self.body, etag='"f1"', fetched_at=NOW)
+
+
+def test_the_manifest_covers_both_regulations_of_every_season_in_the_lake():
+    listed = {(item.season, "sporting" in item.title.lower()) for item in docs.regulations()}
+    assert listed == {
+        (season, sporting) for season in range(2021, 2026) for sporting in (True, False)
+    }
+    assert all(item.url.startswith("https://www.fia.com/") for item in docs.regulations())
+
+
+def test_a_regulation_lands_verbatim_in_raw_and_as_text_in_the_corpus(store, raw, ledger):
+    fetch = FakeFia()
+    outcome = docs.ingest_regulation(store, raw, REGULATION, ledger, "run-1", fetch=fetch)
+    assert outcome.key == (
+        "docs/source=fia_docs/kind=regulation/"
+        "fia-2024-formula-1-sporting-regulations-issue-7-2024-07-31.txt"
+    )
+    assert "Article 40.1" in store.get(outcome.key).decode()
+    landed = [item.key for item in store.list("raw/source=fia_docs/season=2024/")]
+    stored = next(key for key in landed if key.endswith(".pdf"))
+    assert store.get(stored) == SPORTING
+    attributes = json.loads(store.get(outcome.key + ".metadata.json"))["metadataAttributes"]
+    assert attributes["issued"] == "2024-07-31"
+    assert attributes["season"] == 2024
+
+
+def test_a_regulation_with_no_text_layer_is_reported_rather_than_written(store, raw, ledger):
+    fetch = FakeFia(one_page_pdf(["Scanned."]))
+    outcome = docs.ingest_regulation(store, raw, REGULATION, ledger, "run-1", fetch=fetch)
+    assert outcome.key is None
+    assert "no text layer" in outcome.skipped
+    assert docs.corpus(store) == []
+
+
+def test_a_regulation_already_in_the_corpus_is_not_fetched_again(store, raw, ledger):
+    fetch = FakeFia()
+    for run in ("run-1", "run-2"):
+        docs.ingest_regulations(
+            store, raw, ledger, run, wanted=[REGULATION], fetch=fetch, pause_seconds=0
+        )
+    assert len(fetch.calls) == 1

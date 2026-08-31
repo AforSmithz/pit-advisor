@@ -36,6 +36,7 @@ data/*
 !data/reference/
 data/reference/*
 !data/reference/circuits.yml
+!data/reference/regulations.yml
 fastf1_cache/
 
 .DS_Store

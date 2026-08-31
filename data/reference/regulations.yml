@@ -1,0 +1,54 @@
+# The final issue of each season's regulations, which is the one that governed the races in the
+# lake. Every intermediate issue is listed at fia.com/regulation/category/110 and is near-identical
+# text: indexing all ninety of them would answer one question with thirteen copies of the article.
+# The issue date is in the metadata, so an earlier issue can be added later without moving anything.
+
+- season: 2021
+  title: FIA 2021 Formula 1 Sporting Regulations, Issue 13
+  issued: 2021-12-08
+  url: https://www.fia.com/sites/default/files/2021_formula_1_sporting_regulations_-_iss_13_-_2021-12-08.pdf
+
+- season: 2021
+  title: FIA 2021 Formula 1 Technical Regulations, Issue 10
+  issued: 2021-06-28
+  url: https://www.fia.com/sites/default/files/2021_formula_1_technical_regulations_-_iss_10_-_2021-06-28.pdf
+
+- season: 2022
+  title: FIA 2022 Formula 1 Sporting Regulations, Issue 9
+  issued: 2022-10-19
+  url: https://www.fia.com/sites/default/files/fia_2022_formula_1_sporting_regulations_-_issue_9_-_2022-10-19_0.pdf
+
+- season: 2022
+  title: FIA 2022 Formula 1 Technical Regulations, Issue 13
+  issued: 2022-08-16
+  url: https://www.fia.com/sites/default/files/fia_2022_formula_1_technical_regulations_-_issue_13_-_2022-08-16.pdf
+
+- season: 2023
+  title: FIA 2023 Formula 1 Sporting Regulations, Issue 8
+  issued: 2023-12-06
+  url: https://www.fia.com/sites/default/files/fia_2023_formula_1_sporting_regulations_-_issue_8_-_2023-12-06_0.pdf
+
+- season: 2023
+  title: FIA 2023 Formula 1 Technical Regulations, Issue 7
+  issued: 2023-08-31
+  url: https://www.fia.com/sites/default/files/fia_2023_formula_1_technical_regulations_-_issue_7_-_2023-08-31.pdf
+
+- season: 2024
+  title: FIA 2024 Formula 1 Sporting Regulations, Issue 7
+  issued: 2024-07-31
+  url: https://www.fia.com/sites/default/files/fia_2024_formula_1_sporting_regulations_-_issue_7_-_2024-07-31.pdf
+
+- season: 2024
+  title: FIA 2024 Formula 1 Technical Regulations, Issue 8
+  issued: 2024-10-17
+  url: https://www.fia.com/sites/default/files/fia_2024_formula_1_technical_regulations_-_issue_8_-_2024-10-17.pdf
+
+- season: 2025
+  title: FIA 2025 Formula 1 Sporting Regulations, Issue 5
+  issued: 2025-04-30
+  url: https://www.fia.com/system/files/documents/fia_2025_formula_1_sporting_regulations_-_issue_5_-_2025-04-30.pdf
+
+- season: 2025
+  title: FIA 2025 Formula 1 Technical Regulations, Issue 03
+  issued: 2025-04-07
+  url: https://www.fia.com/sites/default/files/documents/fia_2025_formula_1_technical_regulations_-_issue_03_-_2025-04-07.pdf

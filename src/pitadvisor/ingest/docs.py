@@ -1,3 +1,4 @@
+import io
 import json
 import re
 import time
@@ -7,12 +8,15 @@ from pathlib import Path
 from typing import Any, Final
 from urllib.parse import quote, unquote
 
+import yaml
 from pydantic import BaseModel
+from pypdf import PdfReader
+from pypdf.errors import PyPdfError
 
 from pitadvisor.ingest import http
 from pitadvisor.ingest.ratelimit import Ledger, RateLimiter
 from pitadvisor.ingest.raw_store import META_SUFFIX, ObjectStore, RawStore
-from pitadvisor.types import EventKey, Layer, Provenance, Source
+from pitadvisor.types import EventKey, Layer, Provenance, SeasonKey, Source
 
 WIKI_API: Final = "https://en.wikipedia.org/w/api.php"
 WIKI_PREFIX: Final = "https://en.wikipedia.org/wiki/"
@@ -38,6 +42,10 @@ MIN_CHARACTERS: Final = 400
 PAUSE_SECONDS: Final = 1.0
 # three refusals in a row is the site telling us to come back later, not one bad page
 CONSECUTIVE_FAILURES: Final = 3
+REGULATIONS: Final = Path("data/reference/regulations.yml")
+# fia.com publishes Crawl-delay: 10 in robots.txt and the whole set is ten documents, so there
+# is no reason not to honour it
+FIA_PAUSE_SECONDS: Final = 10.0
 
 
 class Page(BaseModel, frozen=True):
@@ -49,7 +57,11 @@ class Page(BaseModel, frozen=True):
 
     @property
     def slug(self) -> str:
-        return re.sub(r"[^a-z0-9]+", "-", self.title.lower()).strip("-")
+        return slug_of(self.title)
+
+
+def slug_of(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
 class DocOutcome(BaseModel, frozen=True):
@@ -237,14 +249,23 @@ def curated_key(item: Curated, suffix: str) -> str:
     # the regulations are reissued mid-season, so the issue date is part of the name or the
     # august version silently overwrites the march one
     name = item.title if item.issued is None else f"{item.title} {item.issued.isoformat()}"
-    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-    return f"{Layer.DOCS}/source={item.source}/kind={item.kind}/{slug}{suffix}"
+    return f"{Layer.DOCS}/source={item.source}/kind={item.kind}/{slug_of(name)}{suffix}"
 
 
 def add_curated(store: ObjectStore, path: Path, item: Curated) -> str:
-    """Regulations and methodology notes are dropped in by hand, which §3 of the plan allows."""
-    key = curated_key(item, path.suffix or ".txt")
-    store.put(key, path.read_bytes())
+    """Methodology notes and anything the manifest does not cover are dropped in by hand, which
+    §3 of the plan allows."""
+    body = path.read_bytes()
+    # the corpus is text whichever door a document comes in by. a pdf sitting in docs/ is one
+    # the local retriever cannot read at all
+    if path.suffix.lower() == ".pdf":
+        return write_curated(store, item, f"{item.title}\n\n{pdf_text(body)}".encode(), ".txt")
+    return write_curated(store, item, body, path.suffix or ".txt")
+
+
+def write_curated(store: ObjectStore, item: Curated, body: bytes, suffix: str) -> str:
+    key = curated_key(item, suffix)
+    store.put(key, body)
     attributes: dict[str, Any] = {
         "source": str(item.source),
         "kind": item.kind,
@@ -259,6 +280,88 @@ def add_curated(store: ObjectStore, path: Path, item: Curated) -> str:
         json.dumps({"metadataAttributes": attributes}, indent=2).encode(),
     )
     return key
+
+
+class Regulation(BaseModel, frozen=True):
+    season: int
+    title: str
+    issued: date
+    url: str
+
+    @property
+    def curated(self) -> Curated:
+        return Curated(title=self.title, kind="regulation", season=self.season, issued=self.issued)
+
+
+def regulations(path: Path = REGULATIONS) -> list[Regulation]:
+    return [Regulation.model_validate(row) for row in yaml.safe_load(path.read_text())]
+
+
+def pdf_text(body: bytes) -> str:
+    pages = [page.extract_text() or "" for page in PdfReader(io.BytesIO(body)).pages]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(pages)).strip()
+
+
+def ingest_regulation(
+    store: ObjectStore,
+    raw: RawStore,
+    item: Regulation,
+    ledger: Ledger,
+    run_id: str,
+    limiter: RateLimiter | None = None,
+    fetch: Callable[..., http.Response] = http.fetch,
+) -> DocOutcome:
+    # the regulations are ten megabytes of pdf, not a json payload the default header asks for
+    response = fetch(item.url, ledger, limiter, timeout=60.0, accept="application/pdf")
+    if response.not_modified:
+        return DocOutcome(title=item.title, kind="regulation", skipped="not modified")
+    provenance = Provenance(
+        run_id=run_id,
+        source=Source.FIA_DOCS,
+        url=item.url,
+        fetched_at=response.fetched_at,
+        status=response.status,
+        etag=response.etag,
+    )
+    # the pdf is the source payload and lands verbatim, the corpus gets the text out of it
+    raw.land(
+        SeasonKey(season=item.season), slug_of(item.title), response.body, provenance, suffix="pdf"
+    )
+    text = pdf_text(response.body)
+    if len(text) < MIN_CHARACTERS:
+        return DocOutcome(title=item.title, kind="regulation", skipped="no text layer to extract")
+    key = write_curated(store, item.curated, f"{item.title}\n\n{text}".encode(), ".txt")
+    return DocOutcome(title=item.title, kind="regulation", key=key, characters=len(text))
+
+
+def ingest_regulations(
+    store: ObjectStore,
+    raw: RawStore,
+    ledger: Ledger,
+    run_id: str,
+    limiter: RateLimiter | None = None,
+    wanted: list[Regulation] | None = None,
+    fetch: Callable[..., http.Response] = http.fetch,
+    refresh: bool = False,
+    pause_seconds: float = FIA_PAUSE_SECONDS,
+    sleep: Callable[[float], None] = time.sleep,
+    on_page: Callable[[DocOutcome], None] | None = None,
+) -> list[DocOutcome]:
+    items = wanted if wanted is not None else regulations()
+    if not refresh:
+        items = [item for item in items if not store.exists(curated_key(item.curated, ".txt"))]
+    outcomes: list[DocOutcome] = []
+    for index, item in enumerate(items):
+        if index and pause_seconds:
+            sleep(pause_seconds)
+        try:
+            outcome = ingest_regulation(store, raw, item, ledger, run_id, limiter, fetch)
+        except (http.FetchError, OSError, PyPdfError) as exc:
+            outcome = DocOutcome(title=item.title, kind="regulation", skipped=f"{exc}")
+        outcomes.append(outcome)
+        if on_page is not None:
+            on_page(outcome)
+    return outcomes
 
 
 def corpus(store: ObjectStore) -> list[str]:
