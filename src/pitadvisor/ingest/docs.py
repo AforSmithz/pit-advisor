@@ -43,6 +43,10 @@ PAUSE_SECONDS: Final = 1.0
 # three refusals in a row is the site telling us to come back later, not one bad page
 CONSECUTIVE_FAILURES: Final = 3
 REGULATIONS: Final = Path("data/reference/regulations.yml")
+METHODOLOGY: Final = Path("data/reference/methodology")
+# a note we wrote about our own metrics is not an FIA document, and filing it under fia_docs
+# would attribute it to them and hand it back under a source filter meant for the regulations
+KIND_SOURCES: Final = {"regulation": Source.FIA_DOCS, "decision": Source.FIA_DOCS}
 # fia.com publishes Crawl-delay: 10 in robots.txt and the whole set is ten documents, so there
 # is no reason not to honour it
 FIA_PAUSE_SECONDS: Final = 10.0
@@ -240,9 +244,13 @@ def ingest_wikipedia(
 class Curated(BaseModel, frozen=True):
     title: str
     kind: str
-    source: Source = Source.FIA_DOCS
+    source: Source = Source.CURATED
     season: int | None = None
     issued: date | None = None
+
+
+def source_of(kind: str) -> Source:
+    return KIND_SOURCES.get(kind, Source.CURATED)
 
 
 def curated_key(item: Curated, suffix: str) -> str:
@@ -282,6 +290,38 @@ def write_curated(store: ObjectStore, item: Curated, body: bytes, suffix: str) -
     return key
 
 
+def methodology_note(path: Path) -> tuple[Curated, str]:
+    """The first line of the file is the title, which keeps the note and its name together in
+    one place a human edits."""
+    text = path.read_text().strip()
+    return Curated(title=text.partition("\n")[0].strip(), kind="methodology"), text
+
+
+def ingest_methodology(
+    store: ObjectStore,
+    directory: Path = METHODOLOGY,
+    refresh: bool = False,
+    on_page: Callable[[DocOutcome], None] | None = None,
+) -> list[DocOutcome]:
+    """Our own notes, which are in the repo rather than upstream, so there is nothing to fetch
+    and nothing to land in raw: git is their provenance."""
+    outcomes: list[DocOutcome] = []
+    for path in sorted(directory.glob("*.txt")):
+        item, text = methodology_note(path)
+        key, body = curated_key(item, ".txt"), text.encode()
+        if not refresh and store.exists(key) and store.get(key) == body:
+            outcome = DocOutcome(title=item.title, kind="methodology", skipped="unchanged")
+        else:
+            write_curated(store, item, body, ".txt")
+            outcome = DocOutcome(
+                title=item.title, kind="methodology", key=key, characters=len(text)
+            )
+        outcomes.append(outcome)
+        if on_page is not None:
+            on_page(outcome)
+    return outcomes
+
+
 class Regulation(BaseModel, frozen=True):
     season: int
     title: str
@@ -290,7 +330,13 @@ class Regulation(BaseModel, frozen=True):
 
     @property
     def curated(self) -> Curated:
-        return Curated(title=self.title, kind="regulation", season=self.season, issued=self.issued)
+        return Curated(
+            title=self.title,
+            kind="regulation",
+            source=Source.FIA_DOCS,
+            season=self.season,
+            issued=self.issued,
+        )
 
 
 def regulations(path: Path = REGULATIONS) -> list[Regulation]:

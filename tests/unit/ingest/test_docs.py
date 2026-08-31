@@ -192,7 +192,14 @@ def test_a_hand_dropped_regulation_lands_with_its_metadata(store, tmp_path):
     source = tmp_path / "sporting.txt"
     source.write_text("Article 1. The championship.")
     key = docs.add_curated(
-        store, source, Curated(title="Sporting Regulations 2025", kind="regulation", season=2025)
+        store,
+        source,
+        Curated(
+            title="Sporting Regulations 2025",
+            kind="regulation",
+            source=docs.source_of("regulation"),
+            season=2025,
+        ),
     )
     assert key == "docs/source=fia_docs/kind=regulation/sporting-regulations-2025.txt"
     assert json.loads(store.get(key + ".metadata.json"))["metadataAttributes"]["season"] == 2025
@@ -205,7 +212,13 @@ def test_a_reissued_regulation_does_not_overwrite_the_earlier_one(store, tmp_pat
         docs.add_curated(
             store,
             source,
-            Curated(title="Sporting Regulations", kind="regulation", season=2024, issued=issued),
+            Curated(
+                title="Sporting Regulations",
+                kind="regulation",
+                source=docs.source_of("regulation"),
+                season=2024,
+                issued=issued,
+            ),
         )
         for issued in (date(2024, 2, 28), date(2024, 8, 16))
     ]
@@ -388,3 +401,47 @@ def test_a_regulation_already_in_the_corpus_is_not_fetched_again(store, raw, led
             store, raw, ledger, run, wanted=[REGULATION], fetch=fetch, pause_seconds=0
         )
     assert len(fetch.calls) == 1
+
+
+def test_a_note_of_ours_is_not_filed_as_an_fia_document():
+    assert docs.source_of("regulation") is Source.FIA_DOCS
+    assert docs.source_of("methodology") is Source.CURATED
+    assert docs.source_of("anything else") is Source.CURATED
+
+
+def test_a_methodology_note_takes_its_title_from_the_first_line(store, tmp_path):
+    (tmp_path / "clean-air.txt").write_text(
+        "Clean-air race pace\n\nThe estimator refuses to guess."
+    )
+    outcomes = docs.ingest_methodology(store, tmp_path)
+    assert [item.key for item in outcomes] == [
+        "docs/source=curated/kind=methodology/clean-air-race-pace.txt"
+    ]
+    attributes = json.loads(store.get(outcomes[0].key + ".metadata.json"))["metadataAttributes"]
+    assert attributes["source"] == "curated"
+    assert attributes["title"] == "Clean-air race pace"
+
+
+def test_an_unchanged_note_is_not_rewritten(store, tmp_path):
+    (tmp_path / "note.txt").write_text("A note\n\nBody.")
+    docs.ingest_methodology(store, tmp_path)
+    again = docs.ingest_methodology(store, tmp_path)
+    assert again[0].key is None
+    assert again[0].skipped == "unchanged"
+
+
+def test_an_edited_note_is_rewritten(store, tmp_path):
+    path = tmp_path / "note.txt"
+    path.write_text("A note\n\nBody.")
+    docs.ingest_methodology(store, tmp_path)
+    path.write_text("A note\n\nBody, corrected.")
+    assert docs.ingest_methodology(store, tmp_path)[0].key is not None
+    assert "corrected" in store.get("docs/source=curated/kind=methodology/a-note.txt").decode()
+
+
+def test_the_shipped_notes_all_carry_a_title_line():
+    for path in sorted(docs.METHODOLOGY.glob("*.txt")):
+        item, text = docs.methodology_note(path)
+        assert item.title, path
+        assert not item.title.endswith("."), path
+        assert len(text) > docs.MIN_CHARACTERS, path
