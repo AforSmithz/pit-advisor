@@ -37,6 +37,8 @@ data/*
 data/reference/*
 !data/reference/circuits.yml
 !data/reference/regulations.yml
+!data/reference/methodology/
+!data/reference/methodology/*.txt
 fastf1_cache/
 
 .DS_Store

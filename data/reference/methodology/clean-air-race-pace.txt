@@ -1,0 +1,49 @@
+Clean-air race pace: how it is fitted
+
+Clean-air race pace is the foundation metric. A raw lap time is not a measurement of a car's
+pace: it carries fuel load, tyre age, the compound on the car, the traffic ahead and whatever
+the track was doing at the time. The estimator removes what it can and refuses to guess at the
+rest.
+
+Laps are excluded before anything is fitted, and every exclusion carries a named reason code
+that is counted and published rather than hidden. The codes are no_lap_time, off_regime,
+no_compound, deleted, out_lap, in_lap, opening_laps, track_not_green, inaccurate, gap_unknown
+and traffic. In plain terms: a lap with no time, a lap from the other weather regime, a lap on
+a compound FastF1 could not name, a lap deleted for track limits, the lap into and out of the
+pits, the first two laps of the race, any lap not run under green flag conditions, a lap FastF1
+itself flags as inaccurate, a lap where the gap to the car ahead is unknown, and a lap run
+within 1500 ms of the car ahead. That last one is the big one and it is deliberate: a lap in
+dirty air measures the gap, not the pace, and if the exclusion rate looks low the filter is not
+working.
+
+Wet and dry are different regimes, not fast and slow versions of the same thing, so each is
+fitted separately and compared elsewhere. A session is fitted only when at least two drivers
+have five or more surviving clean laps.
+
+What is fitted is one model per session, not one per driver and not one per stint. Each driver
+gets his own intercept; the tyre-age slope, the race-progress slope and the compound offsets are
+shared across the field. The plan originally specified a per-driver-stint fit and that model
+cannot be estimated at all: within a stint the laps remaining and the lap number in the stint are
+the same variable with the sign flipped, so the two slopes are perfectly collinear, and the
+design goes singular. Rather than let a least-squares routine return a minimum-norm answer that
+looks like a lap time and is not one, the fit checks the rank of the design first and refuses.
+
+The fit is Huber, tuned at 1.345, which is insurance against a driver with a genuinely heavier
+tail than his teammate rather than a general accuracy improvement. The design is centred on its
+own centroid, where the intercept is best determined, and shifted analytically back to the
+display reference of a fresh tyre at the end of the race.
+
+The intercept, corrected that way, is the driver's clean-air pace. It is expressed as a
+percentage off a session benchmark, which is the mean of the best three corrected estimates
+rather than the single fastest, because the minimum of twenty noisy estimates is an extreme
+order statistic and carries a race-specific bias large enough to break the cross-weekend
+comparison the normalisation exists to provide.
+
+Two things make a race produce no dry fit at all, and they look identical in a count. Some races
+have too few clean laps left: usually a wet race with nothing in the dry regime, sometimes a dry
+race at a circuit where DRS trains put nearly every lap inside the traffic threshold. Others have
+plenty of laps but a confounded design, because after filtering each driver's surviving laps come
+from a single stint. Where dropping the race-progress slope restores the rank, the fit is redone
+without it and the progress term is reported as absent; where it does not, the race is refused.
+Loosening the traffic threshold would recover races by reintroducing exactly the bias the filter
+exists to remove, so the threshold is not the fix.

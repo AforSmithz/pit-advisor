@@ -1,0 +1,20 @@
+Qualifying to race delta: how a Saturday car is told apart from a Sunday car
+
+Some cars are set up to produce one lap and some are set up to run a race distance. The delta
+between a driver's corrected qualifying pace and his corrected race pace is the signal that
+separates them, and it is one of the few genuinely actionable things in a pre-weekend view.
+
+Qualifying times cannot be compared raw across the segments. A driver knocked out in Q1 never
+ran on the rubbered-in track the Q3 runners had, and charging him for that would read as a slow
+car when it is a track that improved. The estimator measures track evolution from within-driver
+medians chained across the segments, using drivers who appear in both, and corrects each best
+lap for the segment it was set in. Where too few drivers ran in both segments to measure the
+offset, the correction is not applied rather than invented.
+
+The race side is the clean-air pace described in the clean-air race pace note, so both sides of
+the delta are corrected quantities normalised the same way.
+
+One weekend's delta is a strategy call, a tyre that went off, or a safety car at the wrong
+moment. A standing gap between Saturday and Sunday across many weekends is a property of the
+car. So the delta is reported as a trend over history with the same five-event decay the form
+rating uses, not as a single weekend's number, and it carries its interval.

@@ -1,0 +1,29 @@
+Driver form: how the rating separates the driver from the car
+
+A driver's results are mostly a statement about his car. Isolating the driver is the hard part
+of the problem, and the instrument for it is the teammate comparison: two drivers in the same
+car, at the same circuit, in the same conditions, on the same weekend. Everything that is a
+property of the machine is common to both and cancels in the difference.
+
+The rating is built from intra-team gaps, in corrected race pace and in qualifying time, fitted
+jointly so that driver effects and car effects are estimated together rather than one being
+assumed away. Each gap is weighted by how long ago it happened, on an exponential decay with a
+half-life of five events. Five events is roughly a third of a season: recent form dominates,
+last year still counts for something, and three seasons ago is close to nothing.
+
+The decay weights are computed as of the prediction date and only as of the prediction date.
+This is the single easiest place in the whole project to leak the future into a rating, and a
+calibration curve that looks too good on the training window is the symptom.
+
+Every rating is published with a 95% interval and the number of samples behind it, and both are
+meant to be read. A driver with three races does not get a confident rating, and the interval
+is what says so. A rating whose interval spans zero is a driver this method cannot distinguish
+from his teammate, which is a real finding rather than a missing number.
+
+The same machinery produces the qualifying-to-race trend, on the same decay, from the same
+teammate deltas. The wet-weather delta is built the same way from sessions FastF1 marks as wet,
+and its interval is usually wide, because wet sessions are rare and a driver may have very few.
+
+The rating is a pace and gap measurement. It is not a prediction of finishing position, it does
+not know about reliability, and it does not know whether the car has been upgraded since. Those
+live in other parts of the system and are combined only in the simulation.

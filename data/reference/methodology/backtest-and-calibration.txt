@@ -1,0 +1,36 @@
+Backtesting and calibration: how the forecast is judged
+
+A forecast that is never scored against what happened is decoration. The rule this project
+holds itself to is that the model is only allowed to claim value if it beats a dumb baseline
+out of sample, and the dashboard leads with the calibration page rather than with predictions.
+
+The backtest walks the calendar forward. Every race is predicted using only what was known
+before it was run: ratings fitted as of that date, decay weights computed as of that date, and
+a weather forecast rather than an observation. There is no shuffling and there are no random
+splits, because a random split over a time series lets the model see the future.
+
+Three baselines are scored on exactly the same races. Grid position only, championship standings
+only, and last race result. Grid position is the hard one to beat and it is the honest
+comparison: most of the information about who wins a Formula 1 race is already in where they
+start.
+
+The scores are multiclass log loss and Brier over classified finishing position, plus expected
+calibration error for the win, podium and points markets. Intervals come from a bootstrap
+resampled at the race level, never at the driver level. Twenty drivers in one race share a
+circuit, a safety car and often a strategy, so treating them as twenty independent observations
+produces intervals several times too narrow and would let noise read as a result.
+
+The difference against each baseline is resampled over the same races, so the paired comparison
+is on the same events rather than on two independent samples. An interval on that difference
+which straddles zero means the holdout does not separate the two, and that is reported as not
+separated rather than as a win.
+
+The phase this work belongs to passes whether or not the model beats its baselines. What it has
+to do is measure honestly. A model that beats the baselines by a wide margin is treated as a bug
+until proven otherwise: the first things checked are whether the holdout is really time-forward,
+whether grid position has leaked in as a feature in disguise, and whether any post-race
+information reached the features.
+
+The current scores, the intervals and the reliability curves live in the backtest artifacts and
+in the calibration view. They are not repeated here, because a document that carries a number
+the artifacts own will eventually disagree with them.

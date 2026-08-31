@@ -1,0 +1,38 @@
+The race simulation: what it models and what it does not
+
+The forecast is not a classifier over finishing positions. It is a lap-by-lap simulation of the
+race, run thousands of times, because the structure of a race is most of what determines the
+outcome and a classifier has to learn that structure from a few hundred examples instead of
+being told it.
+
+Each path starts from a grid drawn from the qualifying-pace model, with known penalties applied.
+Lap one is sampled from the empirical distribution of position change conditioned on grid slot
+and circuit, because the start is its own event and is not predicted by race pace. From there
+every lap samples a pace for each car from its rating, applies tyre degradation and the fuel
+effect, and resolves overtaking: a car within the following gap is in dirty air and loses time
+against its own clean pace, and a pass is sampled with a probability driven by the pace
+difference and by how hard the circuit is to overtake at. Safety cars are sampled at a per-lap
+rate estimated for the circuit, bunch the field and open the pit window; strategy responds.
+Retirements are sampled from a hazard rather than assigned.
+
+Paths are aggregated into a full finishing-position distribution, which is what produces win,
+podium, points and head-to-head probabilities. Every one of them is a count over paths, so they
+are all consistent with each other by construction.
+
+Weather enters as scenario weights over dry, mixed and wet, taken from the forecast for the
+circuit at session time. Each scenario is simulated separately and the results are blended by
+those weights. A past prediction can be replayed against the forecast that was actually
+available at the time, because forecasts are snapshotted when they are fetched.
+
+The known weaknesses, which are measured rather than suspected. The simulation is shy at the
+front and generous at the back: pole wins fewer paths than pole wins races, and cars starting
+in the middle of the field score points in more paths than they do in reality. Two structural
+causes are plausible and neither has been ruled out. The pace draw is a single spread applied
+across the field, which is probably too wide at the sharp end, and the pass model uses one
+slope for the whole sport when a circuit that is hard to overtake at is likely also a circuit
+where a pace advantage converts into fewer passes. Separately, the tyre model represents a
+stint rather than a compound: degradation is one slope per circuit and a stop resets tyre age,
+so which compound is fitted is not represented.
+
+None of these are hidden by the reported numbers. They are visible in the reliability curves
+and in the per-slot diagnostic, which is the reason both are published.

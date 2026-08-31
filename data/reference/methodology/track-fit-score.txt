@@ -1,0 +1,25 @@
+Track fit: how a team's suitability to a circuit is estimated
+
+A circuit taxonomy, hand-maintained, describes every circuit on the calendar with the things
+that actually drive performance: downforce level, traction demand, braking energy, top-speed
+sensitivity, surface abrasiveness, kerb severity, altitude, pit-lane loss, DRS gain, overtaking
+difficulty and the historical safety-car rate. Every field is either a published constant or a
+measured aggregate; none of it is a hand-written opinion about how a car will go.
+
+Track fit is estimated two ways and the two are shown side by side rather than blended into one
+number. The first regresses a team's historical corrected pace on the circuit feature vector and
+predicts at the target circuit. The second scores circuits by cosine similarity over the same
+feature vector, z-scored because altitude spans thousands of metres and a demand band spans four
+points, and weights a team's history at the nearest circuits by both similarity and recency.
+
+A circuit is treated as its own nearest neighbour. A team's record at this track is the
+strongest available evidence about this track, and dropping it in favour of lookalikes throws
+away the best data in the set.
+
+A reprofiled circuit is a different track wearing the same name, so races run before the change
+are not treated as evidence about the current layout. The taxonomy records when a layout became
+comparable to its present form and history is cut there.
+
+Where the two estimators disagree, the disagreement is displayed rather than resolved. Two
+methods that diverge are telling you the estimate is weak, which is information the reader
+needs and a blended average would hide.

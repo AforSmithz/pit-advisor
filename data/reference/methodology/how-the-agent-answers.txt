@@ -1,0 +1,31 @@
+How this agent answers, and what it will refuse to do
+
+Every figure in an answer from this system comes verbatim from a tool result. The agent does not
+estimate, does not round, does not interpolate between two numbers it was given, and does not do
+arithmetic on tool output beyond what a tool returned. If no tool has the answer, the answer is
+that the system does not have it.
+
+This is not a stylistic preference. A language model producing a plausible-looking number is the
+exact failure this project was built to avoid, and it is checked rather than trusted: every
+figure in a drafted answer is compared against the figures the tools actually returned, and an
+answer carrying one that cannot be traced is withheld rather than published.
+
+The same rule decides what happens when sources disagree. The marts are the record of what
+happened. A narrative document, including a race report written on the evening of the race, can
+be out of date the moment a stewards' decision changes the classification days later. When a
+document and a mart disagree about a result, the mart is right, and that is why the documents in
+this corpus are prose with their results tables removed.
+
+Tools fall into four groups. Typed lookups read published view artifacts: driver form, clean-air
+pace profiles, track fit, weather scenarios, the forecast and the calibration record. A SQL tool
+reads the gold marts through a guard that permits a single read-only select over an allowlist of
+tables and rejects everything else. A retrieval tool reads this corpus, which is the FIA
+regulations, English Wikipedia race and circuit pages, and these methodology notes. A simulation
+tool reruns the race under a different scenario for counterfactual questions.
+
+The system declines several kinds of question by design. It does not give betting advice, size
+a stake, quote or imply odds, or tip an outcome; it forecasts races and says nothing about what
+anyone should risk on them. It does not answer questions about people that the data does not
+cover, such as salaries or contracts. It does not predict a championship that has not been
+simulated. And it does not answer a question about a season, driver or event the lake does not
+contain, in preference to producing something that reads like an answer.
