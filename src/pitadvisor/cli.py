@@ -797,6 +797,9 @@ def docs_sync(
     index: Annotated[
         bool, typer.Option("--index", help="Reindex the corpus into the knowledge base.")
     ] = False,
+    regulations: Annotated[
+        bool, typer.Option("--regulations", help="Fetch the FIA regulations the manifest lists.")
+    ] = False,
     add: Annotated[Path | None, typer.Option(help="Drop one curated file into the corpus.")] = None,
     title: Annotated[str | None, typer.Option(help="Title for the curated file.")] = None,
     kind: Annotated[str, typer.Option(help="Kind for the curated file.")] = "regulation",
@@ -818,9 +821,26 @@ def docs_sync(
 
     def announce(outcome: doc_corpus.DocOutcome) -> None:
         if outcome.skipped:
-            typer.echo(f"skip  {outcome.title:<44} {outcome.skipped}")
+            typer.echo(f"skip  {outcome.title:<52} {outcome.skipped}")
         else:
-            typer.echo(f"ok    {outcome.title:<44} {outcome.characters} characters")
+            typer.echo(f"ok    {outcome.title:<52} {outcome.characters} characters")
+
+    if regulations:
+        outcomes = doc_corpus.ingest_regulations(
+            store,
+            RawStore(store),
+            ledger,
+            _run_id(),
+            RateLimiter(bucket_for("fia_docs")),
+            refresh=refresh,
+            pause_seconds=pause if pause != 1.0 else doc_corpus.FIA_PAUSE_SECONDS,
+            on_page=announce,
+        )
+        written = [item for item in outcomes if item.key]
+        typer.echo(f"{len(written)} documents, {len(doc_corpus.corpus(store))} in the corpus")
+        if index:
+            _reindex(settings)
+        return
 
     limiter = RateLimiter(bucket_for("wikipedia"))
     outcomes = doc_corpus.ingest_wikipedia(

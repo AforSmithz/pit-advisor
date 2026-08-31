@@ -14,6 +14,7 @@ from pitadvisor.config import Settings
 from pitadvisor.ingest.raw_store import LocalObjectStore
 from pitadvisor.quality import catalog
 from pitadvisor.types import EventKey
+from tests.unit.ingest.test_docs import one_page_pdf
 
 REGION = "ap-southeast-1"
 
@@ -757,7 +758,7 @@ def test_the_forecast_view_does_not_read_an_archive_as_a_forecast(lake, seed_lak
 
 def test_a_curated_drop_carries_the_season_and_the_issue_date(lake, tmp_path):
     source = tmp_path / "sporting.pdf"
-    source.write_bytes(b"%PDF-1.4")
+    source.write_bytes(one_page_pdf(["Article 1. The championship."]))
     result = CliRunner().invoke(
         cli.app,
         [
@@ -775,7 +776,9 @@ def test_a_curated_drop_carries_the_season_and_the_issue_date(lake, tmp_path):
     )
     assert result.exit_code == 0, result.stdout
     key = result.stdout.strip()
-    assert key.endswith("kind=regulation/sporting-regulations-2024-08-16.pdf")
+    # a pdf goes in and text comes out, or the local retriever cannot read its own corpus
+    assert key.endswith("kind=regulation/sporting-regulations-2024-08-16.txt")
+    assert "Article 1." in (lake / key).read_text()
     sidecar = (lake / (key + ".metadata.json")).read_text()
     attributes = json.loads(sidecar)["metadataAttributes"]
     assert attributes == {
@@ -788,8 +791,8 @@ def test_a_curated_drop_carries_the_season_and_the_issue_date(lake, tmp_path):
 
 
 def test_a_curated_drop_refuses_a_date_that_is_not_one(lake, tmp_path):
-    source = tmp_path / "sporting.pdf"
-    source.write_bytes(b"%PDF-1.4")
+    source = tmp_path / "sporting.txt"
+    source.write_text("Article 1.")
     result = CliRunner().invoke(
         cli.app,
         ["docs-sync", "--local", "--add", str(source), "--title", "x", "--issued", "august"],
