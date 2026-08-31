@@ -1,6 +1,6 @@
 import json
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from importlib.metadata import version as package_version
 from pathlib import Path
 from typing import Annotated, Any, cast
@@ -800,14 +800,20 @@ def docs_sync(
     add: Annotated[Path | None, typer.Option(help="Drop one curated file into the corpus.")] = None,
     title: Annotated[str | None, typer.Option(help="Title for the curated file.")] = None,
     kind: Annotated[str, typer.Option(help="Kind for the curated file.")] = "regulation",
+    season: Annotated[int | None, typer.Option(help="Season the curated file covers.")] = None,
+    issued: Annotated[
+        str | None, typer.Option(help="Issue date of the curated file, YYYY-MM-DD.")
+    ] = None,
 ) -> None:
     settings = get_settings()
     store, ledger, bucket_for = _runtime(local, settings)
     if add is not None:
         if title is None:
             raise typer.BadParameter("--add needs --title")
-        item = doc_corpus.Curated(title=title, kind=kind)
+        item = doc_corpus.Curated(title=title, kind=kind, season=season, issued=_issued(issued))
         typer.echo(doc_corpus.add_curated(store, add, item))
+        if index:
+            _reindex(settings)
         return
 
     def announce(outcome: doc_corpus.DocOutcome) -> None:
@@ -832,6 +838,15 @@ def docs_sync(
     typer.echo(f"{len(written)} documents, {len(doc_corpus.corpus(store))} in the corpus")
     if index:
         _reindex(settings)
+
+
+def _issued(value: str | None) -> date | None:
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise typer.BadParameter(f"{value} is not a date") from exc
 
 
 def _reindex(settings: Settings) -> None:

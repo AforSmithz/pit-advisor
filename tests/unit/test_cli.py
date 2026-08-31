@@ -753,3 +753,46 @@ def test_the_forecast_view_does_not_read_an_archive_as_a_forecast(lake, seed_lak
     assert result.exit_code == 0, result.stdout
     view = json.loads((lake / "views" / "forecast_view.json").read_text())
     assert view["weights_are_forecast"] is False
+
+
+def test_a_curated_drop_carries_the_season_and_the_issue_date(lake, tmp_path):
+    source = tmp_path / "sporting.pdf"
+    source.write_bytes(b"%PDF-1.4")
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "docs-sync",
+            "--local",
+            "--add",
+            str(source),
+            "--title",
+            "Sporting Regulations",
+            "--season",
+            "2024",
+            "--issued",
+            "2024-08-16",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    key = result.stdout.strip()
+    assert key.endswith("kind=regulation/sporting-regulations-2024-08-16.pdf")
+    sidecar = (lake / (key + ".metadata.json")).read_text()
+    attributes = json.loads(sidecar)["metadataAttributes"]
+    assert attributes == {
+        "source": "fia_docs",
+        "kind": "regulation",
+        "title": "Sporting Regulations",
+        "season": 2024,
+        "issued": "2024-08-16",
+    }
+
+
+def test_a_curated_drop_refuses_a_date_that_is_not_one(lake, tmp_path):
+    source = tmp_path / "sporting.pdf"
+    source.write_bytes(b"%PDF-1.4")
+    result = CliRunner().invoke(
+        cli.app,
+        ["docs-sync", "--local", "--add", str(source), "--title", "x", "--issued", "august"],
+    )
+    assert result.exit_code != 0
+    assert "not a date" in plain(result.stderr)
