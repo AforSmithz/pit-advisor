@@ -3,6 +3,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date
+from decimal import ROUND_DOWN, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Final, Protocol, TypeVar, cast
 
@@ -696,6 +697,16 @@ def renderings(value: float) -> set[str]:
         if number.is_integer():
             out.add(str(int(number)))
         for places in range(0, 5):
-            out.add(f"{number:.{places}f}")
-            out.add(f"{number * 100:.{places}f}")
+            for scaled in (number, number * 100):
+                out.add(f"{scaled:.{places}f}")
+                out.add(_dropped(scaled, places))
     return out
+
+
+# a model that writes 0.245 for 0.24550 quoted the tool and dropped the tail, and rounding on
+# its own calls that an invented figure and withholds a correct answer
+def _dropped(value: float, places: int) -> str:
+    try:
+        return str(Decimal(value).quantize(Decimal(1).scaleb(-places), rounding=ROUND_DOWN))
+    except (InvalidOperation, ValueError, OverflowError):
+        return f"{value:.{places}f}"

@@ -214,6 +214,17 @@ def test_the_figures_a_tool_returned_are_recoverable_for_the_grounding_check(box
     assert f"{win * 100:.1f}" in tools.numbers_in(result)
 
 
+def test_a_figure_quoted_with_the_tail_dropped_is_still_the_tools_figure():
+    # 0.2455 rounds to 0.246 and truncates to 0.245, and a model writes either
+    assert {"0.245", "0.246"} <= tools.renderings(0.24550175963352447)
+    assert {"-0.245", "-0.246"} <= tools.renderings(-0.24550175963352447)
+
+
+def test_a_figure_that_cannot_be_quantized_does_not_take_the_check_down():
+    for awkward in (float("nan"), float("inf"), -float("inf"), 1e300):
+        assert tools.renderings(awkward)
+
+
 def test_arguments_that_do_not_fit_the_schema_are_refused(box):
     assert "bad arguments" in invoke(box, "get_driver_form", {"n_events": 0}).detail
 
