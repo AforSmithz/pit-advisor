@@ -5,11 +5,10 @@ ok    numeric_exact_match  97.4%  (needs 95%)
 ok    refusals             91.7%
 ok    retrieval_hit_rate   100.0%  (needs 90%)
 ok    tool_selection       98.4%  (needs 90%)
-FAIL  ungrounded_figures   1
+ok    ungrounded_figures   0
 
 failed cases
   form-interval-low used no tool
   pace-upcoming-race answered a question it should have declined
-  calibration-separation ungrounded figures: 0.245
 
-did not pass the gate
+passed
