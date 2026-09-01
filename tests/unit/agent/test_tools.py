@@ -181,6 +181,38 @@ def test_a_corpus_with_no_match_is_a_failure(box):
     assert not result.ok
 
 
+def test_a_source_that_is_not_a_corpus_source_says_so(box):
+    """A filter nothing matches returns an empty list, which reads as a corpus with nothing in
+    it. The model guessed 'regulations' and reported that the regulations were missing."""
+
+    class Corpus:
+        def retrieve(self, query, top_k, source):
+            return []
+
+    result = invoke(
+        Toolbox(store=box.store, docs=Corpus()),
+        "retrieve_docs",
+        {"query": "parc ferme", "source": "regulations"},
+    )
+    assert not result.ok
+    assert "is not a corpus source" in result.detail
+    assert "fia_docs" in result.detail
+
+
+def test_every_real_corpus_source_is_accepted(box):
+    class Corpus:
+        def retrieve(self, query, top_k, source):
+            return [{"text": "x", "uri": f"s3://docs/{source}.txt", "score": 0.1}]
+
+    for source in tools.CORPUS_SOURCES:
+        result = invoke(
+            Toolbox(store=box.store, docs=Corpus()),
+            "retrieve_docs",
+            {"query": "x", "source": source},
+        )
+        assert result.ok, source
+
+
 def test_the_simulator_is_bounded_by_the_schema(box):
     class Sim:
         def simulate(self, event, scenario, paths):

@@ -21,6 +21,7 @@ from pitadvisor.outputs.view_contracts import (
     WeekendView,
     view_key,
 )
+from pitadvisor.types import Source
 
 MAX_SIM_PATHS: Final = 2000
 # every interval in the project is a 95% one: z of 1.96 in the feature fits, t at 0.975 in the
@@ -31,6 +32,7 @@ IN_TEXT = re.compile(r"[-+]?\d[\d,]*(?:\.\d+)?")
 # "turns 11-14" is two numbers and a range, not eleven and minus fourteen
 RANGE = re.compile(r"(?<=\d)\s*[-\u2013\u2014\u2212]\s*(?=\d)")
 MARKETS: Final = ("win", "podium", "points", "finish", "expected_position")
+CORPUS_SOURCES: Final = (str(Source.FIA_DOCS), str(Source.WIKIPEDIA), str(Source.CURATED))
 LOCAL_MARTS: Final = Path("data/local/pitadvisor.duckdb")
 
 View = TypeVar("View", bound=BaseModel)
@@ -184,7 +186,14 @@ class DocQuery(BaseModel, frozen=True):
         description="What to look for in the regulations, race documents and methodology notes."
     )
     top_k: int = Field(default=5, ge=1, le=10, description="How many passages to return.")
-    source: str | None = Field(default=None, description="Restrict to one corpus source.")
+    source: str | None = Field(
+        default=None,
+        description=(
+            "Restrict to one corpus source: fia_docs for the regulations, wikipedia for race and "
+            "circuit write-ups, curated for this system's own methodology notes. Leave it out to "
+            "search all of them, which is usually what you want."
+        ),
+    )
 
 
 class SimRequest(BaseModel, frozen=True):
@@ -385,6 +394,13 @@ class Toolbox:
     def retrieve_docs(self, request: DocQuery) -> ToolResult:
         if self.docs is None:
             raise ToolError("no knowledge base is configured for this session")
+        # a filter nothing matches returns an empty list, which reads to the model as a corpus
+        # with nothing in it. it has to fail as the mistake it is
+        if request.source is not None and request.source not in CORPUS_SOURCES:
+            raise ToolError(
+                f"{request.source!r} is not a corpus source. they are "
+                f"{', '.join(CORPUS_SOURCES)}, or leave it out to search all of them"
+            )
         passages = self.docs.retrieve(request.query, request.top_k, request.source)
         if not passages:
             raise ToolError(f"nothing in the corpus matches {request.query!r}")
