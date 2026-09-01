@@ -15,8 +15,10 @@ JOLPICA_HOURLY_CAP = 200
 OPEN_METEO_HOURLY_CAP = 600
 # wikipedia asks for a descriptive user agent and courtesy rather than a published number
 WIKIPEDIA_HOURLY_CAP = 500
-# fia.com asks for ten seconds between requests, which is 360 an hour. this stays well under it
-FIA_HOURLY_CAP = 120
+# fia.com asks for ten seconds between requests in robots.txt, which is 360 an hour. the event
+# document set is 1658 pdfs, so a third of the allowed rate would cost thirteen hours instead
+# of five and buy nothing the site asked for
+FIA_HOURLY_CAP = 360
 HOURLY_CAPS: dict[str, int] = {
     "jolpica": JOLPICA_HOURLY_CAP,
     "open_meteo": OPEN_METEO_HOURLY_CAP,
