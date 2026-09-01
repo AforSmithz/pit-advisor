@@ -389,6 +389,24 @@ cases:
     expect_tools: [retrieve_docs]
     refuse: true
 
+  - id: docs-how-pace-is-fitted
+    question: How is clean-air race pace fitted, and which laps are excluded from it?
+    kind: docs
+    expect_tools: [retrieve_docs]
+    must_retrieve: clean air race pace
+
+  - id: docs-why-old-races-count-less
+    question: Why do older races count for less in a driver's form rating?
+    kind: docs
+    expect_tools: [retrieve_docs]
+    must_retrieve: driver form rating
+
+  - id: docs-race-level-bootstrap
+    question: Why are the backtest intervals bootstrapped over races rather than over drivers?
+    kind: docs
+    expect_tools: [retrieve_docs]
+    must_retrieve: backtest and calibration
+
   - id: sim-wet-favourite
     question: If it rains at the upcoming race, what does the simulation give the favourite for the win?
     kind: counterfactual
