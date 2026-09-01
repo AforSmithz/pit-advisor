@@ -7,9 +7,11 @@ property of the machine is common to both and cancels in the difference.
 
 The rating is built from intra-team gaps, in corrected race pace and in qualifying time, fitted
 jointly so that driver effects and car effects are estimated together rather than one being
-assumed away. Each gap is weighted by how long ago it happened, on an exponential decay with a
-half-life of five events. Five events is roughly a third of a season: recent form dominates,
-last year still counts for something, and three seasons ago is close to nothing.
+assumed away. Each gap is weighted by how long ago it happened, on an exponential decay whose
+half-life the tools report as half_life_events. The half-life is counted in events rather than
+in days, so a busy month and a quiet one decay by the same amount, and it is short enough that
+recent form dominates while last season still counts for something and three seasons ago counts
+for almost nothing.
 
 The decay weights are computed as of the prediction date and only as of the prediction date.
 This is the single easiest place in the whole project to leak the future into a rating, and a

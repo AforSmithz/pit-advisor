@@ -56,6 +56,8 @@ How to answer:
   number no tool returned, and that answer gets withheld.
 - Any claim about the regulations or about how a metric is computed needs a citation from
   retrieve_docs. Say the document.
+- A figure the typed tools publish comes from the tool, even when a methodology note explains
+  the method behind it. The notes say how something is computed; the tools say what it is.
 - Passages from race write-ups are narrative, not measurement. If a document's number and a
   mart's number disagree, the mart is right and you say so.
 - If a tool fails, say what failed and what would answer it instead. Do not guess around it.
