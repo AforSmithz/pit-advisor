@@ -247,6 +247,9 @@ class Curated(BaseModel, frozen=True):
     source: Source = Source.CURATED
     season: int | None = None
     issued: date | None = None
+    # what to key on when the title is not the right name: a note's title is a sentence, and
+    # rewording it would orphan the object it wrote last time
+    slug: str | None = None
 
 
 def source_of(kind: str) -> Source:
@@ -256,7 +259,9 @@ def source_of(kind: str) -> Source:
 def curated_key(item: Curated, suffix: str) -> str:
     # the regulations are reissued mid-season, so the issue date is part of the name or the
     # august version silently overwrites the march one
-    name = item.title if item.issued is None else f"{item.title} {item.issued.isoformat()}"
+    name = item.slug or (
+        item.title if item.issued is None else f"{item.title} {item.issued.isoformat()}"
+    )
     return f"{Layer.DOCS}/source={item.source}/kind={item.kind}/{slug_of(name)}{suffix}"
 
 
@@ -294,7 +299,8 @@ def methodology_note(path: Path) -> tuple[Curated, str]:
     """The first line of the file is the title, which keeps the note and its name together in
     one place a human edits."""
     text = path.read_text().strip()
-    return Curated(title=text.partition("\n")[0].strip(), kind="methodology"), text
+    item = Curated(title=text.partition("\n")[0].strip(), kind="methodology", slug=path.stem)
+    return item, text
 
 
 def ingest_methodology(

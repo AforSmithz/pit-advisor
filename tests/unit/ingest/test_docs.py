@@ -409,14 +409,13 @@ def test_a_note_of_ours_is_not_filed_as_an_fia_document():
     assert docs.source_of("anything else") is Source.CURATED
 
 
-def test_a_methodology_note_takes_its_title_from_the_first_line(store, tmp_path):
+def test_a_note_is_titled_by_its_first_line_and_keyed_by_its_filename(store, tmp_path):
     (tmp_path / "clean-air.txt").write_text(
         "Clean-air race pace\n\nThe estimator refuses to guess."
     )
     outcomes = docs.ingest_methodology(store, tmp_path)
-    assert [item.key for item in outcomes] == [
-        "docs/source=curated/kind=methodology/clean-air-race-pace.txt"
-    ]
+    # a title is a sentence and gets reworded, the filename is what a citation stays stable on
+    assert [item.key for item in outcomes] == ["docs/source=curated/kind=methodology/clean-air.txt"]
     attributes = json.loads(store.get(outcomes[0].key + ".metadata.json"))["metadataAttributes"]
     assert attributes["source"] == "curated"
     assert attributes["title"] == "Clean-air race pace"
@@ -436,7 +435,8 @@ def test_an_edited_note_is_rewritten(store, tmp_path):
     docs.ingest_methodology(store, tmp_path)
     path.write_text("A note\n\nBody, corrected.")
     assert docs.ingest_methodology(store, tmp_path)[0].key is not None
-    assert "corrected" in store.get("docs/source=curated/kind=methodology/a-note.txt").decode()
+    written = store.get("docs/source=curated/kind=methodology/note.txt").decode()
+    assert "corrected" in written
 
 
 def test_the_shipped_notes_all_carry_a_title_line():
