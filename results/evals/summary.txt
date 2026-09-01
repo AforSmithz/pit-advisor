@@ -1,11 +1,11 @@
 model     global.anthropic.claude-haiku-4-5-20251001-v1:0
-cases     64
+cases     67
 
 ok    assertions           100.0%
 ok    numeric_exact_match  97.4%  (needs 95%)
 ok    refusals             91.7%
 ok    retrieval_hit_rate   100.0%  (needs 90%)
-ok    tool_selection       98.4%  (needs 90%)
+ok    tool_selection       98.5%  (needs 90%)
 ok    ungrounded_figures   0
 
 failed cases

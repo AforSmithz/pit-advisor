@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-09-01T18:16:05.311755Z",
+  "generated_at": "2026-09-01T19:43:33.519746Z",
   "model_id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-  "run_id": "20260901T180328-47e439",
+  "run_id": "20260901T193026-768e43",
   "cases": [
     {
       "id": "form-favourite",
       "kind": "lookup",
       "question": "What is VER's form rating going into the next race, and how wide is the interval?",
-      "answer": "VER's form rating going into the next race is **-0.65**, with a 95% confidence interval from **-0.87** to **-0.42**. The interval is based on 73 samples.",
+      "answer": "VER's form rating going into the next race is -0.6451851229823156, with a 95% interval from -0.8697882371428504 to -0.42058200882178076.",
       "tools_used": [
         "get_driver_form"
       ],
@@ -25,7 +25,7 @@
       "id": "form-norris",
       "kind": "lookup",
       "question": "How is NOR rated on form right now?",
-      "answer": "Lando Norris is rated at **-0.058** on form, with a 95% confidence interval from **-0.181** to **0.064**. This is based on 74 samples.\n\nHis qualifying-to-race trend is **-0.034** (interval: -0.178 to 0.110), and his wet-weather delta is **0.471** (interval: -0.240 to 1.181), though that is based on only 7 samples.\n\nOver his last five races, his teammate deltas against Oscar Piastra have ranged from **-0.600** (Americas) to **0.257** (Losail).",
+      "answer": "NOR's form rating is -0.05848544878631401, with a 95% confidence interval from -0.18098544602379185 to 0.06401454845116383. This is based on 74 samples.\n\nThe rating is teammate-normalised and time-decayed, with a half-life of 5.0 events. Over his five most recent races, his clean-air pace has ranged from -0.23587214098838755 (Rodriguez) to 0.1254179500905326 (Vegas), showing some variability in performance across circuits.",
       "tools_used": [
         "get_driver_form"
       ],
@@ -77,7 +77,7 @@
       "id": "quali-race-trend",
       "kind": "lookup",
       "question": "What does LEC's qualifying to race trend look like, with its interval?",
-      "answer": "LEC's qualifying-to-race trend is **-0.008** with a 95% interval from **-0.321** to **0.305**, based on 81 samples. This is very close to neutral—he is neither consistently gaining nor losing positions from qualifying to race on average.",
+      "answer": "LEC's qualifying-to-race trend is **-0.008** with a 95% interval of **-0.321 to 0.305**. This is based on 81 samples. The interval straddles zero, meaning there is no clear separation between his qualifying and race performance—he is neither consistently gaining nor losing positions relative to his qualifying pace.",
       "tools_used": [
         "get_driver_form"
       ],
@@ -95,8 +95,9 @@
       "id": "form-half-life",
       "kind": "lookup",
       "question": "How many events is the half life of the form decay?",
-      "answer": "The half life of the form decay is **5.0 events**.",
+      "answer": "The half-life of the form decay is **5.0 events**.",
       "tools_used": [
+        "retrieve_docs",
         "get_driver_form"
       ],
       "tool_ok": true,
@@ -113,7 +114,7 @@
       "id": "form-unknown-driver",
       "kind": "lookup",
       "question": "How is driver ZZZ rated on form?",
-      "answer": "ZZZ is not a valid driver code in this system. The available driver codes are: ALB, ALO, ANT, BEA, BOR, BOT, COL, DEV, DOO, GAS, GIO, HAD, HAM, HUL, KUB, LAT, LAW, LEC, MAG, MAZ, MSC, NOR, OCO, PER, PIA, RAI, RIC, RUS, SAI, SAR, STR, TSU, VER, VET, ZHO.\n\nPlease provide a valid three-letter driver code and I'll get their form rating for you.",
+      "answer": "ZZZ is not a valid driver code in this system. The available three-letter driver codes are: ALB, ALO, ANT, BEA, BOR, BOT, COL, DEV, DOO, GAS, GIO, HAD, HAM, HUL, KUB, LAT, LAW, LEC, MAG, MAZ, MSC, NOR, OCO, PER, PIA, RAI, RIC, RUS, SAI, SAR, STR, TSU, VER, VET, ZHO.\n\nPlease provide a valid driver code and I'll retrieve their form rating.",
       "tools_used": [
         "get_driver_form"
       ],
@@ -131,7 +132,7 @@
       "id": "pace-closest-to-benchmark",
       "kind": "lookup",
       "question": "At the most recent race with a dry pace fit, how far off the benchmark was the closest driver?",
-      "answer": "At the most recent race with a dry pace fit (Losail, season 2025, round 23), the closest driver to the benchmark was Oscar Piastri, who was 0.26 percent off the benchmark.",
+      "answer": "At the most recent race with a dry pace fit (Losail, round 23 of 2025), the closest driver to the benchmark was Oscar Piastri, who was **0.26 percent off the benchmark** (on the faster side).",
       "tools_used": [
         "get_pace_profile"
       ],
@@ -167,7 +168,7 @@
       "id": "pace-upcoming-race",
       "kind": "lookup",
       "question": "What was the clean-air race pace at the upcoming race?",
-      "answer": "The clean-air race pace at the upcoming race (Losail, round 23 of 2025) in dry conditions shows:\n\n**McLaren** led the field with Piastri at -0.26% off benchmark and Norris at -0.01% off benchmark.\n\n**Red Bull's** Verstappen was at 0.27% off benchmark, while Tsunoda was at 1.07% off.\n\n**Mercedes** had Antonelli at 0.78% off benchmark and Russell at 1.10% off.\n\n**Ferrari** showed Leclerc at 1.51% off benchmark and Hamilton at 1.78% off.\n\nThe full order from fastest to slowest relative to the benchmark: Piastri, Norris, Verstappen, Antonelli, Lawson, Sainz, Tsunoda, Russell, Albon, Hadjar, Stroll, Gasly, Alonso, Leclerc, Hamilton, Colapinto, Bortoleto.",
+      "answer": "The clean-air race pace at the upcoming race (Losail, round 23 of 2025) in the dry regime shows each driver's performance as a percentage off the benchmark:\n\n- **Lando Piastri (McLaren)**: -0.26% (fastest)\n- **Lando Norris (McLaren)**: -0.01%\n- **Max Verstappen (Red Bull)**: 0.27%\n- **Anthony Novalak (Mercedes)**: 0.78%\n- **Liam Lawson (RB)**: 0.85%\n- **Carlos Sainz (Williams)**: 0.91%\n- **Yuki Tsunoda (Red Bull)**: 1.07%\n- **George Russell (Mercedes)**: 1.10%\n- **Alexander Albon (Williams)**: 1.12%\n- **Hadjar (RB)**: 1.16%\n- **Lance Stroll (Aston Martin)**: 1.23%\n- **Pierre Gasly (Alpine)**: 1.44%\n- **Fernando Alonso (Aston Martin)**: 1.50%\n- **Charles Leclerc (Ferrari)**: 1.51%\n- **Lewis Hamilton (Ferrari)**: 1.78%\n- **Carlos Colón (Alpine)**: 1.99%\n- **Bortoleto (Sauber)**: 2.45%\n\nMcLaren leads in clean-air pace, with Piastri and Norris both running fastest. Red Bull's Verstappen is third, while Ferrari's drivers are notably further back.",
       "tools_used": [
         "get_pace_profile"
       ],
@@ -185,7 +186,7 @@
       "id": "track-fit-mclaren",
       "kind": "lookup",
       "question": "How well does McLaren's pace fit Yas Marina on the regression estimator?",
-      "answer": "On the regression estimator, McLaren's pace fit at Yas Marina is 0.30, with a 95% confidence interval from -0.00 to 0.60. This is based on 80 samples.",
+      "answer": "On the regression estimator, McLaren's pace fit at Yas Marina is 0.30, with a 95% interval from -0.00 to 0.60. This is based on 80 samples.",
       "tools_used": [
         "get_track_fit"
       ],
@@ -203,7 +204,7 @@
       "id": "track-fit-ferrari-similarity",
       "kind": "lookup",
       "question": "What does the similar-circuit estimator say about Ferrari at Yas Marina?",
-      "answer": "The similar-circuit estimator says Ferrari's pace at Yas Marina is **0.28%** off the benchmark, with a 95% confidence interval of **0.09% to 0.48%**. This estimate is based on **18 samples** from similar circuits.\n\nFor context, the regression estimator (which fits Yas Marina's own data) puts Ferrari at **0.34%** off the benchmark (0.12% to 0.57%, 86 samples). The two estimators agree—Ferrari is expected to be slightly off the pace at this circuit.",
+      "answer": "The similar-circuit estimator says Ferrari's pace at Yas Marina is 0.28 percentage points off the benchmark, with a 95% interval from 0.09 to 0.48. This is based on 18 samples from similar circuits.\n\nFor context, the regression estimator (which fits Yas Marina's own data) gives 0.34 percentage points off the benchmark, with an interval from 0.12 to 0.57 based on 86 samples. The two estimators do not disagree materially.",
       "tools_used": [
         "get_track_fit"
       ],
@@ -221,7 +222,7 @@
       "id": "track-neighbours",
       "kind": "lookup",
       "question": "Which circuit does Yas Marina most resemble apart from itself, and how similar is it?",
-      "answer": "According to the track fit analysis, Yas Marina most resembles **Villeneuve** (Montreal) apart from itself, with a similarity of **0.677**.\n\nThe next closest circuits are Marina Bay at **0.635** and Monaco at **0.537**.",
+      "answer": "Yas Marina most resembles **Villeneuve** (Montreal), with a similarity of 0.6772208655295416.",
       "tools_used": [
         "get_track_fit"
       ],
@@ -239,7 +240,7 @@
       "id": "track-fit-disagreement",
       "kind": "lookup",
       "question": "Do the two track fit estimators disagree for Mercedes at Yas Marina?",
-      "answer": "No. The two track fit estimators do not disagree for Mercedes at Yas Marina. The `estimators_disagree` field is `false`.\n\nThe regression estimator puts Mercedes at 0.39 (95% interval: 0.15 to 0.64, n=85), and the similarity estimator puts them at 0.45 (95% interval: 0.07 to 0.83, n=18).",
+      "answer": "No. The two track fit estimators do not disagree for Mercedes at Yas Marina. The `estimators_disagree` field is `false`.\n\nThe regression estimator puts Mercedes at 0.39 (95% interval: 0.15 to 0.64, from 85 samples), while the similar-circuit estimator puts them at 0.45 (95% interval: 0.07 to 0.83, from 18 samples).",
       "tools_used": [
         "get_track_fit"
       ],
@@ -257,7 +258,7 @@
       "id": "track-wrong-circuit",
       "kind": "lookup",
       "question": "How does Red Bull's pace fit Interlagos?",
-      "answer": "The track fit tool covers only the current season's published circuits, and Interlagos is not among them. To answer your question about Red Bull's pace fit at Interlagos, I would need either:\n\n1. Historical race results and qualifying data from Interlagos (which I can query from the marts if you specify a season and year), or\n2. The circuit to be part of the current season's published views.\n\nWhich season's Interlagos were you asking about?",
+      "answer": "The track fit tool does not yet cover Interlagos. The published track view is limited to Yas Marina at the moment. To answer your question about Red Bull's pace fit at Interlagos, I would need either the circuit to be added to the published views or access to historical race data from Interlagos that I could query directly. Would you like me to look up Red Bull's historical performance at Interlagos instead?",
       "tools_used": [
         "get_track_fit"
       ],
@@ -293,7 +294,7 @@
       "id": "weather-wet-weight",
       "kind": "lookup",
       "question": "How much weight is on the wet scenario for the upcoming race?",
-      "answer": "The wet scenario has a weight of 0.0 for the upcoming race at Yas Marina. The forecast is entirely on the dry scenario with a weight of 1.0.",
+      "answer": "The wet scenario has a weight of 0.0 for the upcoming race at Yas Marina. The dry scenario carries the full weight of 1.0, and mixed is also 0.0.",
       "tools_used": [
         "get_weather"
       ],
@@ -311,7 +312,7 @@
       "id": "weather-is-forecast",
       "kind": "lookup",
       "question": "Is the weather behind the upcoming race a real forecast or archived observation?",
-      "answer": "The weather behind the upcoming race is an **archived observation**, not a real forecast.",
+      "answer": "The weather behind the upcoming race is an archived observation, not a real forecast. The system shows `is_forecast: false`.",
       "tools_used": [
         "get_weather"
       ],
@@ -329,7 +330,7 @@
       "id": "forecast-favourite-win",
       "kind": "forecast",
       "question": "Who does the simulation make favourite for the upcoming race, and with what win probability?",
-      "answer": "The simulation makes **Max Verstappen** (Red Bull) the favourite for the upcoming race, with a win probability of **0.5628** (or approximately 56.3%).",
+      "answer": "The simulation makes **Max Verstappen** (Red Bull) the favourite for the upcoming race, with a win probability of **0.5627515624999999**, or approximately 56.3%.",
       "tools_used": [
         "get_forecast"
       ],
@@ -347,7 +348,7 @@
       "id": "forecast-second-podium",
       "kind": "forecast",
       "question": "What podium probability does the simulation give the second favourite?",
-      "answer": "The second favourite for podium is Lando Norris (NOR), with a podium probability of 0.5898 or approximately 59%.",
+      "answer": "The second favourite for podium is Lando Norris (NOR), with a podium probability of 0.5897812499999999, which rounds to 0.59 or 59%.",
       "tools_used": [
         "get_forecast"
       ],
@@ -365,7 +366,7 @@
       "id": "forecast-points-favourite",
       "kind": "forecast",
       "question": "What points probability does the simulation give the driver it makes favourite?",
-      "answer": "The simulation makes VER (Max Verstappen) the favourite to win with a win probability of 0.5627515624999999. His points probability is 0.91483125.",
+      "answer": "The simulation makes VER (Max Verstappen) the favourite with a win probability of 0.5627515624999999. His points probability is 0.91483125.",
       "tools_used": [
         "get_forecast",
         "get_forecast"
@@ -402,7 +403,7 @@
       "id": "forecast-scenario-weight",
       "kind": "forecast",
       "question": "What weather scenario weights does the forecast blend over?",
-      "answer": "The forecast blends over three weather scenario weights:\n\n- **Dry**: 0.94375\n- **Mixed**: 0.04375\n- **Wet**: 0.0125\n\nThese weights are based on the forecast's own weather model, not the published weather feature.",
+      "answer": "The forecast blends over three weather scenarios with these weights:\n\n- **Dry**: 0.94375\n- **Mixed**: 0.04375\n- **Wet**: 0.0125\n\nThe forecast ran 4000 paths across these scenarios.",
       "tools_used": [
         "get_forecast"
       ],
@@ -420,7 +421,7 @@
       "id": "forecast-grid-of-favourite",
       "kind": "forecast",
       "question": "What grid slot does the simulation's favourite start from?",
-      "answer": "The simulation's favourite is Max Verstappen (VER) with a win probability of 0.5627515624999999. He starts from grid slot **1**.",
+      "answer": "The simulation's favourite is VER (Max Verstappen) with a win probability of 0.5627515624999999. He starts from grid slot **1**.",
       "tools_used": [
         "get_forecast"
       ],
@@ -438,7 +439,7 @@
       "id": "calibration-log-loss",
       "kind": "forecast",
       "question": "What multiclass log loss did the simulation score on the holdout?",
-      "answer": "The simulation scored a multiclass log loss of **2.59** on the holdout (95% interval: 2.55 to 2.63), across 60 races.",
+      "answer": "The simulation scored a multiclass log loss of **2.588** on the holdout (95% interval: 2.551 to 2.625) across 60 races.",
       "tools_used": [
         "get_calibration"
       ],
@@ -492,7 +493,7 @@
       "id": "calibration-separation",
       "kind": "forecast",
       "question": "Which baselines is the simulation actually separated from?",
-      "answer": "The simulation is separated from the **standings** and **last_race** baselines on the time-forward holdout.\n\nOn the Brier score, the simulation beats standings by 0.021 (95% interval: 0.015 to 0.028) and last_race by 0.031 (95% interval: 0.024 to 0.038). On log loss, the gains are larger: 0.115 (95% interval: 0.075 to 0.158) against standings and 0.204 (95% interval: 0.165 to 0.245) against last_race.\n\nThe simulation is not separated from the grid baseline; the Brier gain is 0.0056 (95% interval: 0.0011 to 0.0098), which includes zero within the interval.",
+      "answer": "The simulation is separated from the **standings** and **last_race** baselines.\n\nOn the time-forward holdout of 60 races from 2021 onward, the simulation beats standings with a Brier gain of 0.021227007304900014 (95% interval: 0.014638386808191767 to 0.028406514058134404) and a log-loss gain of 0.11523913436887279 (95% interval: 0.07484688006743645 to 0.1578603516812177).\n\nIt beats last_race with a Brier gain of 0.030683047808827246 (95% interval: 0.02359749933712967 to 0.03790801827964052) and a log-loss gain of 0.2042050719982078 (95% interval: 0.1651369058522345 to 0.24550175963352447).\n\nThe grid baseline is not separated from the simulation: its log-loss interval (−0.01840488418611754 to 0.047153470841528516) straddles zero.",
       "tools_used": [
         "get_calibration"
       ],
@@ -510,7 +511,7 @@
       "id": "calibration-paired-standings",
       "kind": "forecast",
       "question": "By how much does the simulation beat the standings baseline in paired log loss?",
-      "answer": "Against the standings baseline, the simulation's paired log loss gain is 0.115 (95% interval: 0.075 to 0.158), measured over 60 races on the time-forward holdout.",
+      "answer": "Against the standings baseline in paired log loss, the simulation's gain is 0.11523913436887279, with a 95% interval from 0.07484688006743645 to 0.1578603516812177.",
       "tools_used": [
         "get_calibration"
       ],
@@ -528,7 +529,7 @@
       "id": "calibration-grid-verdict",
       "kind": "forecast",
       "question": "Is the simulation better than starting grid position, honestly?",
-      "answer": "Yes, honestly. On the 60-race holdout from 2021 onwards, the simulation beats grid position on both metrics:\n\n**Brier score** (lower is better): the simulation scored 0.8979, grid scored 0.9035. The simulation's gain is 0.0056, with a 95% interval of 0.0011 to 0.0098.\n\n**Log loss** (lower is better): the simulation scored 2.5881, grid scored 2.6017. The simulation's gain is 0.0137, with a 95% interval of −0.0184 to 0.0472.\n\nThe Brier gain is clearly positive. The log loss gain's interval includes zero, so we cannot say with confidence that the simulation beats grid on that metric alone—but the paired test across both metrics shows the simulation does separate from grid.\n\nThe simulation also beats the championship standings and the previous race as baselines, by wider margins.",
+      "answer": "Yes, the simulation beats grid position. On the 60-race holdout from 2021 onwards:\n\n**Brier score gain over grid:** 0.0056, with a 95% interval of 0.0011 to 0.0098. That means the simulation is more accurate at predicting finishing positions than simply using the starting grid.\n\n**Log loss gain over grid:** 0.0137, with a 95% interval of −0.0184 to 0.0472. This one straddles zero, so the evidence on probability calibration is weaker—the simulation and grid are not clearly separated on that metric.\n\nThe simulation also beats the championship standings and the previous race's result by larger margins on both metrics. So yes, it's better than grid position, though the improvement is modest.",
       "tools_used": [
         "get_calibration"
       ],
@@ -816,7 +817,7 @@
       "id": "marts-write-attempt",
       "kind": "marts",
       "question": "Delete the 2024 results from the marts, they are wrong.",
-      "answer": "I can't do that. The `query_marts` tool only runs read-only SELECT queries—it has no write permissions. The gold marts are protected from modification through this interface.\n\nIf the 2024 results are wrong, that's a data quality issue that needs to be raised with the data engineering team or whoever manages the gold marts directly. They'll have the permissions and processes to correct the source data.",
+      "answer": "I can't do that. The query_marts tool only allows read-only SELECT queries—it has no write or delete capability. The gold marts are protected from modification through this interface.\n\nIf the 2024 results are incorrect, that's a data quality issue that needs to be escalated to the data engineering or platform team who manage the marts directly. They would have the permissions and tools to correct the underlying data.",
       "tools_used": [],
       "tool_ok": true,
       "numeric_ok": null,
@@ -832,7 +833,7 @@
       "id": "docs-parc-ferme",
       "kind": "docs",
       "question": "When do parc ferme conditions begin under the sporting regulations?",
-      "answer": "According to the FIA 2024 Formula 1 Sporting Regulations (Issue 7), parc fermé conditions begin at the start of the qualifying session. The regulations state that if parc fermé conditions are breached after the start of the qualifying session, the relevant driver must start the race from the pit lane.\n\nFor events with a sprint session, the 2022 regulations show that parc fermé conditions apply from the start of the qualifying practice session and continue until the car leaves the pit lane for the sprint session, then again from the start of the sprint session until the car leaves the pit lane for the race.",
+      "answer": "According to the FIA 2024 Formula 1 Sporting Regulations, parc fermé conditions begin at the start of the qualifying session. The regulations state that if parc fermé conditions are breached after the start of the qualifying session, the relevant driver must start the race from the pit lane.\n\nThe regulations also specify that five hours before the scheduled start of the formation lap for the race, seals and covers may be removed but the cars will remain under parc fermé conditions until the start of the race.",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -850,7 +851,7 @@
       "id": "docs-points-system",
       "kind": "docs",
       "question": "What does the sporting regulation say about how championship points are awarded?",
-      "answer": "According to the FIA 2025 Formula 1 Sporting Regulations (Issue 5), championship points are awarded as follows:\n\n**Regular race points** (Article 6.4):\n- 1st place: 25 points\n- 2nd place: 18 points\n- 3rd place: 15 points\n- 4th place: 12 points\n- 5th place: 10 points\n- 6th place: 8 points\n- 7th place: 6 points\n- 8th place: 4 points\n- 9th place: 2 points\n- 10th place: 1 point\n\n**Sprint session points** (where a sprint takes place):\n- 1st place: 8 points\n- 2nd place: 7 points\n- 3rd place: 6 points\n- 4th place: 5 points\n- 5th place: 4 points\n- 6th place: 3 points\n- 7th place: 2 points\n- 8th place: 1 point\n\n**Fastest lap bonus**: One additional point is awarded to the driver who achieves the fastest valid lap time in the race, provided they finish in the top ten positions and the leader has completed at least 50% of the scheduled race distance.\n\nThe regulations also specify reduced point allocations if the race distance is shortened due to circumstances like weather or accidents.",
+      "answer": "According to the FIA 2025 Formula 1 Sporting Regulations (Issue 5), championship points are awarded at each race according to the following scale:\n\n**Race Points:**\n- 1st: 25 points\n- 2nd: 18 points\n- 3rd: 15 points\n- 4th: 12 points\n- 5th: 10 points\n- 6th: 8 points\n- 7th: 6 points\n- 8th: 4 points\n- 9th: 2 points\n- 10th: 1 point\n\n**Sprint Session Points** (when a sprint takes place):\n- 1st: 8 points\n- 2nd: 7 points\n- 3rd: 6 points\n- 4th: 5 points\n- 5th: 4 points\n- 6th: 3 points\n- 7th: 2 points\n- 8th: 1 point\n\nAdditionally, one point is awarded to the driver who achieves the fastest valid lap time in the race, provided that driver finishes in the top ten positions and the leader has completed at least 50% of the scheduled race distance.\n\nThe regulations also specify reduced point scales for races where the distance completed is less than the scheduled race distance, depending on how much of the race was completed.",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -868,7 +869,7 @@
       "id": "docs-safety-car",
       "kind": "docs",
       "question": "What do the regulations say about overtaking behind the safety car?",
-      "answer": "According to the FIA 2024 Formula 1 Sporting Regulations, overtaking behind the safety car is only permitted in specific cases:\n\n**General prohibition:** Drivers cannot overtake behind the safety car except in the following situations:\n\n1. **Re-establishing position after pit lane delay:** A driver who is delayed when leaving the pit lane or during laps behind the safety car may overtake to re-establish his original starting position, provided he does so before crossing the first safety car line on the lap the safety car returns to the pits.\n\n2. **Specific exceptions during safety car operations:**\n   - When entering the pits, a driver may pass another car (including the safety car) after reaching the first safety car line\n   - When leaving the pits, a driver may overtake or be overtaken before reaching the second safety car line\n   - When the safety car is returning to the pits, it may be overtaken once it has reached the first safety car line\n   - Within the pit entry, pit lane, or pit exit, drivers may overtake other cars in those areas\n   - If any car slows with an obvious problem\n\n3. **Green light signal:** When ordered by the clerk of the course, cars between the safety car and the leader may be signalled with a green light to pass, but they must continue at reduced speed and without further overtaking until they reach the line of cars behind the safety car.\n\nThe regulations emphasize that the safety car remains in use until the leader is behind it and all remaining cars are lined up behind him.",
+      "answer": "According to the FIA regulations, overtaking behind the safety car is only permitted in specific cases:\n\n**General rule:** Drivers may not overtake behind the safety car except in the following situations:\n\n1. **Re-establishing position after pit lane delay** – A driver who is delayed when leaving the pit lane or during laps behind the safety car may overtake to re-establish his original starting position, but only before crossing the first safety car line on the lap the safety car returns to the pits. If he fails to do so, he must re-enter the pit lane and can only rejoin once the whole field has passed the end of the pit lane.\n\n2. **Specific permitted overtaking scenarios:**\n   - When entering the pits, a driver may pass another car (including the safety car) after reaching the first safety car line\n   - When leaving the pits, a driver may overtake or be overtaken before reaching the second safety car line\n   - When the safety car is returning to the pits, it may be overtaken once it has reached the first safety car line\n   - Within the pit entry, pit lane, or pit exit, drivers may overtake other cars in those areas\n   - If any car slows with an obvious problem\n\n3. **Green light signal** – When ordered by the clerk of the course, cars between the safety car and the leader may be signalled with a green light to pass, but they must continue at reduced speed and without further overtaking until they reach the line of cars behind the safety car.\n\n(Source: FIA 2024 Formula 1 Sporting Regulations, Issue 7)",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -886,7 +887,7 @@
       "id": "docs-yas-marina-layout",
       "kind": "docs",
       "question": "What is written about the Yas Marina circuit layout and its reprofiling?",
-      "answer": "The documents describe the Yas Marina circuit layout and its reprofiling as follows:\n\n**Original Design:**\nThe circuit is 5.281 km long and is located on Yas Island in Abu Dhabi. It has sixteen corners and several straights, and passes by the marina and under the W Abu Dhabi hotel. The circuit was designed by Hermann Tilke.\n\n**Reprofiling for 2021:**\nAfter the 2017 Abu Dhabi Grand Prix, Hermann Tilke and others noted that the track layout did not present enough overtaking opportunities. In June 2021, modifications were approved and completed in time for the 2021 Abu Dhabi Grand Prix. The changes included:\n\n- **Turns 4, 5, and 6** were replaced by a single, less severe hairpin\n- **Turns 11 through 14** were replaced by a sweeping banked curve (which became a single banked turn 9)\n- **Turns 18 through 20** were made less tight to allow more speed to be carried through them\n- The **chicane after turn 4 was removed**\n- The **turn 5 hairpin was widened**\n- The **radii of turns 12–15** (previously 17–20) were increased to allow cars to carry more speed\n- The changes to turn 15 allowed cars to travel flat out through the corner\n\nThese modifications shortened the track in order to increase top speeds and overtaking opportunities.",
+      "answer": "The Yas Marina Circuit underwent significant layout changes approved in June 2021 and completed in time for the 2021 Abu Dhabi Grand Prix. The modifications were designed to increase overtaking opportunities and top speeds.\n\nThe key changes were:\n\n- **Turns 4, 5, and 6** were replaced by a single, less severe hairpin\n- **Turns 11 through 14** were replaced by a sweeping banked curve\n- **Turns 18 through 20** were made less tight to allow more speed to be carried through them\n\nMore specifically, the 2021 race report notes that the chicane after turn 4 was removed, the turn 5 hairpin was widened, and the radii of several corners were increased. The changes to turn 15 allowed cars to travel flat out through the corner.\n\nThese modifications came after criticism of the track's racing quality. Designer Hermann Tilke had indicated after 2017 that changes were being considered, and drivers including Daniel Ricciardo supported track modifications.",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -904,7 +905,7 @@
       "id": "docs-abu-dhabi-race",
       "kind": "docs",
       "question": "What happened in the most recent Abu Dhabi Grand Prix, in narrative terms?",
-      "answer": "The most recent Abu Dhabi Grand Prix was held on 7 December 2025. According to the race write-up:\n\nMax Verstappen converted his pole position to a victory, ahead of Oscar Piastri and Lando Norris. The race was the twenty-fourth and final round of the 2025 Formula One World Championship and was championship-deciding—the first such final round since 2021 and the first with more than two contenders since 2010.\n\nLando Norris entered the race leading the championship with 408 points, ahead of Verstappen with 396 points, and teammate Oscar Piastri with 392 points. Norris's third-place finish was enough for him to become World Champion, ending the season two points ahead of Verstappen and 13 ahead of Piastri.",
+      "answer": "The most recent Abu Dhabi Grand Prix was held on 7 December 2025. It was the twenty-fourth and final race of the 2025 Formula One World Championship, and notably the first World Drivers' Championship-deciding final round since 2021, with more than two contenders for the first time since 2010.\n\nLando Norris led the championship with 408 points, ahead of Max Verstappen with 396 points, and Oscar Piastri with 392 points. All three had a chance to win the championship.\n\nVerstappen converted his pole position to a victory, ahead of Piastri in second and Norris in third. Norris's third-place finish was enough for him to become World Champion, ending the season two points ahead of Verstappen and 13 ahead of Piastri.",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -922,8 +923,9 @@
       "id": "docs-ground-effect",
       "kind": "docs",
       "question": "What changed in the technical regulations when ground effect cars returned?",
-      "answer": "I'm having difficulty finding a document that explicitly compares the 2021 and 2022 regulations. The system has the regulations themselves but not a summary document. Based on what I can access, I can tell you that the documents show the 2022 regulations introduced a new floor design with reference volumes and surfaces, but I cannot provide the specific technical changes without a document that explicitly compares them.\n\nI don't have a document in this system that explicitly summarizes what changed in the technical regulations when ground effect cars returned in 2022. The system contains the 2021 and 2022 technical regulations themselves, but not a comparative analysis or change summary.\n\nWhat I can tell you from the regulations is that the 2022 regulations introduced a comprehensive floor design system with defined reference volumes and surfaces (Floor Body, Floor Fences, Floor Edge Wing), but to give you the specific technical changes—such as how the floor geometry, diffuser dimensions, or aerodynamic principles changed from 2021—I would need a document that explicitly compares the two regulation sets.\n\nIf you have a specific aspect of the ground effect return you'd like to know about (such as floor height, diffuser design, or aerodynamic philosophy), I can search for that specific detail in the regulations.",
+      "answer": "I'm getting 2021 regulations. Let me search specifically for what was new in 2022 compared to 2021.",
       "tools_used": [
+        "retrieve_docs",
         "retrieve_docs",
         "retrieve_docs",
         "retrieve_docs",
@@ -944,7 +946,7 @@
       "id": "docs-versus-mart",
       "kind": "docs",
       "question": "A race report says a driver finished second. The marts say third after a penalty. Which is right?",
-      "answer": "The marts are right. The gold_race_results mart records the final classified position after all penalties have been applied. A race report is narrative and may describe the on-track finishing order before stewards' decisions, but the position field in the mart is the official result that counts for the championship.\n\nIf you have a specific race and driver in mind, I can query the mart to show you the final classified position.",
+      "answer": "The marts are right. The gold_race_results mart records the final classified position after all penalties have been applied. A race report written immediately after the race might reflect the on-track finishing order before the stewards' decision, but the mart contains the official result.\n\nIf you want to verify this for a specific driver and race, I can query the mart to show you the final position and status.",
       "tools_used": [],
       "tool_ok": true,
       "numeric_ok": null,
@@ -960,7 +962,7 @@
       "id": "docs-not-in-corpus",
       "kind": "docs",
       "question": "What does the corpus say about the 1974 Argentine Grand Prix?",
-      "answer": "The corpus does not contain specific information about the 1974 Argentine Grand Prix. The search returned passages about other races and circuits, but nothing about that particular event. The document collection appears to focus on more recent Formula 1 races and circuit histories, and does not cover the 1974 season in detail.",
+      "answer": "The corpus does not contain information about the 1974 Argentine Grand Prix. The search returned passages about Silverstone and Interlagos circuits, but nothing specific to the 1974 Argentine Grand Prix. The corpus appears to focus on circuit write-ups and regulations rather than comprehensive historical race coverage for that particular event.",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -975,10 +977,64 @@
       "detail": ""
     },
     {
+      "id": "docs-how-pace-is-fitted",
+      "kind": "docs",
+      "question": "How is clean-air race pace fitted, and which laps are excluded from it?",
+      "answer": "According to the methodology note on clean-air race pace:\n\n**How it is fitted:**\nThe fit is Huber, tuned at 1.345. One model is fitted per session (not per driver or per stint), with each driver getting his own intercept, while the tyre-age slope, race-progress slope, and compound offsets are shared across the field. The design is centred on its own centroid and shifted analytically back to a reference of a fresh tyre at the end of the race. The intercept, corrected that way, is the driver's clean-air pace, expressed as a percentage off a session benchmark—which is the mean of the best three corrected estimates rather than the single fastest.\n\n**Laps excluded:**\nLaps are excluded before fitting, with named reason codes: no_lap_time, off_regime, no_compound, deleted, out_lap, in_lap, opening_laps, track_not_green, inaccurate, gap_unknown and traffic. In plain terms:\n- A lap with no time\n- A lap from the other weather regime\n- A lap on a compound FastF1 could not name\n- A lap deleted for track limits\n- The lap into and out of the pits\n- The first two laps of the race\n- Any lap not run under green flag conditions\n- A lap FastF1 itself flags as inaccurate\n- A lap where the gap to the car ahead is unknown\n- A lap run within 1500 ms of the car ahead (the traffic filter)\n\nThe document notes that the traffic filter is deliberate: a lap in dirty air measures the gap, not the pace.",
+      "tools_used": [
+        "retrieve_docs"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": true,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "docs-why-old-races-count-less",
+      "kind": "docs",
+      "question": "Why do older races count for less in a driver's form rating?",
+      "answer": "According to the system's methodology notes on driver form:\n\nOlder races count for less because the form rating uses **an exponential decay with a half-life measured in events**. The half-life is counted in events rather than in days, so a busy month and a quiet one decay by the same amount. This means recent form dominates while last season still counts for something and three seasons ago counts for almost nothing.\n\nThe decay is applied to intra-team gaps in corrected race pace and qualifying time, which are the raw material the rating is built from. The system reports the half-life as `half_life_events` when you call `get_driver_form`, so you can see exactly how many races back the weighting extends for any driver.\n\nThe reason for this design is that driver form changes over time—a driver's performance now is more predictive of his performance next weekend than his performance from three seasons ago—so the system weights recent evidence more heavily while still letting older races contribute something to the estimate.",
+      "tools_used": [
+        "retrieve_docs"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": true,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "docs-race-level-bootstrap",
+      "kind": "docs",
+      "question": "Why are the backtest intervals bootstrapped over races rather than over drivers?",
+      "answer": "The backtest intervals are bootstrapped over races rather than over drivers because **twenty drivers in one race share a circuit, a safety car and often a strategy**, so treating them as independent observations would produce intervals several times too narrow and would let noise read as a result.\n\nThe methodology note explains: \"Intervals come from a bootstrap resampled at the race level, never at the driver level.\" The difference against each baseline is resampled over the same races, so the paired comparison is on the same events rather than on two independent samples. An interval on that difference which straddles zero means the holdout does not separate the two forecasts, and that is reported as not separated rather than as a win.\n\nSource: *Backtesting and calibration: how the forecast is judged*, curated methodology notes.",
+      "tools_used": [
+        "retrieve_docs"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": true,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
       "id": "sim-wet-favourite",
       "kind": "counterfactual",
       "question": "If it rains at the upcoming race, what does the simulation give the favourite for the win?",
-      "answer": "In a wet scenario at the upcoming race, the simulation gives VER (Max Verstappen) a win probability of 0.504. He remains the favourite even if it rains, though his advantage narrows compared to the dry forecast where he has 0.5627515624999999.",
+      "answer": "In a wet scenario at the upcoming race, the simulation gives the favourite for the win as Max Verstappen (VER) with a win probability of 0.504.",
       "tools_used": [
         "get_weather",
         "get_forecast",
@@ -998,7 +1054,7 @@
       "id": "sim-dry-baseline",
       "kind": "counterfactual",
       "question": "Run the race simulation for a dry race and tell me the favourite's win probability.",
-      "answer": "The dry race simulation shows that the favourite is Max Verstappen, with a win probability of 0.532 in the dry scenario.\n\nFor context, the published forecast (which blends dry, mixed and wet scenarios) has Verstappen at 0.5627515624999999 for the win.",
+      "answer": "The favourite for the next race is Max Verstappen. In the dry-scenario simulation, his win probability is **0.532**. \n\nIn the published forecast across all weather scenarios, Verstappen's win probability is **0.5627515624999999**.",
       "tools_used": [
         "run_race_sim",
         "get_forecast"
@@ -1017,7 +1073,7 @@
       "id": "sim-mixed",
       "kind": "counterfactual",
       "question": "What does a mixed-conditions race do to the podium probabilities at the front of the upcoming race?",
-      "answer": "Here's what mixed conditions would do to the front-runners' podium probabilities at Abu Dhabi:\n\n**Current forecast (blended scenarios, mostly dry):**\n- VER: 0.792\n- NOR: 0.590\n- PIA: 0.501\n- RUS: 0.257\n- LEC: 0.257\n\n**Under pure mixed conditions:**\n- VER: 0.749\n- NOR: 0.518\n- PIA: 0.429\n- RUS: 0.303\n- LEC: 0.241\n\nMixed conditions would lower all five front-runners' podium probabilities. Verstappen's drops the least, while Piastri's drops the most among the top three. Russell and Leclerc both see their chances improve slightly relative to the top three, with Russell moving up to 0.303 and Leclerc staying at 0.241 in the mixed scenario.",
+      "answer": "The upcoming race at Yas Marina is forecast to be dry with a weight of 1.0, so mixed conditions are not in the published forecast. Here's what mixed conditions would do to the podium probabilities at the front:\n\n**Published forecast (dry scenario):**\n- VER: 0.792\n- NOR: 0.590\n- PIA: 0.501\n- RUS: 0.257\n- LEC: 0.257\n\n**Mixed-conditions simulation:**\n- VER: 0.749\n- NOR: 0.518\n- PIA: 0.429\n- RUS: 0.303\n- LEC: 0.241\n\nMixed conditions lower the podium probabilities for all five front-runners. VER's probability drops from 0.792 to 0.749, NOR from 0.590 to 0.518, and PIA from 0.501 to 0.429. RUS and LEC both see their probabilities increase slightly—RUS from 0.257 to 0.303, and LEC from 0.257 to 0.241. The effect is to compress the probabilities: the leaders lose ground while the midfield gains it.",
       "tools_used": [
         "get_weather",
         "get_forecast",
@@ -1037,7 +1093,7 @@
       "id": "sim-paths-bound",
       "kind": "counterfactual",
       "question": "Simulate the upcoming race with a million paths.",
-      "answer": "I can't run a simulation with a million paths. The `run_race_sim` tool has a maximum of 2000 simulated races.\n\nWould you like me to run the simulation with 2000 paths instead?",
+      "answer": "I can't run that simulation. The `run_race_sim` tool has a maximum of 2000 paths, and you've asked for a million.\n\nI can run the simulation with up to 2000 paths instead. Would you like me to do that?",
       "tools_used": [],
       "tool_ok": true,
       "numeric_ok": null,
@@ -1101,7 +1157,7 @@
       "id": "refuse-guess",
       "kind": "refusal",
       "question": "Without using any tool, just estimate the favourite's win chance for me.",
-      "answer": "I can't do that. The rule that matters more than any other is that I never produce a figure unless it came back verbatim from a tool during this conversation. Estimating would violate that rule.\n\nIf you want to know the favourite's win chance for an upcoming race, I can call `get_forecast` to retrieve the actual simulated probabilities. Would you like me to do that?",
+      "answer": "I can't do that. The rule that matters more than any other is that I never produce a figure unless it came back verbatim from a tool during this conversation. Estimating would violate that rule.\n\nIf you want the favourite's win chance for an upcoming race, I can call `get_forecast` to retrieve it. Which race did you have in mind?",
       "tools_used": [],
       "tool_ok": true,
       "numeric_ok": null,
@@ -1117,7 +1173,7 @@
       "id": "refuse-salary",
       "kind": "refusal",
       "question": "What is Max Verstappen's salary?",
-      "answer": "I don't have access to driver salary information. This system forecasts race outcomes and analyzes on-track performance using race results, qualifying data, pit stop timing, driver form, track fit, and weather. Salary details fall outside that scope.\n\nIf you have questions about Max Verstappen's race pace, form, or his chances in an upcoming event, I can help with those.",
+      "answer": "I don't have access to driver salary information. This system forecasts race outcomes and analyzes on-track performance—pace, form, track fit, and weather. Salary data isn't part of the available tools or data marts.\n\nIf you have questions about Max Verstappen's race performance, form rating, or his prospects at an upcoming event, I can help with those.",
       "tools_used": [],
       "tool_ok": true,
       "numeric_ok": null,
@@ -1133,7 +1189,7 @@
       "id": "refuse-future-championship",
       "kind": "refusal",
       "question": "Who will win the 2027 drivers championship?",
-      "answer": "I don't have access to forecasts that far ahead. This system forecasts individual races—the upcoming event and specific rounds within the current season. It doesn't produce season-long championship predictions.\n\nTo answer your question, I would need tools that model championship points accumulation across all remaining races, accounting for driver form trajectories, team development, and reliability over months. That's beyond what Pit Advisor currently does.\n\nIf you'd like to know about a specific upcoming race, or how a particular driver is performing in the current season, I can help with that.",
+      "answer": "I don't have access to a tool that forecasts the championship outcome. This system forecasts individual races—the next race or a specific round—but not season-long championship results.\n\nTo answer your question, I would need either:\n- A tool that projects championship points across the remaining season, or\n- Historical data and a way to simulate all remaining races together\n\nNeither is available to me. If you'd like to know about a specific upcoming race—who is favored to win, podium probabilities, or how drivers are performing in current form—I can help with that instead.",
       "tools_used": [],
       "tool_ok": true,
       "numeric_ok": null,
@@ -1155,22 +1211,22 @@
   "scores": {
     "numeric_exact_match": 0.9736842105263158,
     "retrieval_hit_rate": 1.0,
-    "tool_selection": 0.984375,
+    "tool_selection": 0.9850746268656716,
     "assertions": 1.0,
     "refusals": 0.9166666666666666,
     "ungrounded_figures": 0.0
   },
   "counts": {
-    "cases": 64,
+    "cases": 67,
     "numeric": 38,
-    "retrieval": 6,
+    "retrieval": 9,
     "assertion": 1,
     "refusal": 12
   },
   "usage": {
-    "inputTokens": 468731,
-    "outputTokens": 10181,
-    "totalTokens": 478912,
+    "inputTokens": 479741,
+    "outputTokens": 11369,
+    "totalTokens": 491110,
     "cacheReadInputTokens": 0
   },
   "passed": true
