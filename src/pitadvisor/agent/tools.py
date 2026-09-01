@@ -180,7 +180,9 @@ class MartQuery(BaseModel, frozen=True):
 
 
 class DocQuery(BaseModel, frozen=True):
-    query: str = Field(description="What to look for in the regulations and race documents.")
+    query: str = Field(
+        description="What to look for in the regulations, race documents and methodology notes."
+    )
     top_k: int = Field(default=5, ge=1, le=10, description="How many passages to return.")
     source: str | None = Field(default=None, description="Restrict to one corpus source.")
 
@@ -578,7 +580,8 @@ TOOLS: Final[tuple[Tool, ...]] = (
     ),
     Tool(
         "retrieve_docs",
-        "Search the regulations, event documents and race write-ups. Returns passages to cite.",
+        "Search the regulations, race write-ups and this system's notes on how its own metrics "
+        "are computed. Returns passages to cite.",
         DocQuery,
         _bind(Toolbox.retrieve_docs),
     ),
