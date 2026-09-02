@@ -121,7 +121,12 @@ def main() -> None:
                 flush=True,
             )
 
-    records = [json.loads(line) for line in out.read_text().splitlines()]
+    # a rerun appends rather than rewrites, so the last record for a key is the one that counts
+    latest: dict[str, dict[str, Any]] = {}
+    for line in out.read_text().splitlines():
+        record = json.loads(line)
+        latest[record["key"]] = record
+    records = list(latest.values())
     spans = sum(len(d["spans"]) for r in records for d in r["decisions"])
     bad = sum(len(r["unverified"]) for r in records)
     clean = sum(1 for r in records if not r["unverified"] and not r["error"])
