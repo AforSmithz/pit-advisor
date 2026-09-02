@@ -46,8 +46,13 @@ BOOK = re.compile(
     r"|(?:Formula\s+(?:One|1)\s+)?(?P<kind>Sporting|Technical)\s+Regulations)",
     re.I,
 )
+# an appendix citation is one reference, not three: appendix L chapter IV article 2 c) is a
+# different rule from article 2 of the code itself, so the chapter and the article are kept on
+# the code rather than emitted as citations of their own
 CITATION = re.compile(
-    r"(Appendix\s+[A-Z](?:\s+Ch\s+[IVXLC]+)?(?:\s+(?:Art\.?\s*)?\d+(?:\.\d+)*(?:\.?[a-z])?)?"
+    r"(Appendix\s+[A-Z]"
+    r"(?:[ ,]+(?:Ch|Chapter)\.?\s*[IVXLC]+)?"
+    r"(?:[ ,]+(?:Art(?:icle)?\.?\s*)?\d+(?:\.\d+)*(?:\s*[a-z]\)|\.?[a-z]\b)?)?"
     r"|(?:Article|Art)\.?\s*\d+(?:\.\d+)*(?:\s*[a-z]\))?)"
 )
 SUMMONED = re.compile(r"summoned\s*\(documents?\s+([\d\s&,and]+)\)", re.I)

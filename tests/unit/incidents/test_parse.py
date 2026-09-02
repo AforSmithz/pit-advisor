@@ -113,8 +113,7 @@ def test_a_charge_naming_two_books_gives_each_citation_its_own():
     ).articles
     assert [(article.code, article.book) for article in articles] == [
         ("Article 34.14 a)", Book.SPORTING),
-        ("Appendix L", Book.ISC),
-        ("Article 2 c)", Book.ISC),
+        ("Appendix L Chapter IV Article 2 c)", Book.ISC),
     ]
 
 

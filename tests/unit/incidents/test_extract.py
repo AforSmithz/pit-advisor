@@ -79,8 +79,7 @@ def test_the_header_the_parser_already_reads_is_not_asked_of_the_model():
 def test_a_charge_is_still_split_into_citations():
     found = extract(FakeBedrock([entry()]), "model", RAW)
     assert [(article.code, article.book) for article in found.decisions[0].articles] == [
-        ("Appendix L", Book.ISC),
-        ("Article 2 c)", Book.ISC),
+        ("Appendix L Chapter IV Article 2 c)", Book.ISC),
         ("Article 33.3", Book.SPORTING),
     ]
 
