@@ -124,6 +124,37 @@ class SessionLapRow(BronzeRow):
     position: int | None = Field(default=None, ge=1, le=30)
 
 
+class IncidentRow(BronzeRow):
+    document: int | None = None
+    # a document ruling on eighteen cars is eighteen rows, and the ordinal keeps them apart
+    entry: int = Field(ge=0)
+    kind: str
+    issued: datetime | None = None
+    car: int | None = Field(default=None, ge=0, le=199)
+    driver: str | None = None
+    competitor: str | None = None
+    session: str | None = None
+    fact: str | None = None
+    charge: str | None = None
+    outcome: str | None = None
+    reason: str | None = None
+    # "parsed" when the field block carried it, "extracted" when a model read the prose
+    read_by: str
+    # fields a model quoted that were not found in the document, so they are not stored
+    unverified: list[str] = []
+    raw_key: str
+
+
+class IncidentArticleRow(BronzeRow):
+    document: int | None = None
+    entry: int = Field(ge=0)
+    code: str
+    regulation: str
+    book: str | None = None
+    edition: int | None = None
+    raw_key: str
+
+
 TABLES: dict[str, type[BronzeRow]] = {
     "races": RaceRow,
     "results": ResultRow,
@@ -132,6 +163,8 @@ TABLES: dict[str, type[BronzeRow]] = {
     "pitstops": PitStopRow,
     "weather": WeatherRow,
     "session_laps": SessionLapRow,
+    "incidents": IncidentRow,
+    "incident_articles": IncidentArticleRow,
 }
 
 
