@@ -18,6 +18,9 @@ from pitadvisor.agent import tools as agent_tools
 from pitadvisor.agent.runtime import agent_for
 from pitadvisor.config import Settings, boto_session, get_settings
 from pitadvisor.features import assemble as feature_assemble
+from pitadvisor.incidents import lake as incident_lake
+from pitadvisor.incidents.extract import extract as extract_decision
+from pitadvisor.incidents.parse import parse as parse_decision
 from pitadvisor.ingest import docs as doc_corpus
 from pitadvisor.ingest import fia_docs, jolpica
 from pitadvisor.ingest.fastf1_session import backfill as session_backfill
@@ -35,7 +38,7 @@ from pitadvisor.ingest.ratelimit import (
     RateLimiter,
 )
 from pitadvisor.ingest.raw_store import LocalObjectStore, ObjectStore, RawStore, object_store
-from pitadvisor.ingest.rebuild import rebuild_bronze
+from pitadvisor.ingest.rebuild import latest_objects, rebuild_bronze
 from pitadvisor.ingest.weather import Circuit, WeatherClient, event_circuits
 from pitadvisor.ingest.weather import ingest_event as weather_ingest_event
 from pitadvisor.model import backtest as forecast_model
@@ -438,6 +441,66 @@ def _backfill_sessions(
                 store, season, settings.fastf1_cache, run_id, kinds, sync_cache=not local
             )
         )
+
+
+@app.command(
+    name="incidents-extract",
+    help="Read the stewards' documents that have no field block. Costs Bedrock tokens.",
+)
+def incidents_extract(
+    limit: Annotated[int | None, typer.Option(help="Stop after this many documents.")] = None,
+    season: Annotated[int | None, typer.Option(help="One season only.")] = None,
+    refresh: Annotated[bool, typer.Option("--refresh", help="Re-read cached documents.")] = False,
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+) -> None:
+    settings = get_settings()
+    store = LocalObjectStore(LOCAL_ROOT) if local else object_store(settings)
+    session = cast(Any, boto_session(settings))
+    bedrock = session.client("bedrock-runtime", region_name=settings.aws_region)
+
+    wanted = [
+        found
+        for found in latest_objects(store, f"{Layer.RAW}/source={Source.FIA_DOCS}/")
+        if incident_lake.kind_of(found.key) is not None
+        and (season is None or found.season == season)
+    ]
+    todo: list[Any] = []
+    for found in wanted:
+        if not refresh and store.exists(incident_lake.cache_key(found.key)):
+            continue
+        if parse_decision(doc_corpus.pdf_text(store.get(found.key))).structured:
+            continue
+        todo.append(found)
+    todo = todo[:limit] if limit else todo
+    typer.echo(f"{len(todo)} documents to read of {len(wanted)}")
+
+    tokens_in = tokens_out = failed = 0
+    for found in todo:
+        text = doc_corpus.pdf_text(store.get(found.key))
+        result = extract_decision(bedrock, settings.bedrock_model, text)
+        tokens_in += result.input_tokens
+        tokens_out += result.output_tokens
+        kind = incident_lake.kind_of(found.key) or "decision"
+        reading = incident_lake.Reading(
+            raw_key=found.key,
+            kind=kind,
+            read_by=incident_lake.EXTRACTED,
+            decisions=result.decisions,
+            unverified=result.unverified,
+            error=result.error,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+        )
+        if result.error is not None:
+            failed += 1
+            typer.echo(f"skip  {found.name[:60]}  {result.error}")
+            continue
+        store.put(incident_lake.cache_key(found.key), incident_lake.dump(reading))
+        typer.echo(
+            f"ok    {len(result.decisions):2d} entries  {found.name[:56]}"
+            f"  {result.unverified or ''}"
+        )
+    typer.echo(f"{len(todo) - failed} cached, {failed} unread, {tokens_in}/{tokens_out} tokens")
 
 
 @app.command(help="Replay raw into bronze with no network at all.")
