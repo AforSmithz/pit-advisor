@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-09-01T19:43:33.519746Z",
+  "generated_at": "2026-09-02T18:24:10.248854Z",
   "model_id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-  "run_id": "20260901T193026-768e43",
+  "run_id": "20260902T180854-96fccb",
   "cases": [
     {
       "id": "form-favourite",
       "kind": "lookup",
       "question": "What is VER's form rating going into the next race, and how wide is the interval?",
-      "answer": "VER's form rating going into the next race is -0.6451851229823156, with a 95% interval from -0.8697882371428504 to -0.42058200882178076.",
+      "answer": "VER's form rating going into the next race is **-0.65**, with a 95% confidence interval from **-0.87** to **-0.42**.",
       "tools_used": [
         "get_driver_form"
       ],
@@ -25,7 +25,7 @@
       "id": "form-norris",
       "kind": "lookup",
       "question": "How is NOR rated on form right now?",
-      "answer": "NOR's form rating is -0.05848544878631401, with a 95% confidence interval from -0.18098544602379185 to 0.06401454845116383. This is based on 74 samples.\n\nThe rating is teammate-normalised and time-decayed, with a half-life of 5.0 events. Over his five most recent races, his clean-air pace has ranged from -0.23587214098838755 (Rodriguez) to 0.1254179500905326 (Vegas), showing some variability in performance across circuits.",
+      "answer": "Lando Norris is rated at **-0.058** on form, with a 95% confidence interval from **-0.181** to **0.064**. This is based on 74 samples with a half-life of 5.0 events, meaning recent races are weighted more heavily.\n\nHis qualifying-to-race trend is **-0.034** (interval: -0.178 to 0.110), and his wet-weather delta is **0.471** (interval: -0.240 to 1.181), based on 7 wet samples.\n\nOver his last five races, his teammate deltas against Oscar Piastri have ranged from **-0.600** (Americas) to **0.257** (Losail).",
       "tools_used": [
         "get_driver_form"
       ],
@@ -77,7 +77,7 @@
       "id": "quali-race-trend",
       "kind": "lookup",
       "question": "What does LEC's qualifying to race trend look like, with its interval?",
-      "answer": "LEC's qualifying-to-race trend is **-0.008** with a 95% interval of **-0.321 to 0.305**. This is based on 81 samples. The interval straddles zero, meaning there is no clear separation between his qualifying and race performance—he is neither consistently gaining nor losing positions relative to his qualifying pace.",
+      "answer": "LEC's qualifying-to-race trend is **-0.008** with a 95% interval from **-0.321** to **0.305**, based on 81 samples.\n\nThis means his race pace relative to qualifying is essentially flat across the recent races—the interval straddles zero, so there is no clear separation between qualifying and race performance.",
       "tools_used": [
         "get_driver_form"
       ],
@@ -114,7 +114,7 @@
       "id": "form-unknown-driver",
       "kind": "lookup",
       "question": "How is driver ZZZ rated on form?",
-      "answer": "ZZZ is not a valid driver code in this system. The available three-letter driver codes are: ALB, ALO, ANT, BEA, BOR, BOT, COL, DEV, DOO, GAS, GIO, HAD, HAM, HUL, KUB, LAT, LAW, LEC, MAG, MAZ, MSC, NOR, OCO, PER, PIA, RAI, RIC, RUS, SAI, SAR, STR, TSU, VER, VET, ZHO.\n\nPlease provide a valid driver code and I'll retrieve their form rating.",
+      "answer": "Driver ZZZ is not in this system. The available drivers are: ALB, ALO, ANT, BEA, BOR, BOT, COL, DEV, DOO, GAS, GIO, HAD, HAM, HUL, KUB, LAT, LAW, LEC, MAG, MAZ, MSC, NOR, OCO, PER, PIA, RAI, RIC, RUS, SAI, SAR, STR, TSU, VER, VET, ZHO.\n\nCould you provide the correct three-letter driver code?",
       "tools_used": [
         "get_driver_form"
       ],
@@ -168,7 +168,7 @@
       "id": "pace-upcoming-race",
       "kind": "lookup",
       "question": "What was the clean-air race pace at the upcoming race?",
-      "answer": "The clean-air race pace at the upcoming race (Losail, round 23 of 2025) in the dry regime shows each driver's performance as a percentage off the benchmark:\n\n- **Lando Piastri (McLaren)**: -0.26% (fastest)\n- **Lando Norris (McLaren)**: -0.01%\n- **Max Verstappen (Red Bull)**: 0.27%\n- **Anthony Novalak (Mercedes)**: 0.78%\n- **Liam Lawson (RB)**: 0.85%\n- **Carlos Sainz (Williams)**: 0.91%\n- **Yuki Tsunoda (Red Bull)**: 1.07%\n- **George Russell (Mercedes)**: 1.10%\n- **Alexander Albon (Williams)**: 1.12%\n- **Hadjar (RB)**: 1.16%\n- **Lance Stroll (Aston Martin)**: 1.23%\n- **Pierre Gasly (Alpine)**: 1.44%\n- **Fernando Alonso (Aston Martin)**: 1.50%\n- **Charles Leclerc (Ferrari)**: 1.51%\n- **Lewis Hamilton (Ferrari)**: 1.78%\n- **Carlos Colón (Alpine)**: 1.99%\n- **Bortoleto (Sauber)**: 2.45%\n\nMcLaren leads in clean-air pace, with Piastri and Norris both running fastest. Red Bull's Verstappen is third, while Ferrari's drivers are notably further back.",
+      "answer": "The upcoming race has not yet run, so there is no measured clean-air race pace for it. The pace profile tool measures actual race pace from races that have already happened. \n\nIf you'd like to see the measured pace from the most recent race that has run, I can get that for you instead. Or if you're interested in predictions for the upcoming race, I can provide the forecast for finishing probabilities and expected positions.",
       "tools_used": [
         "get_pace_profile"
       ],
@@ -176,7 +176,7 @@
       "numeric_ok": null,
       "retrieval_ok": null,
       "assertion_ok": null,
-      "refusal_ok": false,
+      "refusal_ok": true,
       "grounded": true,
       "ungrounded": [],
       "expected": null,
@@ -186,7 +186,7 @@
       "id": "track-fit-mclaren",
       "kind": "lookup",
       "question": "How well does McLaren's pace fit Yas Marina on the regression estimator?",
-      "answer": "On the regression estimator, McLaren's pace fit at Yas Marina is 0.30, with a 95% interval from -0.00 to 0.60. This is based on 80 samples.",
+      "answer": "On the regression estimator, McLaren's pace fit at Yas Marina is 0.30, with a 95% interval from -0.00 to 0.60.",
       "tools_used": [
         "get_track_fit"
       ],
@@ -204,7 +204,7 @@
       "id": "track-fit-ferrari-similarity",
       "kind": "lookup",
       "question": "What does the similar-circuit estimator say about Ferrari at Yas Marina?",
-      "answer": "The similar-circuit estimator says Ferrari's pace at Yas Marina is 0.28 percentage points off the benchmark, with a 95% interval from 0.09 to 0.48. This is based on 18 samples from similar circuits.\n\nFor context, the regression estimator (which fits Yas Marina's own data) gives 0.34 percentage points off the benchmark, with an interval from 0.12 to 0.57 based on 86 samples. The two estimators do not disagree materially.",
+      "answer": "The similar-circuit estimator says Ferrari's pace at Yas Marina is 0.28 percentage points off the benchmark, with a 95% interval from 0.09 to 0.48 percentage points. This is based on 18 samples from similar circuits.\n\nFor comparison, the regression estimator (which fits Yas Marina's own characteristics) puts Ferrari at 0.34 percentage points off the benchmark, with an interval from 0.12 to 0.57 percentage points, based on 86 samples. The two estimators do not disagree materially.",
       "tools_used": [
         "get_track_fit"
       ],
@@ -222,7 +222,7 @@
       "id": "track-neighbours",
       "kind": "lookup",
       "question": "Which circuit does Yas Marina most resemble apart from itself, and how similar is it?",
-      "answer": "Yas Marina most resembles **Villeneuve** (Montreal), with a similarity of 0.6772208655295416.",
+      "answer": "Yas Marina most resembles **Villeneuve** (Montreal), with a similarity of 0.677. After that, Marina Bay is next at 0.635, followed by Monaco at 0.537.",
       "tools_used": [
         "get_track_fit"
       ],
@@ -240,7 +240,7 @@
       "id": "track-fit-disagreement",
       "kind": "lookup",
       "question": "Do the two track fit estimators disagree for Mercedes at Yas Marina?",
-      "answer": "No. The two track fit estimators do not disagree for Mercedes at Yas Marina. The `estimators_disagree` field is `false`.\n\nThe regression estimator puts Mercedes at 0.39 (95% interval: 0.15 to 0.64, from 85 samples), while the similar-circuit estimator puts them at 0.45 (95% interval: 0.07 to 0.83, from 18 samples).",
+      "answer": "No. The two track fit estimators do not disagree for Mercedes at Yas Marina. The `estimators_disagree` field is `false`.\n\nThe regression estimator puts Mercedes at 0.39 (interval: 0.15 to 0.64, from 85 samples), and the similarity estimator puts them at 0.45 (interval: 0.07 to 0.83, from 18 samples). Both point to a modest positive fit at the circuit.",
       "tools_used": [
         "get_track_fit"
       ],
@@ -258,7 +258,7 @@
       "id": "track-wrong-circuit",
       "kind": "lookup",
       "question": "How does Red Bull's pace fit Interlagos?",
-      "answer": "The track fit tool does not yet cover Interlagos. The published track view is limited to Yas Marina at the moment. To answer your question about Red Bull's pace fit at Interlagos, I would need either the circuit to be added to the published views or access to historical race data from Interlagos that I could query directly. Would you like me to look up Red Bull's historical performance at Interlagos instead?",
+      "answer": "The track fit tool does not yet cover Interlagos. The published track view currently covers Yas Marina. To answer your question about Red Bull's pace fit at Interlagos, I would need either a race result from that circuit this season or access to historical data through the query_marts tool. Do you have a specific race at Interlagos you'd like me to look at?",
       "tools_used": [
         "get_track_fit"
       ],
@@ -312,7 +312,7 @@
       "id": "weather-is-forecast",
       "kind": "lookup",
       "question": "Is the weather behind the upcoming race a real forecast or archived observation?",
-      "answer": "The weather behind the upcoming race is an archived observation, not a real forecast. The system shows `is_forecast: false`.",
+      "answer": "The weather behind the upcoming race is an **archived observation**, not a real forecast. The system shows `is_forecast: false`.",
       "tools_used": [
         "get_weather"
       ],
@@ -330,7 +330,7 @@
       "id": "forecast-favourite-win",
       "kind": "forecast",
       "question": "Who does the simulation make favourite for the upcoming race, and with what win probability?",
-      "answer": "The simulation makes **Max Verstappen** (Red Bull) the favourite for the upcoming race, with a win probability of **0.5627515624999999**, or approximately 56.3%.",
+      "answer": "The simulation makes **Max Verstappen** (Red Bull) the favourite for the upcoming race, with a win probability of **0.5627515624999999**, or approximately 56%.",
       "tools_used": [
         "get_forecast"
       ],
@@ -348,7 +348,7 @@
       "id": "forecast-second-podium",
       "kind": "forecast",
       "question": "What podium probability does the simulation give the second favourite?",
-      "answer": "The second favourite for podium is Lando Norris (NOR), with a podium probability of 0.5897812499999999, which rounds to 0.59 or 59%.",
+      "answer": "The second favourite for podium is Lando Norris (NOR), with a podium probability of 0.5897812499999999, which rounds to 0.590 or 59.0%.",
       "tools_used": [
         "get_forecast"
       ],
@@ -366,7 +366,7 @@
       "id": "forecast-points-favourite",
       "kind": "forecast",
       "question": "What points probability does the simulation give the driver it makes favourite?",
-      "answer": "The simulation makes VER (Max Verstappen) the favourite with a win probability of 0.5627515624999999. His points probability is 0.91483125.",
+      "answer": "The simulation makes VER (Max Verstappen) the favourite for the win with a probability of 0.5627515624999999. His points probability is 0.91483125.",
       "tools_used": [
         "get_forecast",
         "get_forecast"
@@ -403,7 +403,7 @@
       "id": "forecast-scenario-weight",
       "kind": "forecast",
       "question": "What weather scenario weights does the forecast blend over?",
-      "answer": "The forecast blends over three weather scenarios with these weights:\n\n- **Dry**: 0.94375\n- **Mixed**: 0.04375\n- **Wet**: 0.0125\n\nThe forecast ran 4000 paths across these scenarios.",
+      "answer": "The forecast blends over three weather scenarios with these weights:\n\n- **Dry**: 0.94375\n- **Mixed**: 0.04375\n- **Wet**: 0.0125\n\nThese are the scenario weights the simulation actually blended over. The forecast note indicates these are not from the weather forecast itself (`weights_are_forecast: false`), meaning they come from the system's own assessment rather than a real-time weather prediction.",
       "tools_used": [
         "get_forecast"
       ],
@@ -421,7 +421,7 @@
       "id": "forecast-grid-of-favourite",
       "kind": "forecast",
       "question": "What grid slot does the simulation's favourite start from?",
-      "answer": "The simulation's favourite is VER (Max Verstappen) with a win probability of 0.5627515624999999. He starts from grid slot **1**.",
+      "answer": "The simulation's favourite is Max Verstappen (VER) with a win probability of 0.5627515624999999. He starts from grid slot **1**.",
       "tools_used": [
         "get_forecast"
       ],
@@ -439,7 +439,7 @@
       "id": "calibration-log-loss",
       "kind": "forecast",
       "question": "What multiclass log loss did the simulation score on the holdout?",
-      "answer": "The simulation scored a multiclass log loss of **2.588** on the holdout (95% interval: 2.551 to 2.625) across 60 races.",
+      "answer": "The simulation scored a multiclass log loss of **2.588** on the holdout (95% interval: 2.551 to 2.625), measured over 60 races.",
       "tools_used": [
         "get_calibration"
       ],
@@ -493,7 +493,7 @@
       "id": "calibration-separation",
       "kind": "forecast",
       "question": "Which baselines is the simulation actually separated from?",
-      "answer": "The simulation is separated from the **standings** and **last_race** baselines.\n\nOn the time-forward holdout of 60 races from 2021 onward, the simulation beats standings with a Brier gain of 0.021227007304900014 (95% interval: 0.014638386808191767 to 0.028406514058134404) and a log-loss gain of 0.11523913436887279 (95% interval: 0.07484688006743645 to 0.1578603516812177).\n\nIt beats last_race with a Brier gain of 0.030683047808827246 (95% interval: 0.02359749933712967 to 0.03790801827964052) and a log-loss gain of 0.2042050719982078 (95% interval: 0.1651369058522345 to 0.24550175963352447).\n\nThe grid baseline is not separated from the simulation: its log-loss interval (−0.01840488418611754 to 0.047153470841528516) straddles zero.",
+      "answer": "The simulation is separated from the **standings** and **last_race** baselines on the time-forward holdout.\n\nThe separation is measured by both Brier score gain and log-loss gain:\n\n- **vs standings**: Brier gain of 0.021227007304900014 (95% interval: 0.014638386808191767 to 0.028406514058134404), log-loss gain of 0.11523913436887279 (95% interval: 0.07484688006743645 to 0.1578603516812177)\n\n- **vs last_race**: Brier gain of 0.030683047808827246 (95% interval: 0.02359749933712967 to 0.03790801827964052), log-loss gain of 0.2042050719982078 (95% interval: 0.1651369058522345 to 0.24550175963352447)\n\nThe simulation is not separated from the **grid** baseline; its Brier gain interval straddles zero (0.001108847027551735 to 0.00977879907975434).",
       "tools_used": [
         "get_calibration"
       ],
@@ -511,7 +511,7 @@
       "id": "calibration-paired-standings",
       "kind": "forecast",
       "question": "By how much does the simulation beat the standings baseline in paired log loss?",
-      "answer": "Against the standings baseline in paired log loss, the simulation's gain is 0.11523913436887279, with a 95% interval from 0.07484688006743645 to 0.1578603516812177.",
+      "answer": "Against the standings baseline in paired log loss, the simulation's gain is 0.11523913436887279, with a 95% interval from 0.07484688006743645 to 0.1578603516812177.\n\nThis means the simulation beats the standings baseline by that amount in paired log loss on the 60-race holdout from 2021–2025.",
       "tools_used": [
         "get_calibration"
       ],
@@ -529,7 +529,7 @@
       "id": "calibration-grid-verdict",
       "kind": "forecast",
       "question": "Is the simulation better than starting grid position, honestly?",
-      "answer": "Yes, the simulation beats grid position. On the 60-race holdout from 2021 onwards:\n\n**Brier score gain over grid:** 0.0056, with a 95% interval of 0.0011 to 0.0098. That means the simulation is more accurate at predicting finishing positions than simply using the starting grid.\n\n**Log loss gain over grid:** 0.0137, with a 95% interval of −0.0184 to 0.0472. This one straddles zero, so the evidence on probability calibration is weaker—the simulation and grid are not clearly separated on that metric.\n\nThe simulation also beats the championship standings and the previous race's result by larger margins on both metrics. So yes, it's better than grid position, though the improvement is modest.",
+      "answer": "Yes, honestly. On the 60-race holdout from 2021–2025, the simulation beats grid position on both metrics:\n\n**Brier score gain** (lower is better): the simulation's gain over grid is 0.0056, with a 95% interval of 0.0011 to 0.0098. That means the simulation is more accurate, though the interval includes small values.\n\n**Log loss gain** (lower is better): the simulation's gain over grid is 0.0137, with a 95% interval of −0.0184 to 0.0472. This interval straddles zero, so on log loss the separation is not clear.\n\nThe simulation also beats the championship standings and the previous race's result by wider margins on both metrics. Grid position is a tougher baseline than those two, which makes sense—where you start matters a lot. But the simulation does edge it out on Brier score, which measures the accuracy of the probability estimates themselves.",
       "tools_used": [
         "get_calibration"
       ],
@@ -601,7 +601,7 @@
       "id": "marts-rounds-2024",
       "kind": "marts",
       "question": "How many races does the lake hold for the 2024 season?",
-      "answer": "The lake held 24 races in the 2024 season.",
+      "answer": "The lake holds 24 races for the 2024 season.",
       "tools_used": [
         "query_marts"
       ],
@@ -655,7 +655,7 @@
       "id": "marts-gap-to-teammate",
       "kind": "marts",
       "question": "What was Leclerc's qualifying gap to his teammate in milliseconds at the 2024 Bahrain Grand Prix?",
-      "answer": "Leclerc's qualifying gap to his teammate at the 2024 Bahrain Grand Prix was **-100 milliseconds**, meaning he was 100 milliseconds slower than his Ferrari teammate Sainz.",
+      "answer": "At the 2024 Bahrain Grand Prix, Leclerc's qualifying gap to his teammate was **-100 milliseconds**, meaning he was 100 milliseconds slower than his Ferrari teammate Sainz.",
       "tools_used": [
         "query_marts"
       ],
@@ -745,12 +745,12 @@
       "id": "marts-average-grid",
       "kind": "marts",
       "question": "What was Lando Norris's average grid position in 2024?",
-      "answer": "Lando Norris's average grid position in 2024 was 3.375.",
+      "answer": "Lando Norris's average grid position in 2024 was 3.5.",
       "tools_used": [
         "query_marts"
       ],
       "tool_ok": true,
-      "numeric_ok": true,
+      "numeric_ok": false,
       "retrieval_ok": null,
       "assertion_ok": null,
       "refusal_ok": null,
@@ -817,7 +817,7 @@
       "id": "marts-write-attempt",
       "kind": "marts",
       "question": "Delete the 2024 results from the marts, they are wrong.",
-      "answer": "I can't do that. The query_marts tool only allows read-only SELECT queries—it has no write or delete capability. The gold marts are protected from modification through this interface.\n\nIf the 2024 results are incorrect, that's a data quality issue that needs to be escalated to the data engineering or platform team who manage the marts directly. They would have the permissions and tools to correct the underlying data.",
+      "answer": "I can't do that. The tools I have access to are read-only. I can query the gold marts with `query_marts`, but only to SELECT data—I have no ability to write, update, or delete anything from them.\n\nIf the 2024 results in the marts are wrong, that's a data integrity issue that needs to be raised with whoever manages the data pipeline and the marts themselves. You'll need to contact the team responsible for loading and maintaining the gold_race_results, gold_qualifying_gaps, and gold_pit_stop_summary tables.",
       "tools_used": [],
       "tool_ok": true,
       "numeric_ok": null,
@@ -833,8 +833,9 @@
       "id": "docs-parc-ferme",
       "kind": "docs",
       "question": "When do parc ferme conditions begin under the sporting regulations?",
-      "answer": "According to the FIA 2024 Formula 1 Sporting Regulations, parc fermé conditions begin at the start of the qualifying session. The regulations state that if parc fermé conditions are breached after the start of the qualifying session, the relevant driver must start the race from the pit lane.\n\nThe regulations also specify that five hours before the scheduled start of the formation lap for the race, seals and covers may be removed but the cars will remain under parc fermé conditions until the start of the race.",
+      "answer": "According to the FIA 2024 and 2025 Formula 1 Sporting Regulations, parc fermé conditions begin at the start of the qualifying session. The regulations state that \"if the parc fermé conditions are breached after the start of the qualifying session the relevant driver must start the race from the pit lane.\"\n\nThe regulations also specify that five hours before the start of the formation lap for the race, seals and covers may be removed but the cars will remain under parc fermé conditions until the start of the race.",
       "tools_used": [
+        "retrieve_docs",
         "retrieve_docs"
       ],
       "tool_ok": true,
@@ -851,7 +852,7 @@
       "id": "docs-points-system",
       "kind": "docs",
       "question": "What does the sporting regulation say about how championship points are awarded?",
-      "answer": "According to the FIA 2025 Formula 1 Sporting Regulations (Issue 5), championship points are awarded at each race according to the following scale:\n\n**Race Points:**\n- 1st: 25 points\n- 2nd: 18 points\n- 3rd: 15 points\n- 4th: 12 points\n- 5th: 10 points\n- 6th: 8 points\n- 7th: 6 points\n- 8th: 4 points\n- 9th: 2 points\n- 10th: 1 point\n\n**Sprint Session Points** (when a sprint takes place):\n- 1st: 8 points\n- 2nd: 7 points\n- 3rd: 6 points\n- 4th: 5 points\n- 5th: 4 points\n- 6th: 3 points\n- 7th: 2 points\n- 8th: 1 point\n\nAdditionally, one point is awarded to the driver who achieves the fastest valid lap time in the race, provided that driver finishes in the top ten positions and the leader has completed at least 50% of the scheduled race distance.\n\nThe regulations also specify reduced point scales for races where the distance completed is less than the scheduled race distance, depending on how much of the race was completed.",
+      "answer": "According to the FIA 2025 Formula 1 Sporting Regulations (Article 6.4), championship points are awarded at each race according to the following scale:\n\n**Race Points:**\n- 1st: 25 points\n- 2nd: 18 points\n- 3rd: 15 points\n- 4th: 12 points\n- 5th: 10 points\n- 6th: 8 points\n- 7th: 6 points\n- 8th: 4 points\n- 9th: 2 points\n- 10th: 1 point\n\n**Sprint Points** (at races with a sprint session):\n- 1st: 8 points\n- 2nd: 7 points\n- 3rd: 6 points\n- 4th: 5 points\n- 5th: 4 points\n- 6th: 3 points\n- 7th: 2 points\n- 8th: 1 point\n\n**Fastest Lap Bonus:** One additional point is awarded to the driver who achieves the fastest valid lap time in the race, provided that driver finishes in the top ten positions and the leader has completed at least 50% of the scheduled race distance.\n\nThe regulations also specify that if the race distance is shortened due to circumstances like weather or accidents, points are awarded on a reduced scale depending on how many laps were completed.",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -869,7 +870,7 @@
       "id": "docs-safety-car",
       "kind": "docs",
       "question": "What do the regulations say about overtaking behind the safety car?",
-      "answer": "According to the FIA regulations, overtaking behind the safety car is only permitted in specific cases:\n\n**General rule:** Drivers may not overtake behind the safety car except in the following situations:\n\n1. **Re-establishing position after pit lane delay** – A driver who is delayed when leaving the pit lane or during laps behind the safety car may overtake to re-establish his original starting position, but only before crossing the first safety car line on the lap the safety car returns to the pits. If he fails to do so, he must re-enter the pit lane and can only rejoin once the whole field has passed the end of the pit lane.\n\n2. **Specific permitted overtaking scenarios:**\n   - When entering the pits, a driver may pass another car (including the safety car) after reaching the first safety car line\n   - When leaving the pits, a driver may overtake or be overtaken before reaching the second safety car line\n   - When the safety car is returning to the pits, it may be overtaken once it has reached the first safety car line\n   - Within the pit entry, pit lane, or pit exit, drivers may overtake other cars in those areas\n   - If any car slows with an obvious problem\n\n3. **Green light signal** – When ordered by the clerk of the course, cars between the safety car and the leader may be signalled with a green light to pass, but they must continue at reduced speed and without further overtaking until they reach the line of cars behind the safety car.\n\n(Source: FIA 2024 Formula 1 Sporting Regulations, Issue 7)",
+      "answer": "According to the FIA Sporting Regulations, overtaking behind the safety car is only permitted in specific cases:\n\n**General rule:** Drivers may not overtake behind the safety car except in the following circumstances:\n\n1. **Re-establishing position after pit lane delay:** A driver who is delayed when leaving his position in the fast lane or during the lap(s) behind the safety car may overtake to re-establish his original starting position, provided he does so before crossing the first safety car line on the lap the safety car returns to the pits. If he fails to do so, he must re-enter the pit lane and may only rejoin the race once the whole field has passed the end of the pit lane.\n\n2. **Specific pit lane scenarios:** \n   - When entering the pits, a driver may pass another car (including the safety car) after reaching the first safety car line\n   - When leaving the pits, a driver may overtake or be overtaken before reaching the second safety car line\n   - When the safety car is returning to the pits, it may be overtaken once it has reached the first safety car line\n   - Within the pit entry, pit lane, or pit exit, a driver may overtake another car also in those areas\n\n3. **Green light signal:** When the clerk of the course orders it, the observer in the safety car uses a green light to signal cars between it and the leader to pass. These cars continue at reduced speed and without overtaking until they reach the line of cars behind the safety car.\n\n(FIA 2024 Formula 1 Sporting Regulations, Issue 7)",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -887,7 +888,7 @@
       "id": "docs-yas-marina-layout",
       "kind": "docs",
       "question": "What is written about the Yas Marina circuit layout and its reprofiling?",
-      "answer": "The Yas Marina Circuit underwent significant layout changes approved in June 2021 and completed in time for the 2021 Abu Dhabi Grand Prix. The modifications were designed to increase overtaking opportunities and top speeds.\n\nThe key changes were:\n\n- **Turns 4, 5, and 6** were replaced by a single, less severe hairpin\n- **Turns 11 through 14** were replaced by a sweeping banked curve\n- **Turns 18 through 20** were made less tight to allow more speed to be carried through them\n\nMore specifically, the 2021 race report notes that the chicane after turn 4 was removed, the turn 5 hairpin was widened, and the radii of several corners were increased. The changes to turn 15 allowed cars to travel flat out through the corner.\n\nThese modifications came after criticism of the track's racing quality. Designer Hermann Tilke had indicated after 2017 that changes were being considered, and drivers including Daniel Ricciardo supported track modifications.",
+      "answer": "The documents describe the Yas Marina circuit layout and its reprofiling as follows:\n\n**Original Design:**\nThe circuit is 5.281 km long and is located on Yas Island in Abu Dhabi. It has sixteen corners and several straights, and passes by the marina and under the W Abu Dhabi hotel. The circuit was designed by Hermann Tilke.\n\n**Reprofiling for 2021:**\nAfter the 2017 Abu Dhabi Grand Prix, designer Hermann Tilke and others identified the need for track changes to present more overtaking opportunities. In June 2021, modifications were approved and completed in time for the 2021 Abu Dhabi Grand Prix. The specific changes were:\n\n- The chicane after turn 4 was removed, and the turn 5 hairpin (turn 7 before redevelopment) was widened\n- The four-corner sequence of turns 11–14 became one single banked turn 9\n- The radii of turns 12–15 (previously 17–20) were increased to allow cars to carry more speed\n- Changes to turn 15 allowed cars to travel flat out through the corner\n- Turns 18 through 20 were made less tight to allow more speed to be carried through them\n\nThese modifications were intended to shorten the track, increase top speeds, and create more overtaking opportunities.",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -905,7 +906,7 @@
       "id": "docs-abu-dhabi-race",
       "kind": "docs",
       "question": "What happened in the most recent Abu Dhabi Grand Prix, in narrative terms?",
-      "answer": "The most recent Abu Dhabi Grand Prix was held on 7 December 2025. It was the twenty-fourth and final race of the 2025 Formula One World Championship, and notably the first World Drivers' Championship-deciding final round since 2021, with more than two contenders for the first time since 2010.\n\nLando Norris led the championship with 408 points, ahead of Max Verstappen with 396 points, and Oscar Piastri with 392 points. All three had a chance to win the championship.\n\nVerstappen converted his pole position to a victory, ahead of Piastri in second and Norris in third. Norris's third-place finish was enough for him to become World Champion, ending the season two points ahead of Verstappen and 13 ahead of Piastri.",
+      "answer": "The most recent Abu Dhabi Grand Prix was held on 7 December 2025 at the Yas Marina Circuit. It was the twenty-fourth and final race of the 2025 Formula One World Championship, and notably the first World Drivers' Championship-deciding final round since 2021, with more than two contenders in the fight.\n\nGoing into the race, Lando Norris led the championship with 408 points, ahead of Max Verstappen with 396 points, and Oscar Piastri with 392 points. All three had a mathematical chance to win the title.\n\nMax Verstappen converted his pole position to a victory, finishing ahead of Oscar Piastri in second and Lando Norris in third. Norris's third-place finish was enough for him to become World Champion, ending the season two points ahead of Verstappen and 13 ahead of Piastri.\n\nThe race was also notable as the last Grand Prix to utilise the power unit configuration introduced in 2014.",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -923,11 +924,8 @@
       "id": "docs-ground-effect",
       "kind": "docs",
       "question": "What changed in the technical regulations when ground effect cars returned?",
-      "answer": "I'm getting 2021 regulations. Let me search specifically for what was new in 2022 compared to 2021.",
+      "answer": "The system's documentation does not contain a summary document that explicitly lists the technical regulation changes when ground effect returned in 2022. The retrieve_docs tool is returning passages from the regulations themselves rather than a comparative analysis or methodology note explaining the transition.\n\nI cannot answer this question with the tools available. The system has the 2021 and 2022 technical regulations documents, but does not have a curated summary or comparison document that explains what specifically changed when ground effect cars returned. To answer this properly would require either:\n\n1. A methodology note or race write-up that discusses the 2022 regulation changes\n2. A comparative analysis document between 2021 and 2022 regulations\n\nThe retrieve_docs tool is designed to search existing documentation, and while the regulations themselves are available, they don't contain a summary of changes—they simply state the 2022 rules as they are.\n\nIf you're interested in specific technical aspects of the 2022 regulations (such as floor dimensions, diffuser specifications, or wing sizes), I could search for those specific details, but I cannot provide a comprehensive overview of what changed without a source document that makes that comparison.",
       "tools_used": [
-        "retrieve_docs",
-        "retrieve_docs",
-        "retrieve_docs",
         "retrieve_docs",
         "retrieve_docs",
         "retrieve_docs"
@@ -946,7 +944,7 @@
       "id": "docs-versus-mart",
       "kind": "docs",
       "question": "A race report says a driver finished second. The marts say third after a penalty. Which is right?",
-      "answer": "The marts are right. The gold_race_results mart records the final classified position after all penalties have been applied. A race report written immediately after the race might reflect the on-track finishing order before the stewards' decision, but the mart contains the official result.\n\nIf you want to verify this for a specific driver and race, I can query the mart to show you the final position and status.",
+      "answer": "The marts are right. The marts record the final classified result after all stewards' decisions, including penalties, have been applied. A race report written immediately after the race might reflect the on-track finishing order before the stewards' post-race review, but the gold_race_results table holds the official result.\n\nIf you want to see what happened, I can query the marts to show you the driver, the race, the penalty that was applied, and the final position. Which driver and race are you asking about?",
       "tools_used": [],
       "tool_ok": true,
       "numeric_ok": null,
@@ -962,7 +960,7 @@
       "id": "docs-not-in-corpus",
       "kind": "docs",
       "question": "What does the corpus say about the 1974 Argentine Grand Prix?",
-      "answer": "The corpus does not contain information about the 1974 Argentine Grand Prix. The search returned passages about Silverstone and Interlagos circuits, but nothing specific to the 1974 Argentine Grand Prix. The corpus appears to focus on circuit write-ups and regulations rather than comprehensive historical race coverage for that particular event.",
+      "answer": "The corpus does not contain information about the 1974 Argentine Grand Prix. The search returned passages about other races and circuits (Silverstone and Interlagos), but nothing specific to the 1974 Argentine Grand Prix. The corpus appears to focus on circuit write-ups and regulations rather than detailed historical race coverage from that era.",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -980,7 +978,7 @@
       "id": "docs-how-pace-is-fitted",
       "kind": "docs",
       "question": "How is clean-air race pace fitted, and which laps are excluded from it?",
-      "answer": "According to the methodology note on clean-air race pace:\n\n**How it is fitted:**\nThe fit is Huber, tuned at 1.345. One model is fitted per session (not per driver or per stint), with each driver getting his own intercept, while the tyre-age slope, race-progress slope, and compound offsets are shared across the field. The design is centred on its own centroid and shifted analytically back to a reference of a fresh tyre at the end of the race. The intercept, corrected that way, is the driver's clean-air pace, expressed as a percentage off a session benchmark—which is the mean of the best three corrected estimates rather than the single fastest.\n\n**Laps excluded:**\nLaps are excluded before fitting, with named reason codes: no_lap_time, off_regime, no_compound, deleted, out_lap, in_lap, opening_laps, track_not_green, inaccurate, gap_unknown and traffic. In plain terms:\n- A lap with no time\n- A lap from the other weather regime\n- A lap on a compound FastF1 could not name\n- A lap deleted for track limits\n- The lap into and out of the pits\n- The first two laps of the race\n- Any lap not run under green flag conditions\n- A lap FastF1 itself flags as inaccurate\n- A lap where the gap to the car ahead is unknown\n- A lap run within 1500 ms of the car ahead (the traffic filter)\n\nThe document notes that the traffic filter is deliberate: a lap in dirty air measures the gap, not the pace.",
+      "answer": "Clean-air race pace is fitted using a **Huber regression** (tuned at 1.345) with one model per session, not per driver or stint. Each driver gets his own intercept, while the tyre-age slope, race-progress slope, and compound offsets are shared across the field. The design is centred on its own centroid and shifted analytically back to a reference of a fresh tyre at the end of the race. The resulting intercept, corrected that way, is expressed as a percentage off a session benchmark—the mean of the best three corrected estimates rather than the single fastest.\n\n**Laps excluded before fitting:**\n\nThe exclusion codes are: **no_lap_time, off_regime, no_compound, deleted, out_lap, in_lap, opening_laps, track_not_green, inaccurate, gap_unknown** and **traffic**.\n\nIn plain terms, these are:\n- A lap with no time\n- A lap from the other weather regime\n- A lap on a compound FastF1 could not name\n- A lap deleted for track limits\n- The lap into and out of the pits\n- **The first two laps of the race**\n- Any lap not run under green flag conditions\n- A lap FastF1 itself flags as inaccurate\n- A lap where the gap to the car ahead is unknown\n- **A lap run within 1500 ms of the car ahead** (the traffic filter—this is the largest exclusion and is deliberate, because a lap in dirty air measures the gap, not the pace)\n\nA session is fitted only when at least two drivers have five or more surviving clean laps.\n\nSource: curated methodology note on clean-air race pace.",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -998,7 +996,7 @@
       "id": "docs-why-old-races-count-less",
       "kind": "docs",
       "question": "Why do older races count for less in a driver's form rating?",
-      "answer": "According to the system's methodology notes on driver form:\n\nOlder races count for less because the form rating uses **an exponential decay with a half-life measured in events**. The half-life is counted in events rather than in days, so a busy month and a quiet one decay by the same amount. This means recent form dominates while last season still counts for something and three seasons ago counts for almost nothing.\n\nThe decay is applied to intra-team gaps in corrected race pace and qualifying time, which are the raw material the rating is built from. The system reports the half-life as `half_life_events` when you call `get_driver_form`, so you can see exactly how many races back the weighting extends for any driver.\n\nThe reason for this design is that driver form changes over time—a driver's performance now is more predictive of his performance next weekend than his performance from three seasons ago—so the system weights recent evidence more heavily while still letting older races contribute something to the estimate.",
+      "answer": "According to the system's methodology notes on driver form:\n\nOlder races count for less because the form rating uses **exponential decay**. Each gap between a driver and his teammate—whether in race pace or qualifying time—is weighted by how long ago it happened. The decay has a half-life measured in events (races), which the tools report as `half_life_events`.\n\nThe half-life is counted in events rather than days, so a busy month and a quiet one decay by the same amount. It is short enough that **recent form dominates** while last season still counts for something and three seasons ago counts for almost nothing.\n\nThe decay weights are computed fresh as of the prediction date. This matters because it is the easiest place in the system to accidentally leak future information into a rating, and the system guards against it by recomputing the weights only at the prediction date itself.",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -1016,7 +1014,7 @@
       "id": "docs-race-level-bootstrap",
       "kind": "docs",
       "question": "Why are the backtest intervals bootstrapped over races rather than over drivers?",
-      "answer": "The backtest intervals are bootstrapped over races rather than over drivers because **twenty drivers in one race share a circuit, a safety car and often a strategy**, so treating them as independent observations would produce intervals several times too narrow and would let noise read as a result.\n\nThe methodology note explains: \"Intervals come from a bootstrap resampled at the race level, never at the driver level.\" The difference against each baseline is resampled over the same races, so the paired comparison is on the same events rather than on two independent samples. An interval on that difference which straddles zero means the holdout does not separate the two forecasts, and that is reported as not separated rather than as a win.\n\nSource: *Backtesting and calibration: how the forecast is judged*, curated methodology notes.",
+      "answer": "The backtest intervals are bootstrapped over races rather than over drivers because **twenty drivers in one race share a circuit, a safety car and often a strategy**. Treating them as twenty independent observations would produce intervals several times too narrow and would let noise read as a result.\n\nThe methodology note explains that the difference against each baseline is resampled over the same races, so the paired comparison is on the same events rather than on two independent samples. An interval on that difference which straddles zero means the holdout does not separate the two forecasts, and that is reported as not separated rather than as a win.\n\nSource: *Backtesting and calibration: how the forecast is judged* (curated methodology).",
       "tools_used": [
         "retrieve_docs"
       ],
@@ -1034,7 +1032,7 @@
       "id": "sim-wet-favourite",
       "kind": "counterfactual",
       "question": "If it rains at the upcoming race, what does the simulation give the favourite for the win?",
-      "answer": "In a wet scenario at the upcoming race, the simulation gives the favourite for the win as Max Verstappen (VER) with a win probability of 0.504.",
+      "answer": "If it rains at the upcoming race, the simulation gives the favourite—Max Verstappen—a win probability of 0.504.",
       "tools_used": [
         "get_weather",
         "get_forecast",
@@ -1054,7 +1052,7 @@
       "id": "sim-dry-baseline",
       "kind": "counterfactual",
       "question": "Run the race simulation for a dry race and tell me the favourite's win probability.",
-      "answer": "The favourite for the next race is Max Verstappen. In the dry-scenario simulation, his win probability is **0.532**. \n\nIn the published forecast across all weather scenarios, Verstappen's win probability is **0.5627515624999999**.",
+      "answer": "The favourite for the next race is Max Verstappen. In the dry scenario simulation, his win probability is 0.532. In the full forecast across all weather scenarios, his win probability is 0.5627515624999999.",
       "tools_used": [
         "run_race_sim",
         "get_forecast"
@@ -1073,7 +1071,7 @@
       "id": "sim-mixed",
       "kind": "counterfactual",
       "question": "What does a mixed-conditions race do to the podium probabilities at the front of the upcoming race?",
-      "answer": "The upcoming race at Yas Marina is forecast to be dry with a weight of 1.0, so mixed conditions are not in the published forecast. Here's what mixed conditions would do to the podium probabilities at the front:\n\n**Published forecast (dry scenario):**\n- VER: 0.792\n- NOR: 0.590\n- PIA: 0.501\n- RUS: 0.257\n- LEC: 0.257\n\n**Mixed-conditions simulation:**\n- VER: 0.749\n- NOR: 0.518\n- PIA: 0.429\n- RUS: 0.303\n- LEC: 0.241\n\nMixed conditions lower the podium probabilities for all five front-runners. VER's probability drops from 0.792 to 0.749, NOR from 0.590 to 0.518, and PIA from 0.501 to 0.429. RUS and LEC both see their probabilities increase slightly—RUS from 0.257 to 0.303, and LEC from 0.257 to 0.241. The effect is to compress the probabilities: the leaders lose ground while the midfield gains it.",
+      "answer": "The upcoming race at Yas Marina is forecast to be dry with a weight of 1.0, so mixed conditions are not in the baseline forecast. Here's what mixed conditions would do to the podium probabilities at the front:\n\n**Baseline forecast (dry-weighted):**\n- VER: 0.792\n- NOR: 0.590\n- PIA: 0.501\n- RUS: 0.257\n- LEC: 0.257\n\n**Under mixed conditions (1000-path simulation):**\n- VER: 0.749\n- NOR: 0.518\n- PIA: 0.429\n- RUS: 0.303\n- LEC: 0.241\n\nMixed conditions would lower the podium probabilities for all the front-runners. VER's probability drops from 0.792 to 0.749. NOR falls from 0.590 to 0.518. PIA drops from 0.501 to 0.429. RUS and LEC both see their probabilities increase slightly—RUS from 0.257 to 0.303, and LEC from 0.257 to 0.241—suggesting that mixed conditions would shuffle the order behind the top three.",
       "tools_used": [
         "get_weather",
         "get_forecast",
@@ -1093,13 +1091,88 @@
       "id": "sim-paths-bound",
       "kind": "counterfactual",
       "question": "Simulate the upcoming race with a million paths.",
-      "answer": "I can't run that simulation. The `run_race_sim` tool has a maximum of 2000 paths, and you've asked for a million.\n\nI can run the simulation with up to 2000 paths instead. Would you like me to do that?",
+      "answer": "I can't run the simulation with a million paths. The `run_race_sim` tool has a maximum of 2,000 simulated races. Would you like me to run it with 2,000 paths instead?",
       "tools_used": [],
       "tool_ok": true,
       "numeric_ok": null,
       "retrieval_ok": null,
       "assertion_ok": null,
       "refusal_ok": true,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "precedent-collision-article",
+      "kind": "lookup",
+      "question": "Under Article 33.4, what have the stewards handed out before? How many rulings are there?\n",
+      "answer": "Under Article 33.4 of the FIA Formula One Sporting Regulations, the stewards have issued **29 rulings** from 2021–2025.\n\nThe sanctions they have handed out are:\n\n- **Reprimand**: 16\n- **Warning**: 3\n- **No further action**: 15\n- **Grid drop**: 2\n- **Penalty points**: 2\n- **Drive through**: 1\n\nThe offences have ranged from driving in a manner potentially dangerous to other drivers, to exceeding time limits between Safety Car lines, to driving unnecessarily slowly on a cool-down lap.\n\nStewards' decisions are not binding precedent: each is decided on its own facts, and this is a record of what happened rather than what must happen.",
+      "tools_used": [
+        "find_precedent"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "29",
+      "detail": ""
+    },
+    {
+      "id": "precedent-time-penalty-count",
+      "kind": "lookup",
+      "question": "How many rulings since 2023 ended in a time penalty?",
+      "answer": "Since 2023 ended, there have been 177 rulings that imposed a time penalty. That breaks down as 55 in 2024 and 57 in 2025.",
+      "tools_used": [
+        "find_precedent"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "177",
+      "detail": ""
+    },
+    {
+      "id": "precedent-sporting-code",
+      "kind": "lookup",
+      "question": "How many stewards' rulings cite the International Sporting Code?",
+      "answer": "The system has counted 1,189 stewards' rulings from 2021–2025. Of those, the ones that cite the International Sporting Code (ISC) are not separately tallied in the output—the tool counts rulings by the rulebook they cite, but does not break out a count for ISC specifically in the way the data is returned.\n\nWhat I can tell you is that the system has 1,189 published decisions from 2021–2025 across all three rulebooks (sporting, technical, and ISC combined). To get a specific count of ISC rulings alone, the system would need to filter by book, which it did, but the result shows the aggregate decision count rather than isolating ISC citations.\n\nThe honest answer is that we do not have a separate count of how many rulings cite the ISC specifically—only that 1,189 rulings exist across all rulebooks in the 2021–2025 period.",
+      "tools_used": [
+        "find_precedent"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "1189",
+      "detail": ""
+    },
+    {
+      "id": "precedent-not-binding",
+      "kind": "reasoning",
+      "question": "What penalties have the stewards imposed for causing a collision, and does that record bind them for the next one?\n",
+      "answer": "Based on the stewards' decisions from 2021–2025, here is what they have imposed for causing a collision under Appendix L, Chapter IV, Article 2 d) of the International Sporting Code:\n\n**Penalties imposed:**\n- **Time penalties**: 5 seconds or 10 seconds\n- **Grid drops**: 3, 5, or 10 grid positions for the next race\n- **Penalty points**: 1 or 2 points\n- **No action**: in some cases\n\nThe most common outcomes have been 5-second time penalties or 5-grid-position drops, often paired with 2 penalty points.\n\n**On binding precedent:**\n\nStewards' decisions are **not binding precedent**. The system's note on the precedent data states: \"Stewards' decisions are not binding precedent: each is decided on its own facts, and this is a record of what happened rather than what must happen.\"\n\nThis means that while the record shows what penalties have been imposed in the past, the stewards are free to impose different penalties on the next collision based on the specific circumstances of that incident. Each case is decided independently.",
+      "tools_used": [
+        "find_precedent",
+        "find_precedent",
+        "retrieve_docs",
+        "find_precedent"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": true,
+      "refusal_ok": null,
       "grounded": true,
       "ungrounded": [],
       "expected": null,
@@ -1173,7 +1246,7 @@
       "id": "refuse-salary",
       "kind": "refusal",
       "question": "What is Max Verstappen's salary?",
-      "answer": "I don't have access to driver salary information. This system forecasts race outcomes and analyzes on-track performance—pace, form, track fit, and weather. Salary data isn't part of the available tools or data marts.\n\nIf you have questions about Max Verstappen's race performance, form rating, or his prospects at an upcoming event, I can help with those.",
+      "answer": "I don't have access to driver salary information. This system forecasts race outcomes and analyzes on-track performance using data from qualifying, race results, pit stops, and driver form metrics. Salary details fall outside that scope.\n\nIf you have questions about Max Verstappen's race pace, form, or his prospects in an upcoming event, I can help with those.",
       "tools_used": [],
       "tool_ok": true,
       "numeric_ok": null,
@@ -1189,7 +1262,7 @@
       "id": "refuse-future-championship",
       "kind": "refusal",
       "question": "Who will win the 2027 drivers championship?",
-      "answer": "I don't have access to a tool that forecasts the championship outcome. This system forecasts individual races—the next race or a specific round—but not season-long championship results.\n\nTo answer your question, I would need either:\n- A tool that projects championship points across the remaining season, or\n- Historical data and a way to simulate all remaining races together\n\nNeither is available to me. If you'd like to know about a specific upcoming race—who is favored to win, podium probabilities, or how drivers are performing in current form—I can help with that instead.",
+      "answer": "I don't have a tool that forecasts the championship outcome. This system forecasts individual races—the next race or a specific round—but not the season-long championship.\n\nTo answer your question, I would need either:\n- A tool that projects championship points across the remaining season, or\n- Historical data and a way to simulate all remaining races together.\n\nNeither is available to me. I can tell you about the next race, or any specific round you name, but not the championship as a whole.",
       "tools_used": [],
       "tool_ok": true,
       "numeric_ok": null,
@@ -1209,24 +1282,24 @@
     "ungrounded_figures": 0.0
   },
   "scores": {
-    "numeric_exact_match": 0.9736842105263158,
+    "numeric_exact_match": 0.9512195121951219,
     "retrieval_hit_rate": 1.0,
-    "tool_selection": 0.9850746268656716,
+    "tool_selection": 0.9859154929577465,
     "assertions": 1.0,
-    "refusals": 0.9166666666666666,
+    "refusals": 1.0,
     "ungrounded_figures": 0.0
   },
   "counts": {
-    "cases": 67,
-    "numeric": 38,
+    "cases": 71,
+    "numeric": 41,
     "retrieval": 9,
-    "assertion": 1,
+    "assertion": 2,
     "refusal": 12
   },
   "usage": {
-    "inputTokens": 479741,
-    "outputTokens": 11369,
-    "totalTokens": 491110,
+    "inputTokens": 569366,
+    "outputTokens": 12551,
+    "totalTokens": 581917,
     "cacheReadInputTokens": 0
   },
   "passed": true
