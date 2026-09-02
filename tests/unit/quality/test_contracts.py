@@ -53,6 +53,7 @@ def test_every_table_has_a_contract():
         "session_laps",
         "incidents",
         "incident_articles",
+        "incident_sanctions",
     }
 
 

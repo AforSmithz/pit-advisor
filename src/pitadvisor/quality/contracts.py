@@ -145,6 +145,22 @@ class IncidentRow(BronzeRow):
     raw_key: str
 
 
+class IncidentSanctionRow(BronzeRow):
+    document: int | None = None
+    entry: int = Field(ge=0)
+    # one decision carries several: a driver penalty, its points and a fine on the team
+    ordinal: int = Field(ge=0)
+    kind: str
+    seconds: int | None = Field(default=None, ge=0)
+    positions: int | None = Field(default=None, ge=0)
+    points: int | None = Field(default=None, ge=0)
+    points_total: int | None = Field(default=None, ge=0)
+    amount: int | None = Field(default=None, ge=0)
+    currency: str | None = None
+    text: str
+    raw_key: str
+
+
 class IncidentArticleRow(BronzeRow):
     document: int | None = None
     entry: int = Field(ge=0)
@@ -165,6 +181,7 @@ TABLES: dict[str, type[BronzeRow]] = {
     "session_laps": SessionLapRow,
     "incidents": IncidentRow,
     "incident_articles": IncidentArticleRow,
+    "incident_sanctions": IncidentSanctionRow,
 }
 
 
