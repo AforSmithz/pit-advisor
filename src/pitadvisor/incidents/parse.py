@@ -8,6 +8,16 @@ from pydantic import BaseModel
 # the pdf text layer separates every word with a non-breaking space, so a span stored before
 # normalising will not match the text it was taken from
 NBSP: Final = "\u00a0"
+# the pdf uses typographic punctuation and a reader copying a quote out of it types the ascii
+TYPOGRAPHIC: Final = {
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u2013": "-",
+    "\u2014": "-",
+    "\u2212": "-",
+}
 
 # 2021 and 2022 label the charge "Offence" and 2023 onwards labels it "Infringement", in the
 # document title and in the field block both. reading only one of them loses two seasons
@@ -88,8 +98,37 @@ def normalize(text: str) -> str:
 
 def collapse(text: str) -> str:
     # a field value wraps mid sentence in the pdf, so a stored span and the text it is checked
-    # against have to be folded the same way or every multi line field fails verification
-    return re.sub(r"\n(?!\n)", " ", normalize(text))
+    # against have to be folded the same way or every multi line field fails verification. the
+    # wrapped line is indented, so the run of spaces it leaves behind is squeezed after the join
+    # and not before, or a quote copied by a reader with single spaces will not be found
+    return re.sub(r"[ \t]{2,}", " ", re.sub(r"\n(?!\n)", " ", normalize(text)))
+
+
+def _fold(text: str) -> tuple[str, list[int]]:
+    kept: list[str] = []
+    offsets: list[int] = []
+    for index, character in enumerate(text):
+        if character.isspace():
+            continue
+        kept.append(TYPOGRAPHIC.get(character, character))
+        offsets.append(index)
+    return "".join(kept), offsets
+
+
+def locate(quote: str, source: str) -> str | None:
+    # the pdf breaks a word across a space and prints a curly apostrophe, and a reader copying a
+    # quote out of it will not reproduce either. matching without whitespace or smart punctuation
+    # and then slicing the source keeps what we store a literal substring of the document
+    needle, _ = _fold(quote)
+    if not needle:
+        return None
+    if quote in source:
+        return quote
+    folded, offsets = _fold(source)
+    at = folded.find(needle)
+    if at < 0:
+        return None
+    return source[offsets[at] : offsets[at + len(needle) - 1] + 1]
 
 
 def _issued(text: str) -> datetime | None:
@@ -149,7 +188,7 @@ def _books(charge: str) -> list[tuple[int, int, Book, str, int | None]]:
     return found
 
 
-def _articles(charge: str | None) -> list[Article]:
+def articles(charge: str | None) -> list[Article]:
     if not charge:
         return []
     books = _books(charge)
@@ -198,7 +237,7 @@ def parse(raw: str) -> Decision:
         session=fields.get("Session"),
         fact=fields.get("Fact"),
         charge=charge,
-        articles=_articles(charge),
+        articles=articles(charge),
         outcome=fields.get("Decision"),
         reason=reason,
         summoned=[int(n) for n in NUMBER.findall(summons.group(1))] if summons else [],

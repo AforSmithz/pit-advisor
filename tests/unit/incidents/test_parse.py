@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pitadvisor.incidents.parse import Book, parse, verify
+from pitadvisor.incidents.parse import Book, locate, parse, verify
 
 NB = "\u00a0"
 
@@ -154,3 +154,20 @@ def test_a_document_with_no_field_block_is_flagged_for_the_model():
     assert found.document == 43
     assert found.issued == datetime(2023, 5, 14, 12, 42)
     assert found.car is None
+
+
+def test_a_quote_typed_with_ascii_punctuation_finds_the_typographic_source():
+    source = "non-compliance with the Race Director\u2019s Event Notes, item 1"
+    found = locate("Race Director's Event Notes", source)
+    assert found == "Race Director\u2019s Event Notes"
+
+
+def test_a_quote_finds_text_the_pdf_broke_with_a_stray_space():
+    source = "reviewed on -board cameras and the driver Geor ge Russell"
+    assert locate("on-board cameras", source) == "on -board cameras"
+    assert locate("George Russell", source) == "Geor ge Russell"
+
+
+def test_a_quote_the_document_does_not_contain_is_not_located():
+    assert locate("10 second time penalty", "No further action.") is None
+    assert locate("", "No further action.") is None
