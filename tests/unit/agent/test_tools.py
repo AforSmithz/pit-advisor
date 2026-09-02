@@ -320,3 +320,79 @@ def test_a_failed_athena_query_says_why():
     with pytest.raises(ToolError) as caught:
         marts.rows("select 1")
     assert "boom" in str(caught.value)
+
+
+@pytest.fixture
+def precedent_marts(tmp_path):
+    path = tmp_path / "precedent.duckdb"
+    connection = duckdb.connect(str(path))
+    connection.sql(
+        "create table gold_incident_precedent as select * from (values "
+        "(2024, 5, 'Sample GP', 41, 'Jo Mercier', 'Cobalt', 'Race', 'Collision.', "
+        "'Breach of Article 33.4.', 'sporting', 'Article 33.4', 'time_penalty', 10, null, 2, "
+        "'raw/a.pdf'), "
+        "(2023, 9, 'Other GP', 22, 'Rae Okonkwo', 'Halden', 'Race', 'Collision.', "
+        "'Breach of Article 33.4.', 'sporting', 'Article 33.4', 'time_penalty', 5, null, 1, "
+        "'raw/b.pdf'), "
+        "(2023, 9, 'Other GP', 23, 'Sam Vega', 'Halden', 'Race', 'Impeding.', "
+        "'Breach of Article 37.5.', 'sporting', 'Article 37.5', 'grid_drop', null, 3, null, "
+        "'raw/c.pdf')"
+        ") as t(season, round, race_name, document, driver, competitor, session, fact, charge, "
+        "rule_book, rule_code, sanction_kind, sanction_seconds, sanction_positions, "
+        "sanction_points, raw_key)"
+    )
+    connection.sql("alter table gold_incident_precedent add column outcome varchar")
+    connection.close()
+    return DuckDBMarts(path)
+
+
+def test_precedent_counts_come_from_the_query_not_from_the_examples(box, precedent_marts):
+    result = invoke(
+        Toolbox(store=box.store, marts=precedent_marts),
+        "find_precedent",
+        {"rule_code": "Article 33", "examples": 1},
+    )
+    assert result.ok
+    assert result.payload["matched"] == 2
+    assert result.payload["by_sanction"] == {"time_penalty": 2}
+    assert result.payload["time_penalty_seconds"] == [5, 10]
+    assert len(result.payload["examples"]) == 1
+
+
+def test_a_rule_code_matches_on_its_start_so_a_whole_article_can_be_asked_for(box, precedent_marts):
+    result = invoke(
+        Toolbox(store=box.store, marts=precedent_marts), "find_precedent", {"rule_code": "Article"}
+    )
+    assert result.payload["matched"] == 3
+    assert set(result.payload["by_sanction"]) == {"time_penalty", "grid_drop"}
+
+
+def test_precedent_says_it_is_not_binding(box, precedent_marts):
+    result = invoke(Toolbox(store=box.store, marts=precedent_marts), "find_precedent", {})
+    assert "not binding precedent" in result.payload["note"]
+
+
+def test_a_season_filter_narrows_the_count(box, precedent_marts):
+    result = invoke(
+        Toolbox(store=box.store, marts=precedent_marts), "find_precedent", {"since": 2024}
+    )
+    assert result.payload["matched"] == 1
+    assert result.payload["by_season"] == {"2024": 1}
+
+
+def test_a_rulebook_that_does_not_exist_is_a_mistake_not_an_empty_answer(box, precedent_marts):
+    result = invoke(
+        Toolbox(store=box.store, marts=precedent_marts), "find_precedent", {"book": "appendix"}
+    )
+    assert not result.ok
+    assert "is not a rulebook" in result.detail
+
+
+def test_nothing_matching_says_how_to_widen_it(box, precedent_marts):
+    result = invoke(
+        Toolbox(store=box.store, marts=precedent_marts),
+        "find_precedent",
+        {"rule_code": "Article 99"},
+    )
+    assert not result.ok
+    assert "widen it" in result.detail

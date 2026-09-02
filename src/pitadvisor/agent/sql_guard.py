@@ -12,6 +12,7 @@ ALLOWED_TABLES: Final = (
     "gold_race_results",
     "gold_qualifying_gaps",
     "gold_pit_stop_summary",
+    "gold_incident_precedent",
 )
 MAX_LIMIT: Final = 200
 

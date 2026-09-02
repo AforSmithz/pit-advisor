@@ -196,6 +196,23 @@ class DocQuery(BaseModel, frozen=True):
     )
 
 
+class Precedent(BaseModel, frozen=True):
+    rule_code: str | None = Field(
+        default=None,
+        description="A rule as the stewards write it, e.g. 'Article 33.3' or 'Appendix L "
+        "Chapter IV Article 2 c)'. Matched on the start of the code.",
+    )
+    book: str | None = Field(
+        default=None, description="Which rulebook: sporting, technical or isc."
+    )
+    sanction_kind: str | None = Field(
+        default=None,
+        description="Only rulings that imposed this, e.g. time_penalty, grid_drop, none.",
+    )
+    since: int | None = Field(default=None, description="Earliest season to count.")
+    examples: int = Field(default=5, ge=0, le=25, description="How many rulings to quote back.")
+
+
 class SimRequest(BaseModel, frozen=True):
     event: str = Field(default="next", description="'next' or 'season:round'.")
     scenario: str = Field(default="dry", description="'dry', 'mixed' or 'wet'.")
@@ -411,6 +428,48 @@ class Toolbox:
             citations=[str(item.get("uri", "")) for item in passages if item.get("uri")],
         )
 
+    def find_precedent(self, request: Precedent) -> ToolResult:
+        if self.marts is None:
+            raise ToolError("no mart backend is configured for this session")
+        if request.book is not None and request.book not in BOOKS:
+            raise ToolError(f"{request.book!r} is not a rulebook. they are {', '.join(BOOKS)}")
+        rows = self.marts.rows(guard(_precedent_sql(request)))
+        if not rows:
+            raise ToolError(
+                "no ruling in 2021-2025 matches that. widen it: drop the sanction, the season "
+                "or the rule, or search retrieve_docs for the rule text instead"
+            )
+        counts: dict[str, int] = {}
+        seasons: dict[str, int] = {}
+        for row in rows:
+            kind = str(row.get("sanction_kind") or "not typed")
+            counts[kind] = counts.get(kind, 0) + 1
+            season = str(row.get("season"))
+            seasons[season] = seasons.get(season, 0) + 1
+        seconds = [int(row["sanction_seconds"]) for row in rows if row.get("sanction_seconds")]
+        positions = [
+            int(row["sanction_positions"]) for row in rows if row.get("sanction_positions")
+        ]
+        payload: dict[str, Any] = {
+            "matched": len(rows),
+            "by_sanction": dict(sorted(counts.items(), key=lambda pair: -pair[1])),
+            "by_season": dict(sorted(seasons.items())),
+            "time_penalty_seconds": sorted(set(seconds)),
+            "grid_positions": sorted(set(positions)),
+            "examples": _jsonable(rows[: request.examples]),
+            "note": (
+                "Counted from the published decisions, 2021-2025. Stewards' decisions are not "
+                "binding precedent: each is decided on its own facts, and this is a record of "
+                "what happened rather than what must happen."
+            ),
+        }
+        return ToolResult(
+            tool="find_precedent",
+            ok=True,
+            payload=payload,
+            citations=sorted({str(row["raw_key"]) for row in rows if row.get("raw_key")})[:25],
+        )
+
     def run_race_sim(self, request: SimRequest) -> ToolResult:
         if self.sim is None:
             raise ToolError("no simulator is configured for this session")
@@ -470,6 +529,52 @@ def _parsed(event: str) -> tuple[int, int]:
 
 def _dump(value: BaseModel | None) -> dict[str, Any] | None:
     return None if value is None else value.model_dump(mode="json")
+
+
+BOOKS: Final = ("sporting", "technical", "isc")
+
+PRECEDENT_COLUMNS: Final = (
+    "season",
+    "round",
+    "race_name",
+    "document",
+    "driver",
+    "competitor",
+    "session",
+    "fact",
+    "charge",
+    "outcome",
+    "rule_book",
+    "rule_code",
+    "sanction_kind",
+    "sanction_seconds",
+    "sanction_positions",
+    "sanction_points",
+    "raw_key",
+)
+
+
+def _quoted(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _precedent_sql(request: "Precedent") -> str:
+    where: list[str] = []
+    if request.rule_code:
+        # matched on the start of the code, so "Article 33" finds 33.3 and 33.4 as well
+        where.append(f"rule_code like {_quoted(request.rule_code + '%')}")
+    if request.book:
+        where.append(f"rule_book = {_quoted(request.book)}")
+    if request.sanction_kind:
+        where.append(f"sanction_kind = {_quoted(request.sanction_kind)}")
+    if request.since:
+        where.append(f"season >= {int(request.since)}")
+    clause = " where " + " and ".join(where) if where else ""
+    columns = ", ".join(PRECEDENT_COLUMNS)
+    return (
+        f"select {columns} from gold_incident_precedent{clause} "
+        "order by season desc, round desc, document desc"
+    )
 
 
 def _jsonable(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -600,6 +705,14 @@ TOOLS: Final[tuple[Tool, ...]] = (
         "are computed. Returns passages to cite.",
         DocQuery,
         _bind(Toolbox.retrieve_docs),
+    ),
+    Tool(
+        "find_precedent",
+        "What the stewards have done before for a given rule or sanction, counted from the "
+        "published decisions of 2021-2025, with rulings to quote. Counts come from the query, "
+        "never from reading the examples.",
+        Precedent,
+        _bind(Toolbox.find_precedent),
     ),
     Tool(
         "run_race_sim",
