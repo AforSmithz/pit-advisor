@@ -272,7 +272,10 @@ def test_dev_user_writes_only_the_landing_prefixes(data_template: Template) -> N
         assert prefix in target
     # docs/ joined the list when the corpus builder became a laptop command
     assert "docs/*" in target
-    assert "cache/" not in target
+    # and cache/incidents when reading the stewards' prose became one. the rest of cache/ is the
+    # fastf1 session cache and stays the pipeline's
+    assert "cache/incidents/*" in target
+    assert "cache/*" not in target
 
 
 def test_dev_user_gets_cost_explorer_reads(observability_template: Template) -> None:

@@ -28,14 +28,19 @@ SCAN_CAP_BYTES = 1024**3
 # what a laptop may write. dbt on the athena target needs silver and gold too
 LAPTOP_PREFIXES = ("raw", "bronze", "silver", "gold", "quarantine", "views", "docs")
 
+# reading the stewards' prose costs bedrock tokens and is paid for from a laptop, so the one
+# cache subtree those readings land in is writable from one. the fastf1 cache still is not
+LAPTOP_CACHE_PREFIXES = ("cache/incidents",)
+
 # the pipeline also keeps the fastf1 cache warm, which a laptop has no reason to touch
 PIPELINE_PREFIXES = (*LAPTOP_PREFIXES, "cache")
 
 WRITE_PREFIXES = (
     "Write access is granted per prefix rather than per object. Keys inside the lake are "
     "generated from source, season, event and session, or by dbt, so an object-level list "
-    "would be rewritten on every partition change. docs/ and cache/ stay unwritable from a "
-    "laptop: they belong to the knowledge base and to the session ingest."
+    "would be rewritten on every partition change. cache/ stays unwritable from a laptop apart "
+    "from cache/incidents, which holds readings a laptop pays for; the fastf1 cache under it "
+    "belongs to the session ingest."
 )
 
 CATALOG_WILDCARD = (
@@ -181,7 +186,8 @@ class DataStack(Stack):
                 iam.PolicyStatement(
                     actions=["s3:PutObject", "s3:DeleteObject"],
                     resources=[
-                        self.bucket.arn_for_objects(f"{prefix}/*") for prefix in LAPTOP_PREFIXES
+                        self.bucket.arn_for_objects(f"{prefix}/*")
+                        for prefix in (*LAPTOP_PREFIXES, *LAPTOP_CACHE_PREFIXES)
                     ],
                 ),
                 iam.PolicyStatement(
@@ -243,7 +249,7 @@ class DataStack(Stack):
                     id=f"AwsSolutions-IAM5[Resource::<DataBucketE3889A50.Arn>/{prefix}/*]",
                     reason=WRITE_PREFIXES,
                 )
-                for prefix in LAPTOP_PREFIXES
+                for prefix in (*LAPTOP_PREFIXES, *LAPTOP_CACHE_PREFIXES)
             ),
             Acknowledgment(
                 id=(
