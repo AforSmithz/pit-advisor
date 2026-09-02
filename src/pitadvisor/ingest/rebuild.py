@@ -222,13 +222,15 @@ def read_document(store: ObjectStore, found: RawObject) -> lake.Reading | None:
     kind = lake.kind_of(found.key)
     if kind is None:
         return None
-    decision = parse_decision(pdf_text(store.get(found.key)))
-    if decision.structured:
-        return lake.Reading(raw_key=found.key, kind=kind, read_by=lake.PARSED, decisions=[decision])
+    # the cache is consulted before the pdf is opened: a document already read is that reading,
+    # and pulling the text out of every document again is the slowest part of a replay
     cached = lake.cache_key(found.key)
-    if not store.exists(cached):
+    if store.exists(cached):
+        return lake.load(store.get(cached))
+    decision = parse_decision(pdf_text(store.get(found.key)))
+    if not decision.structured:
         return None
-    return lake.load(store.get(cached))
+    return lake.Reading(raw_key=found.key, kind=kind, read_by=lake.PARSED, decisions=[decision])
 
 
 def rebuild_incidents(
@@ -236,6 +238,7 @@ def rebuild_incidents(
 ) -> list[IngestOutcome]:
     incidents: dict[tuple[int, int], list[contracts.IncidentRow]] = {}
     articles: dict[tuple[int, int], list[contracts.IncidentArticleRow]] = {}
+    imposed: dict[tuple[int, int], list[contracts.IncidentSanctionRow]] = {}
     raw_keys: dict[tuple[int, int], list[str]] = {}
     unread: dict[tuple[int, int], int] = {}
     for found in objects:
@@ -246,9 +249,10 @@ def rebuild_incidents(
         if reading is None:
             unread[marker] = unread.get(marker, 0) + 1
             continue
-        seen, cited = lake.rows(reading, found.season, found.round, stamp)
-        incidents.setdefault(marker, []).extend(seen)
-        articles.setdefault(marker, []).extend(cited)
+        built = lake.rows(reading, found.season, found.round, stamp)
+        incidents.setdefault(marker, []).extend(built.incidents)
+        articles.setdefault(marker, []).extend(built.articles)
+        imposed.setdefault(marker, []).extend(built.sanctions)
         raw_keys.setdefault(marker, []).append(found.key)
     outcomes: list[IngestOutcome] = []
     for marker in sorted(set(incidents) | set(unread)):
@@ -256,11 +260,13 @@ def rebuild_incidents(
         key = EventKey(season=season, round=round_)
         seen = incidents.get(marker, [])
         cited = articles.get(marker, [])
+        ruled = imposed.get(marker, [])
         written = [
             path
             for path in (
                 write_bronze(store, "incidents", key, seen) if seen else None,
                 write_bronze(store, "incident_articles", key, cited) if cited else None,
+                write_bronze(store, "incident_sanctions", key, ruled) if ruled else None,
             )
             if path is not None
         ]

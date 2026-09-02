@@ -51,20 +51,20 @@ def test_the_cache_key_mirrors_the_raw_key():
 
 
 def test_each_car_is_its_own_row_with_an_ordinal():
-    incidents, _ = lake.rows(reading(), 2024, 17, STAMP)
+    incidents = lake.rows(reading(), 2024, 17, STAMP).incidents
     assert [(row.entry, row.car) for row in incidents] == [(0, 1), (1, 31)]
     assert {row.season for row in incidents} == {2024}
     assert {row.read_by for row in incidents} == {lake.EXTRACTED}
 
 
 def test_an_unverified_field_lands_on_the_entry_it_belongs_to():
-    incidents, _ = lake.rows(reading(), 2024, 17, STAMP)
+    incidents = lake.rows(reading(), 2024, 17, STAMP).incidents
     assert incidents[0].unverified == []
     assert incidents[1].unverified == ["reason"]
 
 
 def test_citations_come_out_as_their_own_rows():
-    _, articles = lake.rows(reading(), 2024, 17, STAMP)
+    articles = lake.rows(reading(), 2024, 17, STAMP).articles
     assert [(row.entry, row.code, row.book) for row in articles] == [
         (1, "Article 33.3", "sporting")
     ]
@@ -72,7 +72,7 @@ def test_citations_come_out_as_their_own_rows():
 
 
 def test_a_row_carries_the_document_it_was_read_from():
-    incidents, _ = lake.rows(reading(), 2024, 17, STAMP)
+    incidents = lake.rows(reading(), 2024, 17, STAMP).incidents
     assert {row.raw_key for row in incidents} == {RAW_KEY}
     assert {row.document for row in incidents} == {62}
 
@@ -107,3 +107,25 @@ def test_the_last_record_for_a_key_wins_and_a_failure_is_dropped():
     found = lake.read_jsonl("\n".join(json.dumps(line) for line in lines))
     assert [item.raw_key for item in found] == [RAW_KEY]
     assert found[0].input_tokens == 10
+
+
+def test_a_sanction_row_comes_off_the_outcome():
+    found = reading(
+        decisions=[
+            Decision(
+                document=62,
+                car=1,
+                outcome=(
+                    "10 second time penalty. 2 penalty points (total of 4 for the 12 month period)."
+                ),
+            )
+        ],
+        unverified=[],
+    )
+    imposed = lake.rows(found, 2024, 17, STAMP).sanctions
+    assert [
+        (row.ordinal, row.kind, row.seconds, row.points, row.points_total) for row in imposed
+    ] == [
+        (0, "time_penalty", 10, None, None),
+        (1, "penalty_points", None, 2, 4),
+    ]

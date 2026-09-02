@@ -4,10 +4,11 @@ from typing import Any, Final
 
 from pydantic import BaseModel
 
-from pitadvisor.quality.contracts import IncidentArticleRow, IncidentRow
+from pitadvisor.quality.contracts import IncidentArticleRow, IncidentRow, IncidentSanctionRow
 from pitadvisor.types import Layer
 
 from .parse import Decision
+from .sanctions import sanctions
 
 KINDS: Final = ("decision", "offence", "infringement")
 PARSED: Final = "parsed"
@@ -51,11 +52,16 @@ def _loose(unverified: list[str], entry: int) -> list[str]:
     return [name.removeprefix(head) for name in unverified if name.startswith(head)]
 
 
-def rows(
-    reading: Reading, season: int, round_: int, stamp: dict[str, Any]
-) -> tuple[list[IncidentRow], list[IncidentArticleRow]]:
+class Rows(BaseModel, frozen=True):
     incidents: list[IncidentRow] = []
     articles: list[IncidentArticleRow] = []
+    sanctions: list[IncidentSanctionRow] = []
+
+
+def rows(reading: Reading, season: int, round_: int, stamp: dict[str, Any]) -> Rows:
+    incidents: list[IncidentRow] = []
+    articles: list[IncidentArticleRow] = []
+    imposed: list[IncidentSanctionRow] = []
     for entry, decision in enumerate(reading.decisions):
         incidents.append(
             IncidentRow(
@@ -94,7 +100,27 @@ def rows(
             )
             for article in decision.articles
         ]
-    return incidents, articles
+        imposed += [
+            IncidentSanctionRow(
+                **stamp,
+                season=season,
+                round=round_,
+                document=decision.document,
+                entry=entry,
+                ordinal=ordinal,
+                kind=sanction.kind,
+                seconds=sanction.seconds,
+                positions=sanction.positions,
+                points=sanction.points,
+                points_total=sanction.points_total,
+                amount=sanction.amount,
+                currency=sanction.currency,
+                text=sanction.text,
+                raw_key=reading.raw_key,
+            )
+            for ordinal, sanction in enumerate(sanctions(decision.outcome))
+        ]
+    return Rows(incidents=incidents, articles=articles, sanctions=imposed)
 
 
 def migrate(record: dict[str, Any]) -> Reading:
