@@ -19,7 +19,7 @@ from pitadvisor.agent.runtime import agent_for
 from pitadvisor.config import Settings, boto_session, get_settings
 from pitadvisor.features import assemble as feature_assemble
 from pitadvisor.ingest import docs as doc_corpus
-from pitadvisor.ingest import jolpica
+from pitadvisor.ingest import fia_docs, jolpica
 from pitadvisor.ingest.fastf1_session import backfill as session_backfill
 from pitadvisor.ingest.fastf1_session import ingest_session
 from pitadvisor.ingest.ratelimit import (
@@ -305,6 +305,27 @@ def ingest(
     elif source is Source.OPEN_METEO:
         limiter = RateLimiter(bucket_for("open_meteo"))
         outcomes = _ingest_weather(store, ledger, limiter, run_id, season, round_)
+    elif source is Source.FIA_DOCS:
+        limiter = RateLimiter(bucket_for("fia_docs"))
+        rounds = _race_rounds(store)
+        if season not in rounds:
+            raise typer.BadParameter(f"no races in the lake for {season}, ingest jolpica first")
+        walked = fia_docs.walk(
+            RawStore(store),
+            ledger,
+            run_id,
+            rounds,
+            limiter,
+            wanted_seasons=[season],
+            on_document=lambda item: typer.echo(
+                f"skip  {item.title[:62]:<62} {item.skipped}"
+                if item.skipped
+                else f"ok    {item.title[:62]:<62} landed"
+            ),
+        )
+        landed = [item for item in walked if item.key]
+        typer.echo(f"{len(landed)} documents landed, {len(walked) - len(landed)} skipped")
+        return
     elif source is Source.FASTF1:
         if round_ is None or session is None:
             raise typer.BadParameter("fastf1 needs both --round and --session")
@@ -313,6 +334,18 @@ def ingest(
     else:
         raise typer.BadParameter(f"{source} has no ingest path yet")
     _render_outcomes(outcomes)
+
+
+def _race_rounds(store: ObjectStore) -> dict[int, dict[str, int]]:
+    from pitadvisor.quality.checks import read_table
+
+    frame = read_table(store, Layer.BRONZE, "races")
+    if frame is None:
+        return {}
+    found: dict[int, dict[str, int]] = {}
+    for row in frame.to_dicts():
+        found.setdefault(int(row["season"]), {})[str(row["race_name"])] = int(row["round"])
+    return found
 
 
 def _resources(with_laps: bool) -> tuple[str, ...]:
