@@ -44,9 +44,12 @@ def entry(**over: Any) -> dict[str, Any]:
 
 
 class FakeBedrock:
-    def __init__(self, entries: list[dict[str, Any]] | None, tool: str = TOOL) -> None:
+    def __init__(
+        self, entries: list[dict[str, Any]] | None, tool: str = TOOL, stop: str = "tool_use"
+    ) -> None:
         self.entries = entries
         self.tool = tool
+        self.stop = stop
         self.request: dict[str, Any] = {}
 
     def converse(self, **request: Any) -> dict[str, Any]:
@@ -56,6 +59,7 @@ class FakeBedrock:
             content.append({"toolUse": {"name": self.tool, "input": {"entries": self.entries}}})
         return {
             "output": {"message": {"content": content}},
+            "stopReason": self.stop,
             "usage": {"inputTokens": 1800, "outputTokens": 400},
         }
 
@@ -101,8 +105,13 @@ def test_a_quote_that_wraps_across_an_indented_line_still_verifies():
 def test_a_response_with_no_tool_use_is_an_error():
     found = extract(FakeBedrock(None), "model", RAW)
     assert not found.clean
-    assert found.error == "the model recorded no entries"
+    assert found.error == "the model recorded no entries (stopReason tool_use)"
     assert found.decisions == []
+
+
+def test_a_truncated_tool_call_says_so_rather_than_reading_as_an_empty_document():
+    found = extract(FakeBedrock(None, stop="max_tokens"), "model", RAW)
+    assert found.error == "the response ran out of room before the tool call was complete"
 
 
 def test_the_model_is_made_to_use_the_tool():

@@ -128,7 +128,8 @@ def extract(
     client: Any,
     model_id: str,
     raw: str,
-    max_tokens: int = 4096,
+    # a table of eighteen deleted lap times is eighteen entries, and 4096 truncates it
+    max_tokens: int = 8192,
 ) -> Extraction:
     header = parse(raw)
     text = normalize(raw)
@@ -147,13 +148,22 @@ def extract(
         found, loose = _decision(entry, header, folded)
         decisions.append(found)
         unverified += [f"{index}.{name}" for name in loose]
+    stop = str(response.get("stopReason", ""))
     return Extraction(
         decisions=decisions,
         unverified=unverified,
         input_tokens=int(usage.get("inputTokens", 0)),
         output_tokens=int(usage.get("outputTokens", 0)),
-        error=None if decisions else "the model recorded no entries",
+        error=None if decisions else _why(stop),
     )
+
+
+def _why(stop: str) -> str:
+    # a truncated tool call comes back with no entries at all, so the count alone reads as a
+    # document the model declined rather than one it ran out of room to finish
+    if stop == "max_tokens":
+        return "the response ran out of room before the tool call was complete"
+    return f"the model recorded no entries (stopReason {stop})" if stop else "no response"
 
 
 def as_json(extraction: Extraction) -> str:
