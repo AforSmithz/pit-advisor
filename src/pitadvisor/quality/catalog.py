@@ -35,6 +35,9 @@ class UnmappedTypeError(TypeError):
 
 
 def hive_type(annotation: Any) -> str | None:
+    if get_origin(annotation) is list:
+        inner = hive_type(get_args(annotation)[0])
+        return f"array<{inner}>" if inner else None
     if get_origin(annotation) in (Union, UnionType):
         options = [arg for arg in get_args(annotation) if arg is not type(None)]
         return hive_type(options[0]) if len(options) == 1 else None

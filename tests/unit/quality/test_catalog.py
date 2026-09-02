@@ -27,7 +27,8 @@ class FakeGlue:
 def test_optional_columns_keep_their_inner_type():
     assert catalog.hive_type(int | None) == "bigint"
     assert catalog.hive_type(str) == "string"
-    assert catalog.hive_type(list[int]) is None
+    assert catalog.hive_type(list[str]) == "array<string>"
+    assert catalog.hive_type(dict[str, int]) is None
 
 
 def test_a_session_kind_is_a_string_in_glue():
@@ -44,9 +45,16 @@ def test_partition_columns_are_not_also_columns():
     assert "driver_id" in names
 
 
+def test_a_list_column_becomes_a_hive_array():
+    class Listed(BronzeRow):
+        names: list[str]
+
+    assert {"Name": "names", "Type": "array<string>"} in catalog.columns("listed", Listed)
+
+
 def test_an_unmappable_column_is_loud():
     class Odd(BronzeRow):
-        weird: list[int]
+        weird: dict[str, int]
 
     with pytest.raises(catalog.UnmappedTypeError):
         catalog.columns("odd", Odd)
