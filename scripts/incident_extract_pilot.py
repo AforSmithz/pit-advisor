@@ -7,19 +7,25 @@ resumes."""
 import json
 import random
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, cast
 
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 from pitadvisor.config import Settings, boto_session
-from pitadvisor.incidents.extract import extract
+from pitadvisor.incidents.extract import Extraction, extract
 from pitadvisor.incidents.parse import parse
 from pitadvisor.ingest.docs import pdf_text
 
 INCIDENT_KINDS = ("decision", "offence", "infringement")
 SEED = 20260902
+# the account shares its bedrock quota with an unrelated workload, so a run of this size gets
+# throttled no matter what boto retries. back off further and never let one document end the run
+WORKERS = 2
+BACKOFF = (30.0, 90.0, 240.0)
 
 
 def prose(cache: Path, client: Any, bucket: str) -> list[str]:
@@ -72,13 +78,28 @@ def main() -> None:
 
     done: set[str] = set()
     if out.exists():
-        done = {json.loads(line)["key"] for line in out.read_text().splitlines()}
+        # a document the model could not be reached for is not done, it is waiting for a rerun
+        recorded = [json.loads(line) for line in out.read_text().splitlines()]
+        done = {record["key"] for record in recorded if not record["error"]}
     todo = [key for key in keys if key not in done][:limit]
     print(f"{len(done)} already recorded, running {len(todo)}", flush=True)
 
+    def read(text: str) -> Extraction:
+        for attempt, wait in enumerate(BACKOFF):
+            try:
+                return extract(bedrock, settings.bedrock_model, text)
+            except ClientError as exc:
+                if exc.response.get("Error", {}).get("Code") != "ThrottlingException":
+                    return Extraction(error=f"{exc}")
+                print(f"  throttled, waiting {wait:.0f}s (attempt {attempt + 1})", flush=True)
+                time.sleep(wait)
+        try:
+            return extract(bedrock, settings.bedrock_model, text)
+        except ClientError as exc:
+            return Extraction(error=f"{exc}")
+
     def run(key: str) -> dict[str, Any]:
-        text = text_of(cache, s3, settings.data_bucket, key)
-        found = extract(bedrock, settings.bedrock_model, text)
+        found = read(text_of(cache, s3, settings.data_bucket, key))
         return {
             "key": key,
             "entries": len(found.decisions),
@@ -89,7 +110,7 @@ def main() -> None:
             "decisions": [d.model_dump(mode="json") for d in found.decisions],
         }
 
-    with out.open("a") as sink, ThreadPoolExecutor(max_workers=4) as pool:
+    with out.open("a") as sink, ThreadPoolExecutor(max_workers=WORKERS) as pool:
         for record in pool.map(run, todo):
             sink.write(json.dumps(record) + "\n")
             sink.flush()
@@ -104,9 +125,12 @@ def main() -> None:
     spans = sum(len(d["spans"]) for r in records for d in r["decisions"])
     bad = sum(len(r["unverified"]) for r in records)
     clean = sum(1 for r in records if not r["unverified"] and not r["error"])
+    failed = [r["key"] for r in records if r["error"]]
     tokens_in = sum(r["input_tokens"] for r in records)
     tokens_out = sum(r["output_tokens"] for r in records)
     print(f"\n{len(records)} documents, {clean} with every value verified")
+    if failed:
+        print(f"{len(failed)} could not be read at all, rerun to fill them")
     print(f"{spans} values, {bad} not found in the source")
     print(f"{tokens_in} input tokens, {tokens_out} output tokens")
     # haiku 4.5 list price, us-east-1
