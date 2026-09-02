@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pitadvisor.incidents.parse import parse, verify
+from pitadvisor.incidents.parse import Book, parse, verify
 
 NB = "\u00a0"
 
@@ -34,6 +34,12 @@ def document(charge_label: str = "Infringement") -> str:
         "Stewards, in accordance with Article 15 of the FIA International Sporting Code.\n"
         "The Stewards\n"
         "Ada Fournier Kit Rasmussen\n"
+    )
+
+
+def charged(charge: str) -> str:
+    return document().replace(
+        "Breach of Article 33.4 of the FIA Formula One Sporting\nRegulations.", charge
     )
 
 
@@ -77,6 +83,53 @@ def test_a_citation_keeps_the_wording_the_stewards_used():
         "Appendix L Ch IV Art 1",
         "Appendix H 2.5.4.1.b",
     ]
+
+
+def test_every_spelling_of_a_book_resolves_to_the_same_one():
+    spellings = (
+        "Breach of Article 33.4 of the FIA Formula One Sporting Regulations.",
+        "Breach of Article 33.4 of the Formula One Sporting Regulations.",
+        "Breach of Article 33.4 of the 2025 FIA Formula 1 Sporting Regulations.",
+        "Breach of Article 33.4 FIA Formula One Sporting Regulations.",
+    )
+    for charge in spellings:
+        articles = parse(charged(charge)).articles
+        assert [article.book for article in articles] == [Book.SPORTING], charge
+
+
+def test_the_season_in_front_of_a_book_is_kept():
+    dated = charged("Breach of Article 28.13 of the 2019 FIA Formula One Sporting Regulations.")
+    assert [article.edition for article in parse(dated).articles] == [2019]
+    plain = charged("Breach of Article 33.4 of the FIA Formula One Sporting Regulations.")
+    assert parse(plain).articles[0].edition is None
+
+
+def test_a_charge_naming_two_books_gives_each_citation_its_own():
+    articles = parse(
+        charged(
+            "Breach of Article 34.14 a) of the FIA Formula One Sporting Regulations and "
+            "Appendix L Chapter IV Article 2 c) of the FIA International Sporting Code."
+        )
+    ).articles
+    assert [(article.code, article.book) for article in articles] == [
+        ("Article 34.14 a)", Book.SPORTING),
+        ("Appendix L", Book.ISC),
+        ("Article 2 c)", Book.ISC),
+    ]
+
+
+def test_a_citation_takes_the_book_in_front_of_it_when_none_follows():
+    articles = parse(
+        charged("Breach of International Sporting Code Appendix L Ch IV Art 1.")
+    ).articles
+    assert [article.book for article in articles] == [Book.ISC]
+
+
+def test_the_technical_regulations_are_cited_without_formula_one():
+    articles = parse(
+        charged("Breach of the 2025 FIA Technical Regulations Article 3.10.10 g")
+    ).articles
+    assert [(article.book, article.edition) for article in articles] == [(Book.TECHNICAL, 2025)]
 
 
 def test_the_reason_stops_before_the_appeal_boilerplate():

@@ -1,5 +1,6 @@
 import re
 from datetime import datetime, time
+from enum import StrEnum
 from typing import Final
 
 from pydantic import BaseModel
@@ -26,14 +27,15 @@ DOCUMENT = re.compile(r"^Document\s+(\d+)\s*$", re.M)
 ISSUED_DATE = re.compile(r"^Date\s+(\d{1,2} \w+ \d{4})\s*$", re.M)
 ISSUED_TIME = re.compile(r"^Time\s+(\d{1,2}:\d{2})\s*$", re.M)
 DRIVER = re.compile(r"^(\d+)\s*-\s*(.+)$")
-# the charge often runs on past the rulebook name into what the driver did, so the three books
-# the stewards actually cite are matched first and the open ended capture is the fallback
-KNOWN_BOOK = re.compile(
-    r"\bof\s+the\s+((?:FIA\s+)?(?:Formula\s+One\s+Sporting\s+Regulations"
-    r"|Formula\s+One\s+Technical\s+Regulations|International\s+Sporting\s+Code))",
+# the stewards spell each book several ways: with and without the FIA prefix, "Formula One" and
+# "Formula 1", the technical regulations sometimes without either, and a season in front of any
+# of them. one book each or the citations will not join
+BOOK = re.compile(
+    r"(?:(?P<edition>(?:19|20)\d{2})\s+)?(?:FIA\s+)?"
+    r"(?:(?P<isc>International\s+Sporting\s+Code)"
+    r"|(?:Formula\s+(?:One|1)\s+)?(?P<kind>Sporting|Technical)\s+Regulations)",
     re.I,
 )
-RULEBOOK = re.compile(r"\bof\s+the\s+(.+?)\.?\s*$", re.S)
 CITATION = re.compile(
     r"(Appendix\s+[A-Z](?:\s+Ch\s+[IVXLC]+)?(?:\s+(?:Art\.?\s*)?\d+(?:\.\d+)*(?:\.?[a-z])?)?"
     r"|(?:Article|Art)\.?\s*\d+(?:\.\d+)*(?:\s*[a-z]\))?)"
@@ -47,9 +49,17 @@ class Span(BaseModel, frozen=True):
     text: str
 
 
+class Book(StrEnum):
+    SPORTING = "sporting"
+    TECHNICAL = "technical"
+    ISC = "isc"
+
+
 class Article(BaseModel, frozen=True):
     code: str
     regulation: str
+    book: Book | None = None
+    edition: int | None = None
 
 
 class Decision(BaseModel, frozen=True):
@@ -119,15 +129,54 @@ def _tail(reason: str) -> str:
     return reason[: cut.start()].strip() if cut else reason
 
 
+def _books(charge: str) -> list[tuple[int, int, Book, str, int | None]]:
+    found: list[tuple[int, int, Book, str, int | None]] = []
+    for match in BOOK.finditer(charge):
+        if match.group("isc"):
+            which = Book.ISC
+        else:
+            which = Book.SPORTING if match.group("kind").lower() == "sporting" else Book.TECHNICAL
+        edition = match.group("edition")
+        found.append(
+            (
+                match.start(),
+                match.end(),
+                which,
+                match.group(0).strip(),
+                int(edition) if edition else None,
+            )
+        )
+    return found
+
+
 def _articles(charge: str | None) -> list[Article]:
     if not charge:
         return []
-    book = KNOWN_BOOK.search(charge) or RULEBOOK.search(charge)
+    books = _books(charge)
+
+    # a charge that names two books cites both, so a citation takes the book named after it and
+    # falls back to the one before when the charge leads with the book instead of trailing it
+    def owner(at: int) -> tuple[Book, str, int | None] | None:
+        after = [b for b in books if b[1] > at]
+        chosen = after[0] if after else (books[-1] if books else None)
+        return (chosen[2], chosen[3], chosen[4]) if chosen else None
+
     # a charge cites appendices and abbreviated articles as often as "Article 31.5", so the code
     # is kept exactly as the stewards wrote it rather than normalised into a shape it never had
-    name = book.group(1).strip() if book else ""
-    head = charge[: book.start()] if book else charge
-    return [Article(code=found.strip(), regulation=name) for found in CITATION.findall(head)]
+    articles: list[Article] = []
+    for found in CITATION.finditer(charge):
+        if any(start <= found.start() < end for start, end, _, _, _ in books):
+            continue
+        which = owner(found.start())
+        articles.append(
+            Article(
+                code=found.group(0).strip(),
+                regulation=which[1] if which else "",
+                book=which[0] if which else None,
+                edition=which[2] if which else None,
+            )
+        )
+    return articles
 
 
 def parse(raw: str) -> Decision:
