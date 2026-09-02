@@ -9,8 +9,10 @@ from pitadvisor.types import Layer, Source
 
 MANIFEST = Path("transform/target/manifest.json")
 
-# every bronze table, the upstream it came from and the raw filename it lands under
-RAW_ORIGIN: dict[str, tuple[Source, str]] = {
+# every bronze table, the upstream it came from and the raw filename it lands under. the fia
+# documents are named by the stewards, not by us, so they have no prefix to match and every
+# document under the source counts instead
+RAW_ORIGIN: dict[str, tuple[Source, str | None]] = {
     "races": (Source.JOLPICA, "races"),
     "results": (Source.JOLPICA, "results"),
     "qualifying": (Source.JOLPICA, "qualifying"),
@@ -18,6 +20,9 @@ RAW_ORIGIN: dict[str, tuple[Source, str]] = {
     "pitstops": (Source.JOLPICA, "pitstops"),
     "weather": (Source.OPEN_METEO, "weather"),
     "session_laps": (Source.FASTF1, "session_laps"),
+    "incidents": (Source.FIA_DOCS, None),
+    "incident_articles": (Source.FIA_DOCS, None),
+    "incident_sanctions": (Source.FIA_DOCS, None),
 }
 
 
@@ -89,7 +94,8 @@ def raw_count(store: ObjectStore, table: str) -> int:
     return sum(
         1
         for item in store.list(f"{Layer.RAW}/source={source}/")
-        if not item.key.endswith(META_SUFFIX) and item.key.rsplit("/", 1)[-1].startswith(f"{name}-")
+        if not item.key.endswith(META_SUFFIX)
+        and (name is None or item.key.rsplit("/", 1)[-1].startswith(f"{name}-"))
     )
 
 
