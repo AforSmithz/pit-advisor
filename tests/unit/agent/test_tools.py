@@ -328,16 +328,17 @@ def precedent_marts(tmp_path):
     connection = duckdb.connect(str(path))
     connection.sql(
         "create table gold_incident_precedent as select * from (values "
-        "(2024, 5, 'Sample GP', 41, 'Jo Mercier', 'Cobalt', 'Race', 'Collision.', "
+        "('i1', 2024, 5, 'Sample GP', 41, 'Jo Mercier', 'Cobalt', 'Race', 'Collision.', "
         "'Breach of Article 33.4.', 'sporting', 'Article 33.4', 'time_penalty', 10, null, 2, "
         "'raw/a.pdf'), "
-        "(2023, 9, 'Other GP', 22, 'Rae Okonkwo', 'Halden', 'Race', 'Collision.', "
+        "('i2', 2023, 9, 'Other GP', 22, 'Rae Okonkwo', 'Halden', 'Race', 'Collision.', "
         "'Breach of Article 33.4.', 'sporting', 'Article 33.4', 'time_penalty', 5, null, 1, "
         "'raw/b.pdf'), "
-        "(2023, 9, 'Other GP', 23, 'Sam Vega', 'Halden', 'Race', 'Impeding.', "
+        "('i3', 2023, 9, 'Other GP', 23, 'Sam Vega', 'Halden', 'Race', 'Impeding.', "
         "'Breach of Article 37.5.', 'sporting', 'Article 37.5', 'grid_drop', null, 3, null, "
         "'raw/c.pdf')"
-        ") as t(season, round, race_name, document, driver, competitor, session, fact, charge, "
+        ") as t(incident_id, season, round, race_name, document, driver, competitor, session, "
+        "fact, charge, "
         "rule_book, rule_code, sanction_kind, sanction_seconds, sanction_positions, "
         "sanction_points, raw_key)"
     )
@@ -353,7 +354,8 @@ def test_precedent_counts_come_from_the_query_not_from_the_examples(box, precede
         {"rule_code": "Article 33", "examples": 1},
     )
     assert result.ok
-    assert result.payload["matched"] == 2
+    assert result.payload["decisions"] == 2
+    assert result.payload["sanctions"] == 2
     assert result.payload["by_sanction"] == {"time_penalty": 2}
     assert result.payload["time_penalty_seconds"] == [5, 10]
     assert len(result.payload["examples"]) == 1
@@ -363,7 +365,7 @@ def test_a_rule_code_matches_on_its_start_so_a_whole_article_can_be_asked_for(bo
     result = invoke(
         Toolbox(store=box.store, marts=precedent_marts), "find_precedent", {"rule_code": "Article"}
     )
-    assert result.payload["matched"] == 3
+    assert result.payload["decisions"] == 3
     assert set(result.payload["by_sanction"]) == {"time_penalty", "grid_drop"}
 
 
@@ -376,7 +378,7 @@ def test_a_season_filter_narrows_the_count(box, precedent_marts):
     result = invoke(
         Toolbox(store=box.store, marts=precedent_marts), "find_precedent", {"since": 2024}
     )
-    assert result.payload["matched"] == 1
+    assert result.payload["decisions"] == 1
     assert result.payload["by_season"] == {"2024": 1}
 
 
@@ -396,3 +398,28 @@ def test_nothing_matching_says_how_to_widen_it(box, precedent_marts):
     )
     assert not result.ok
     assert "widen it" in result.detail
+
+
+def test_the_count_is_not_the_length_of_the_page_it_returns(box, precedent_marts, monkeypatch):
+    # the guard caps a select at 200 rows, so a tool that counted its own result would
+    # understate every offence with more rulings than that
+    from pitadvisor.agent.sql_guard import MAX_LIMIT
+
+    seen = []
+    real = precedent_marts.rows
+
+    def watched(sql):
+        seen.append(sql)
+        return real(sql)
+
+    monkeypatch.setattr(precedent_marts, "rows", watched)
+    result = invoke(
+        Toolbox(store=box.store, marts=precedent_marts), "find_precedent", {"examples": 0}
+    )
+    assert result.payload["decisions"] == 3
+    assert result.payload["examples"] == []
+    assert len(seen) == 2
+    assert all("group by" in sql.lower() for sql in seen)
+    assert "count(distinct" in seen[0].lower()
+    assert "count(*)" in seen[1].lower()
+    assert MAX_LIMIT >= 200

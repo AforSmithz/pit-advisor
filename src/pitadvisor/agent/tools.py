@@ -433,32 +433,39 @@ class Toolbox:
             raise ToolError("no mart backend is configured for this session")
         if request.book is not None and request.book not in BOOKS:
             raise ToolError(f"{request.book!r} is not a rulebook. they are {', '.join(BOOKS)}")
-        rows = self.marts.rows(guard(_precedent_sql(request)))
-        if not rows:
+        by_year = self.marts.rows(guard(_precedent_seasons_sql(request)))
+        if not by_year:
             raise ToolError(
                 "no ruling in 2021-2025 matches that. widen it: drop the sanction, the season "
                 "or the rule, or search retrieve_docs for the rule text instead"
             )
+        seasons = {str(row["season"]): int(row["decisions"]) for row in by_year}
         counts: dict[str, int] = {}
-        seasons: dict[str, int] = {}
-        for row in rows:
-            kind = str(row.get("sanction_kind") or "not typed")
-            counts[kind] = counts.get(kind, 0) + 1
-            season = str(row.get("season"))
-            seasons[season] = seasons.get(season, 0) + 1
-        seconds = [int(row["sanction_seconds"]) for row in rows if row.get("sanction_seconds")]
-        positions = [
-            int(row["sanction_positions"]) for row in rows if row.get("sanction_positions")
-        ]
+        seconds: list[int] = []
+        positions: list[int] = []
+        sanctions = 0
+        for tally in self.marts.rows(guard(_precedent_counts_sql(request))):
+            rulings = int(tally["rulings"])
+            sanctions += rulings
+            kind = str(tally.get("sanction_kind") or "not typed")
+            counts[kind] = counts.get(kind, 0) + rulings
+            if tally.get("sanction_seconds"):
+                seconds.append(int(tally["sanction_seconds"]))
+            if tally.get("sanction_positions"):
+                positions.append(int(tally["sanction_positions"]))
+        rows = self.marts.rows(guard(_precedent_examples_sql(request))) if request.examples else []
         payload: dict[str, Any] = {
-            "matched": len(rows),
+            "decisions": sum(seasons.values()),
+            "sanctions": sanctions,
             "by_sanction": dict(sorted(counts.items(), key=lambda pair: -pair[1])),
             "by_season": dict(sorted(seasons.items())),
             "time_penalty_seconds": sorted(set(seconds)),
             "grid_positions": sorted(set(positions)),
             "examples": _jsonable(rows[: request.examples]),
             "note": (
-                "Counted from the published decisions, 2021-2025. Stewards' decisions are not "
+                "decisions counts the rulings; sanctions counts what they imposed, and one "
+                "decision can impose several. Counted from the published documents of "
+                "2021-2025. Stewards' decisions are not "
                 "binding precedent: each is decided on its own facts, and this is a record of "
                 "what happened rather than what must happen."
             ),
@@ -558,7 +565,7 @@ def _quoted(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def _precedent_sql(request: "Precedent") -> str:
+def _precedent_where(request: "Precedent") -> str:
     where: list[str] = []
     if request.rule_code:
         # matched on the start of the code, so "Article 33" finds 33.3 and 33.4 as well
@@ -569,11 +576,33 @@ def _precedent_sql(request: "Precedent") -> str:
         where.append(f"sanction_kind = {_quoted(request.sanction_kind)}")
     if request.since:
         where.append(f"season >= {int(request.since)}")
-    clause = " where " + " and ".join(where) if where else ""
+    return " where " + " and ".join(where) if where else ""
+
+
+def _precedent_seasons_sql(request: "Precedent") -> str:
+    # counted distinct, because the mart carries one row per sanction and a decision that
+    # imposed a penalty and its points would otherwise be two decisions
+    return (
+        "select season, count(distinct incident_id) as decisions "
+        f"from gold_incident_precedent{_precedent_where(request)} group by season"
+    )
+
+
+def _precedent_counts_sql(request: "Precedent") -> str:
+    # the count is a group by, never the length of a page of rows: the guard caps a select at
+    # 200 and a tool that counted its own result would understate every common offence
+    return (
+        "select sanction_kind, sanction_seconds, sanction_positions, count(*) as rulings "
+        f"from gold_incident_precedent{_precedent_where(request)} "
+        "group by sanction_kind, sanction_seconds, sanction_positions"
+    )
+
+
+def _precedent_examples_sql(request: "Precedent") -> str:
     columns = ", ".join(PRECEDENT_COLUMNS)
     return (
-        f"select {columns} from gold_incident_precedent{clause} "
-        "order by season desc, round desc, document desc"
+        f"select {columns} from gold_incident_precedent{_precedent_where(request)} "
+        f"order by season desc, round desc, document desc limit {max(request.examples, 1)}"
     )
 
 
