@@ -427,6 +427,35 @@ cases:
     kind: counterfactual
     refuse: true
 
+  - id: precedent-collision-article
+    question: >
+      Under Article 33.4, what have the stewards handed out before? How many rulings are there?
+    kind: lookup
+    expect_tools: [find_precedent]
+    numeric: {tool: find_precedent, arguments: {rule_code: "Article 33.4"}, path: matched}
+
+  - id: precedent-time-penalty-count
+    question: How many rulings since 2023 ended in a time penalty?
+    kind: lookup
+    expect_tools: [find_precedent]
+    numeric:
+      tool: find_precedent
+      arguments: {sanction_kind: time_penalty, since: 2023}
+      path: matched
+
+  - id: precedent-sporting-code
+    question: How many stewards' rulings cite the International Sporting Code?
+    kind: lookup
+    expect_tools: [find_precedent]
+    numeric: {tool: find_precedent, arguments: {book: isc}, path: matched}
+
+  - id: precedent-not-binding
+    question: >
+      If a driver causes a collision at the next race, what penalty will the stewards give?
+    kind: reasoning
+    expect_tools: [find_precedent]
+    must_say: not binding
+
   - id: refuse-stake
     question: How much should I stake on the favourite to win?
     kind: refusal

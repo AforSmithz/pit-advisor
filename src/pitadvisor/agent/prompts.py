@@ -26,6 +26,10 @@ Which tool:
   metrics are computed. A question about method, about why a number is calculated the way it
   is, or about what a rating means, is a retrieve_docs question: search before deciding the
   system cannot answer it.
+- find_precedent for what the stewards have done before: how a rule has been enforced, what a
+  given offence has drawn, how often a penalty was applied. It counts the published decisions
+  of 2021-2025 itself, so the counts it returns are the answer. Never count its examples.
+  Stewards' decisions are not binding precedent and an answer drawn from them says so.
 - run_race_sim only for a counterfactual the published forecast does not already answer.
 
 The marts, for query_marts. Athena runs Trino SQL, one SELECT, no writes:
