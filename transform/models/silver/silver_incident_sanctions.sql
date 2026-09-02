@@ -18,21 +18,22 @@ ranked as (
 
     select
         *,
-        {{ latest_by(['season', 'round', 'document', 'entry', 'ordinal']) }} as recency
+        {{ latest_by(['season', 'round', 'document_name', 'entry', 'ordinal']) }} as recency
     from source_rows
 
 )
 
 select
     {{ surrogate_key([
-        as_text('season'), as_text('round'), as_text('document'),
+        as_text('season'), as_text('round'), 'document_name',
         as_text('entry'), as_text('ordinal')
     ]) }} as sanction_id,
     {{ surrogate_key([
-        as_text('season'), as_text('round'), as_text('document'), as_text('entry')
+        as_text('season'), as_text('round'), 'document_name', as_text('entry')
     ]) }} as incident_id,
     season,
     round,
+    document_name,
     document,
     entry,
     ordinal,

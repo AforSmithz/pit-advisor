@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import UTC, datetime
 from typing import Any, Final
 
@@ -11,6 +12,7 @@ from .parse import Decision
 from .sanctions import sanctions
 
 KINDS: Final = ("decision", "offence", "infringement")
+STAMPED: Final = re.compile(r"-\d{8}T\d{9}Z\.[A-Za-z0-9]+$")
 PARSED: Final = "parsed"
 EXTRACTED: Final = "extracted"
 
@@ -19,6 +21,7 @@ class Reading(BaseModel, frozen=True):
     """One document's decisions, and where they came from."""
 
     raw_key: str
+    document_name: str = ""
     kind: str
     read_by: str
     decisions: list[Decision] = []
@@ -58,7 +61,13 @@ class Rows(BaseModel, frozen=True):
     sanctions: list[IncidentSanctionRow] = []
 
 
+def document_name(raw_key: str) -> str:
+    """The published name with our fetch stamp taken off, which is stable across a refetch."""
+    return STAMPED.sub("", raw_key.rsplit("/", 1)[-1])
+
+
 def rows(reading: Reading, season: int, round_: int, stamp: dict[str, Any]) -> Rows:
+    named = reading.document_name or document_name(reading.raw_key)
     incidents: list[IncidentRow] = []
     articles: list[IncidentArticleRow] = []
     imposed: list[IncidentSanctionRow] = []
@@ -68,6 +77,7 @@ def rows(reading: Reading, season: int, round_: int, stamp: dict[str, Any]) -> R
                 **stamp,
                 season=season,
                 round=round_,
+                document_name=named,
                 document=decision.document,
                 entry=entry,
                 kind=reading.kind,
@@ -90,6 +100,7 @@ def rows(reading: Reading, season: int, round_: int, stamp: dict[str, Any]) -> R
                 **stamp,
                 season=season,
                 round=round_,
+                document_name=named,
                 document=decision.document,
                 entry=entry,
                 code=article.code,
@@ -105,6 +116,7 @@ def rows(reading: Reading, season: int, round_: int, stamp: dict[str, Any]) -> R
                 **stamp,
                 season=season,
                 round=round_,
+                document_name=named,
                 document=decision.document,
                 entry=entry,
                 ordinal=ordinal,

@@ -51,6 +51,7 @@ select
     events.race_name,
     events.circuit_id,
     events.race_date,
+    incidents.document_name,
     incidents.document,
     incidents.entry,
     incidents.kind,

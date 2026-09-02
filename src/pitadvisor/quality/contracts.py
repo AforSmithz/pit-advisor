@@ -125,6 +125,8 @@ class SessionLapRow(BronzeRow):
 
 
 class IncidentRow(BronzeRow):
+    # five documents in the corpus print no document number, so the published name is the key
+    document_name: str
     document: int | None = None
     # a document ruling on eighteen cars is eighteen rows, and the ordinal keeps them apart
     entry: int = Field(ge=0)
@@ -146,6 +148,7 @@ class IncidentRow(BronzeRow):
 
 
 class IncidentSanctionRow(BronzeRow):
+    document_name: str
     document: int | None = None
     entry: int = Field(ge=0)
     # one decision carries several: a driver penalty, its points and a fine on the team
@@ -162,6 +165,7 @@ class IncidentSanctionRow(BronzeRow):
 
 
 class IncidentArticleRow(BronzeRow):
+    document_name: str
     document: int | None = None
     entry: int = Field(ge=0)
     code: str

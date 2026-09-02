@@ -4,7 +4,10 @@ from datetime import UTC, datetime
 from pitadvisor.incidents import lake
 from pitadvisor.incidents.parse import Article, Book, Decision
 
-RAW_KEY = "raw/source=fia_docs/season=2024/round=17/20240915T1710-infringement-race-x-2026.pdf"
+RAW_KEY = (
+    "raw/source=fia_docs/season=2024/round=17/"
+    "20240915T1710-infringement-race-x-20260902T053350720Z.pdf"
+)
 STAMP = {"run_id": "run-1", "ingested_at": datetime(2026, 9, 2, tzinfo=UTC)}
 
 
@@ -43,10 +46,19 @@ def test_the_kind_comes_off_the_document_name():
     )
 
 
+def test_the_document_name_drops_our_fetch_stamp():
+    assert (
+        lake.document_name(
+            "raw/source=fia_docs/season=2024/round=17/decision-car-7-20260902T053350720Z.pdf"
+        )
+        == "decision-car-7"
+    )
+
+
 def test_the_cache_key_mirrors_the_raw_key():
     assert lake.cache_key(RAW_KEY) == (
         "cache/incidents/source=fia_docs/season=2024/round=17/"
-        "20240915T1710-infringement-race-x-2026.pdf.json"
+        "20240915T1710-infringement-race-x-20260902T053350720Z.pdf.json"
     )
 
 
@@ -75,6 +87,7 @@ def test_a_row_carries_the_document_it_was_read_from():
     incidents = lake.rows(reading(), 2024, 17, STAMP).incidents
     assert {row.raw_key for row in incidents} == {RAW_KEY}
     assert {row.document for row in incidents} == {62}
+    assert {row.document_name for row in incidents} == {"20240915T1710-infringement-race-x"}
 
 
 def test_the_last_record_for_a_key_wins_and_a_failure_is_dropped():
