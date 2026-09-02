@@ -6,6 +6,9 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from pitadvisor.incidents import lake
+from pitadvisor.incidents.parse import parse as parse_decision
+from pitadvisor.ingest.docs import pdf_text
 from pitadvisor.ingest.fastf1_session import to_records
 from pitadvisor.ingest.jolpica import materialize
 from pitadvisor.ingest.raw_store import (
@@ -213,6 +216,73 @@ def rebuild_sessions(
     return outcomes
 
 
+def read_document(store: ObjectStore, found: RawObject) -> lake.Reading | None:
+    """Parses one stewards' document, falling back to what a model already read for the prose
+    ones. A prose document with nothing cached is not read here: rebuild costs no money."""
+    kind = lake.kind_of(found.key)
+    if kind is None:
+        return None
+    decision = parse_decision(pdf_text(store.get(found.key)))
+    if decision.structured:
+        return lake.Reading(raw_key=found.key, kind=kind, read_by=lake.PARSED, decisions=[decision])
+    cached = lake.cache_key(found.key)
+    if not store.exists(cached):
+        return None
+    return lake.load(store.get(cached))
+
+
+def rebuild_incidents(
+    store: ObjectStore, run_id: str, objects: list[RawObject], stamp: dict[str, Any]
+) -> list[IngestOutcome]:
+    incidents: dict[tuple[int, int], list[contracts.IncidentRow]] = {}
+    articles: dict[tuple[int, int], list[contracts.IncidentArticleRow]] = {}
+    raw_keys: dict[tuple[int, int], list[str]] = {}
+    unread: dict[tuple[int, int], int] = {}
+    for found in objects:
+        marker = (found.season, found.round)
+        if lake.kind_of(found.key) is None:
+            continue
+        reading = read_document(store, found)
+        if reading is None:
+            unread[marker] = unread.get(marker, 0) + 1
+            continue
+        seen, cited = lake.rows(reading, found.season, found.round, stamp)
+        incidents.setdefault(marker, []).extend(seen)
+        articles.setdefault(marker, []).extend(cited)
+        raw_keys.setdefault(marker, []).append(found.key)
+    outcomes: list[IngestOutcome] = []
+    for marker in sorted(set(incidents) | set(unread)):
+        season, round_ = marker
+        key = EventKey(season=season, round=round_)
+        seen = incidents.get(marker, [])
+        cited = articles.get(marker, [])
+        written = [
+            path
+            for path in (
+                write_bronze(store, "incidents", key, seen) if seen else None,
+                write_bronze(store, "incident_articles", key, cited) if cited else None,
+            )
+            if path is not None
+        ]
+        outcomes.append(
+            IngestOutcome(
+                source=Source.FIA_DOCS,
+                table="incidents",
+                season=season,
+                round=round_,
+                rows=len(seen),
+                raw_objects=raw_keys.get(marker, []),
+                bronze_objects=written,
+                skipped=(
+                    f"{unread[marker]} documents need extracting first"
+                    if marker in unread
+                    else None
+                ),
+            )
+        )
+    return outcomes
+
+
 def rebuild_bronze(
     store: ObjectStore,
     run_id: str,
@@ -233,4 +303,5 @@ def rebuild_bronze(
         *rebuild_jolpica(store, run_id, by_source.get(Source.JOLPICA, []), stamp),
         *rebuild_weather(store, run_id, by_source.get(Source.OPEN_METEO, []), stamp),
         *rebuild_sessions(store, run_id, by_source.get(Source.FASTF1, []), stamp),
+        *rebuild_incidents(store, run_id, by_source.get(Source.FIA_DOCS, []), stamp),
     ]

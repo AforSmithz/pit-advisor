@@ -181,3 +181,102 @@ def test_rebuild_can_be_scoped_to_one_source(store, ledger, fetch, payload):
     land(RawStore(store), KEY, "weather-archive", payload("open_meteo/forecast.json"))
     outcomes = rebuild_bronze(store, "replay-1", source=Source.OPEN_METEO)
     assert {outcome.table for outcome in outcomes} == {"weather"}
+
+
+FIELD_BLOCK = (
+    "Document 41\nDate 14 May 2024\nTime 18:22\n"
+    "No / Driver 7 - Jo Mercier\nCompetitor Cobalt Racing\nSession Race\n"
+    "Fact Causing a collision.\n"
+    "Infringement Breach of Article 33.4 of the FIA Formula One Sporting Regulations.\n"
+    "Decision 10 second time penalty\nReason The driver was wholly at fault.\n"
+)
+PROSE_DOC = "Document 55\nDate 14 May 2024\nTime 19:02\nThe Stewards grant permission to start.\n"
+
+
+def land_document(raw, name, suffix="pdf"):
+    return raw.land(
+        KEY,
+        name,
+        b"%PDF-1.4",
+        Provenance(
+            run_id="run-1",
+            source=Source.FIA_DOCS,
+            url=f"https://www.fia.com/{name}",
+            fetched_at=datetime(2024, 5, 5, 12, tzinfo=UTC),
+            status=200,
+        ),
+        suffix=suffix,
+    )
+
+
+def test_a_document_with_a_field_block_needs_no_model(store, monkeypatch):
+    from pitadvisor.ingest import rebuild as rebuild_module
+
+    raw = RawStore(store)
+    land_document(raw, "decision-car-7-collision")
+    monkeypatch.setattr(rebuild_module, "pdf_text", lambda body: FIELD_BLOCK)
+    outcomes = rebuild_module.rebuild_incidents(
+        store, "run-2", latest_objects(store), {"run_id": "run-2", "ingested_at": datetime.now(UTC)}
+    )
+    assert [o.rows for o in outcomes] == [1]
+    frame = bronze_frames(store)["bronze/table=incidents/season=2024/round=05/incidents.parquet"]
+    assert frame["read_by"].to_list() == ["parsed"]
+    assert frame["car"].to_list() == [7]
+    assert frame["kind"].to_list() == ["decision"]
+
+
+def test_prose_with_nothing_cached_is_reported_rather_than_paid_for(store, monkeypatch):
+    from pitadvisor.ingest import rebuild as rebuild_module
+
+    raw = RawStore(store)
+    land_document(raw, "decision-car-22-permission")
+    monkeypatch.setattr(rebuild_module, "pdf_text", lambda body: PROSE_DOC)
+    outcomes = rebuild_module.rebuild_incidents(
+        store, "run-2", latest_objects(store), {"run_id": "run-2", "ingested_at": datetime.now(UTC)}
+    )
+    assert outcomes[0].rows == 0
+    assert outcomes[0].skipped == "1 documents need extracting first"
+    assert "bronze/table=incidents/season=2024/round=05/incidents.parquet" not in bronze_frames(
+        store
+    )
+
+
+def test_prose_is_read_from_the_cache_and_never_refetched(store, monkeypatch):
+    from pitadvisor.incidents import lake
+    from pitadvisor.incidents.parse import Decision
+    from pitadvisor.ingest import rebuild as rebuild_module
+
+    raw = RawStore(store)
+    land_document(raw, "decision-car-22-permission")
+    key = latest_objects(store)[0].key
+    monkeypatch.setattr(rebuild_module, "pdf_text", lambda body: PROSE_DOC)
+    store.put(
+        lake.cache_key(key),
+        lake.dump(
+            lake.Reading(
+                raw_key=key,
+                kind="decision",
+                read_by=lake.EXTRACTED,
+                decisions=[Decision(document=55, car=22, driver="Kit Rasmussen")],
+            )
+        ),
+    )
+    outcomes = rebuild_module.rebuild_incidents(
+        store, "run-2", latest_objects(store), {"run_id": "run-2", "ingested_at": datetime.now(UTC)}
+    )
+    assert outcomes[0].rows == 1
+    frame = bronze_frames(store)["bronze/table=incidents/season=2024/round=05/incidents.parquet"]
+    assert frame["read_by"].to_list() == ["extracted"]
+    assert frame["driver"].to_list() == ["Kit Rasmussen"]
+
+
+def test_a_classification_document_is_not_an_incident(store, monkeypatch):
+    from pitadvisor.ingest import rebuild as rebuild_module
+
+    raw = RawStore(store)
+    land_document(raw, "final-race-classification")
+    monkeypatch.setattr(rebuild_module, "pdf_text", lambda body: FIELD_BLOCK)
+    outcomes = rebuild_module.rebuild_incidents(
+        store, "run-2", latest_objects(store), {"run_id": "run-2", "ingested_at": datetime.now(UTC)}
+    )
+    assert outcomes == []
