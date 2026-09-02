@@ -451,7 +451,8 @@ cases:
 
   - id: precedent-not-binding
     question: >
-      If a driver causes a collision at the next race, what penalty will the stewards give?
+      What penalties have the stewards imposed for causing a collision, and does that record
+      bind them for the next one?
     kind: reasoning
     expect_tools: [find_precedent]
     must_say: not binding
