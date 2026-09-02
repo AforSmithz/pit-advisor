@@ -128,3 +128,43 @@ models:
               arguments:
                 values:
                   [fp1, fp2, fp3, sprint_qualifying, sprint_shootout, sprint, qualifying, race]
+
+  - name: silver_incidents
+    description: One row per car in a stewards' decision, deduplicated on the newest ingest.
+    columns:
+      - name: incident_id
+        tests: [unique, not_null]
+      - name: event_id
+        tests: [not_null]
+      - name: kind
+        tests:
+          - not_null
+          - accepted_values:
+              values: [decision, offence, infringement]
+      - name: read_by
+        tests:
+          - not_null
+          - accepted_values:
+              values: [parsed, extracted]
+
+  - name: silver_incident_articles
+    description: The rules a charge cites, one row each. book is the join key, not regulation.
+    columns:
+      - name: citation_id
+        tests: [unique, not_null]
+      - name: incident_id
+        tests: [not_null]
+      - name: book
+        tests:
+          - accepted_values:
+              values: [sporting, technical, isc]
+
+  - name: silver_incident_sanctions
+    description: What a decision imposed, one row per sanction in the order it was written.
+    columns:
+      - name: sanction_id
+        tests: [unique, not_null]
+      - name: incident_id
+        tests: [not_null]
+      - name: kind
+        tests: [not_null]

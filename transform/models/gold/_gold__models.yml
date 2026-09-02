@@ -35,3 +35,17 @@ models:
         tests: [not_null]
       - name: stop_count
         tests: [not_null]
+
+  - name: gold_incident_precedent
+    description: >
+      Every driver ruling with the rule cited and the sanction imposed, one row per sanction.
+      Stewards' decisions are not binding precedent; this counts what happened, nothing more.
+    columns:
+      - name: incident_id
+        tests: [not_null]
+      - name: season
+        tests: [not_null]
+      - name: rule_book
+        tests:
+          - accepted_values:
+              values: [sporting, technical, isc]

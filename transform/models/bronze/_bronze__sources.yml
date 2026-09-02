@@ -22,3 +22,9 @@ sources:
         description: Open-Meteo forecast and archive readings around each event.
       - name: session_laps
         description: FastF1 lap telemetry per session, including tyre, stint and track status.
+      - name: incidents
+        description: One row per car the stewards ruled on, from the published decisions.
+      - name: incident_articles
+        description: The rules a charge cites, one row each, with the book resolved.
+      - name: incident_sanctions
+        description: What each decision imposed. A decision carries a list, not one sanction.

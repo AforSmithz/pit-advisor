@@ -39,3 +39,13 @@ where {{ column }} > coalesce(
     timestamp '1970-01-01 00:00:00'
 )
 {% endmacro %}
+
+
+{% macro list_size(column) %}
+{#- trino counts a list with cardinality, duckdb reserves that for maps and uses len -#}
+{%- if target.type == 'athena' -%}
+cardinality({{ column }})
+{%- else -%}
+len({{ column }})
+{%- endif -%}
+{% endmacro %}
