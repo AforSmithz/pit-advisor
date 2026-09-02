@@ -8,6 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from pitadvisor import cli
+from pitadvisor.types import Source
 
 REPO = Path(__file__).resolve().parents[2]
 DBT = shutil.which("dbt")
@@ -22,6 +23,65 @@ def lake(monkeypatch, tmp_path, fetch):
     monkeypatch.setattr("pitadvisor.ingest.http.fetch", fetch)
     monkeypatch.chdir(tmp_path)
     return tmp_path / "data" / "local"
+
+
+def stewards_document(lake):
+    """One published decision, landed the way the crawler lands it and already read, so the
+    replay reaches bronze without opening a pdf and the incident models have something to
+    build from."""
+    from datetime import UTC, datetime
+
+    from pitadvisor.incidents import lake as incident_lake
+    from pitadvisor.incidents.parse import Article, Book, Decision
+    from pitadvisor.ingest.raw_store import LocalObjectStore, RawStore
+    from pitadvisor.types import EventKey, Provenance
+
+    store = LocalObjectStore(lake)
+    RawStore(store).land(
+        EventKey(season=2024, round=5),
+        "20240505T1800-decision-car-7-collision",
+        b"%PDF-1.4 stub",
+        Provenance(
+            run_id="run-1",
+            source=Source.FIA_DOCS,
+            url="https://www.fia.com/decision.pdf",
+            fetched_at=datetime(2024, 5, 5, 18, tzinfo=UTC),
+            status=200,
+        ),
+        suffix="pdf",
+    )
+    key = next(item.key for item in store.list("raw/source=fia_docs/") if item.key.endswith(".pdf"))
+    store.put(
+        incident_lake.cache_key(key),
+        incident_lake.dump(
+            incident_lake.Reading(
+                raw_key=key,
+                kind="decision",
+                read_by=incident_lake.EXTRACTED,
+                decisions=[
+                    Decision(
+                        document=41,
+                        car=7,
+                        driver="Jo Mercier",
+                        session="Race",
+                        charge=(
+                            "Breach of Article 33.4 of the FIA Formula One Sporting Regulations."
+                        ),
+                        articles=[
+                            Article(
+                                code="Article 33.4",
+                                regulation="FIA Formula One Sporting Regulations",
+                                book=Book.SPORTING,
+                            )
+                        ],
+                        outcome="10 second time penalty.",
+                    )
+                ],
+            )
+        ),
+    )
+    replayed = CliRunner().invoke(cli.app, ["rebuild", "--source", "fia_docs", "--local"])
+    assert replayed.exit_code == 0, replayed.output
 
 
 def dbt(tmp_path, lake, *args):
@@ -73,6 +133,7 @@ def test_a_weekend_goes_from_upstream_json_to_a_gold_mart(lake, tmp_path):
 
     quality = runner.invoke(cli.app, ["quality-report", "--layer", "bronze", "--local"])
     assert quality.exit_code == 0, quality.stdout
+    stewards_document(lake)
 
     built = dbt(tmp_path, lake, "build")
     assert built.returncode == 0, built.stdout
@@ -116,6 +177,7 @@ def test_an_amended_result_replaces_the_old_row(lake, tmp_path):
     runner.invoke(
         cli.app, ["ingest", "--source", "open_meteo", "--season", "2024", "--round", "5", "--local"]
     )
+    stewards_document(lake)
     assert dbt(tmp_path, lake, "run").returncode == 0
 
     # the same event lands again, as it does when a penalty is applied after the race
