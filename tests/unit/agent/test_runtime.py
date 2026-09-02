@@ -2,7 +2,7 @@ import pytest
 
 from pitadvisor.agent import tools
 from pitadvisor.agent.runtime import Agent, ToolCall, ungrounded
-from pitadvisor.agent.tools import Toolbox
+from pitadvisor.agent.tools import MAX_SIM_PATHS, Toolbox, ToolResult
 
 
 class FakeBedrock:
@@ -241,3 +241,15 @@ def test_a_range_of_corner_numbers_is_two_numbers_not_a_negative_one():
         payload={"passages": [{"text": "reprofiled at turns 11 to 14 and 17 to 20"}]},
     )
     assert ungrounded("turns 11-14 and 17-20 changed", "what changed", [call], [result]) == []
+
+
+def test_a_bound_the_tool_schema_publishes_is_not_an_invented_figure():
+    # refusing a request by naming the limit it broke quotes our own contract, which the model
+    # is given, so it is grounded even though no tool ran
+    answer = f"I can't run that. run_race_sim allows at most {MAX_SIM_PATHS:,} paths."
+    assert ungrounded(answer, "Simulate with a million paths.", [], []) == []
+
+
+def test_arithmetic_over_two_tool_results_is_still_caught():
+    result = ToolResult(tool="get_driver_form", ok=True, payload={"low": 0.11, "high": 0.44})
+    assert ungrounded("The interval is 0.33 wide.", "How wide?", [], [result]) == ["0.33"]

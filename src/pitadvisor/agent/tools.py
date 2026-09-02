@@ -820,6 +820,15 @@ def toolbox(settings: Settings, store: ObjectStore, local: bool = False) -> Tool
     )
 
 
+def declared_numbers() -> set[str]:
+    """Every figure the tool contracts publish: bounds, defaults, enumerated sizes. The model is
+    given these, so quoting one back is not an invented number, it is quoting our own schema."""
+    found: set[str] = set()
+    for spec in specs():
+        _walk(spec["toolSpec"]["inputSchema"]["json"], found)
+    return found
+
+
 def numbers_in(result: ToolResult) -> set[str]:
     """Every figure a tool returned, as the strings an answer would have to quote."""
     found: set[str] = set()

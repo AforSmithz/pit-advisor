@@ -186,7 +186,9 @@ def _accumulate(totals: dict[str, int], usage: dict[str, Any]) -> None:
 
 
 def grounding_set(question: str, calls: list[ToolCall], results: list[ToolResult]) -> set[str]:
-    allowed: set[str] = set()
+    # a bound the tool schema declares is a figure this system published, not one the model made
+    # up, so refusing a request by quoting the limit it broke is grounded
+    allowed: set[str] = set(tools.declared_numbers())
     for result in results:
         if result.ok:
             allowed |= tools.numbers_in(result)
