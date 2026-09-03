@@ -12,6 +12,7 @@ const ROUTES = [
   { href: "/track/", name: "Track" },
   { href: "/forecast/", name: "Forecast" },
   { href: "/pipeline/", name: "Pipeline" },
+  { href: "/ask/", name: "Ask" },
 ];
 
 export function Rail({ trackHref }: { trackHref: string }) {
