@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     data_source_id: str = ""
     guardrail_id: str = ""
     guardrail_version: str = "DRAFT"
+    # what the published dashboard may spend in a day, in questions
+    ask_daily_limit: int = 20
 
     @model_validator(mode="after")
     def _derive_names(self) -> "Settings":
