@@ -19,6 +19,9 @@ from aws_cdk import (
     aws_iam as iam,
 )
 from aws_cdk import (
+    aws_lambda as lambda_,
+)
+from aws_cdk import (
     aws_s3 as s3,
 )
 from constructs import Construct
@@ -82,6 +85,7 @@ class WebStack(Stack):
         construct_id: str,
         *,
         env_name: str,
+        ask_url: lambda_.IFunctionUrl | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -159,6 +163,25 @@ class WebStack(Stack):
                         event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
                     )
                 ],
+            ),
+            # the ask function keeps its IAM auth and cloudfront signs each request with an
+            # origin access control, so the browser never holds a credential and the function
+            # url stays unusable on its own. nothing is cached: every question is a new answer
+            additional_behaviors=(
+                {
+                    "/api/ask": cloudfront.BehaviorOptions(
+                        origin=origins.FunctionUrlOrigin.with_origin_access_control(ask_url),
+                        viewer_protocol_policy=(cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS),
+                        allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+                        cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+                        origin_request_policy=(
+                            cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER
+                        ),
+                        response_headers_policy=headers,
+                    )
+                }
+                if ask_url is not None
+                else {}
             ),
             error_responses=[
                 cloudfront.ErrorResponse(

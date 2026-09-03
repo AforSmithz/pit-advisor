@@ -20,8 +20,16 @@ aws_env = cdk.Environment(account=ACCOUNT, region=REGION)
 DataStack(app, f"pitadvisor-data-{env_name}", env_name=env_name, env=aws_env)
 IngestStack(app, f"pitadvisor-ingest-{env_name}", env_name=env_name, env=aws_env)
 TransformStack(app, f"pitadvisor-transform-{env_name}", env_name=env_name, env=aws_env)
-WebStack(app, f"pitadvisor-web-{env_name}", env_name=env_name, env=aws_env)
-AgentStack(app, f"pitadvisor-agent-{env_name}", env_name=env_name, env=aws_env)
+# the agent comes first: the dashboard fronts its function url on /api/ask, so cloudfront
+# needs the url to exist before the distribution that signs requests to it
+agent = AgentStack(app, f"pitadvisor-agent-{env_name}", env_name=env_name, env=aws_env)
+WebStack(
+    app,
+    f"pitadvisor-web-{env_name}",
+    env_name=env_name,
+    ask_url=agent.url,
+    env=aws_env,
+)
 ObservabilityStack(
     app,
     f"pitadvisor-observability-{env_name}",

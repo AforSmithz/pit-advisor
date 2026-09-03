@@ -813,3 +813,40 @@ def test_the_agent_stack_is_tagged_as_its_own_component(agent_template: Template
     )
     tags = {tag["Key"]: tag["Value"] for tag in function["Properties"].get("Tags", [])}
     assert tags.get("component") == "agent"
+
+
+def test_the_ask_function_is_capped_in_two_places(agent_template: Template) -> None:
+    functions = agent_template.find_resources("AWS::Lambda::Function")
+    ask = next(
+        body
+        for body in functions.values()
+        if str(body["Properties"].get("FunctionName", "")).startswith("pitadvisor-ask")
+    )
+    # a burst cannot outrun the daily counter if only two of these can run at once
+    assert ask["Properties"]["ReservedConcurrentExecutions"] == 2
+    assert ask["Properties"]["Environment"]["Variables"]["PITADV_ASK_DAILY_LIMIT"] == "20"
+
+
+def test_the_ask_function_url_is_never_public(agent_template: Template) -> None:
+    urls = agent_template.find_resources("AWS::Lambda::Url")
+    assert len(urls) == 1
+    assert next(iter(urls.values()))["Properties"]["AuthType"] == "AWS_IAM"
+
+
+def test_the_dashboard_signs_its_way_to_the_agent() -> None:
+    app = cdk.App(context={"env": ENV_NAME})
+    aws_env = cdk.Environment(account=ACCOUNT, region=REGION)
+    agent = AgentStack(app, AGENT_STACK, env_name=ENV_NAME, env=aws_env)
+    web = WebStack(app, WEB_STACK, env_name=ENV_NAME, ask_url=agent.url, env=aws_env)
+    template = Template.from_stack(web)
+    distribution = sole(template, "AWS::CloudFront::Distribution")
+    behaviors = distribution["Properties"]["DistributionConfig"]["CacheBehaviors"]
+    ask = next(b for b in behaviors if b["PathPattern"] == "/api/ask")
+    # an answer is never the same twice, and a cached one would also hide the daily counter
+    assert ask["CachePolicyId"] == "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+    assert "OriginAccessControlId" in str(distribution["Properties"]["DistributionConfig"])
+
+
+def test_the_dashboard_has_no_agent_route_when_it_is_not_given_one(web_template: Template) -> None:
+    distribution = sole(web_template, "AWS::CloudFront::Distribution")
+    assert "CacheBehaviors" not in distribution["Properties"]["DistributionConfig"]

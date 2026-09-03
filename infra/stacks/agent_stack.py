@@ -125,6 +125,8 @@ class AgentStack(Stack):
             self.node.try_get_context("dataBucket") or f"pit-advisor-data-{env_name}-{self.account}"
         )
         database_name = f"pitadvisor_{env_name}"
+        ledger_table_name = f"pitadvisor-ingest-{env_name}"
+        ask_daily_limit = int(self.node.try_get_context("askDailyLimit") or 20)
         workgroup_name = self.node.try_get_context("athenaWorkgroup") or "pitadvisor"
         image_tag = self.node.try_get_context("pipelineImageTag") or "latest"
 
@@ -302,7 +304,11 @@ class AgentStack(Stack):
                 "PITADV_KNOWLEDGE_BASE_ID": self.knowledge_base.attr_knowledge_base_id,
                 "PITADV_GUARDRAIL_ID": self.guardrail.attr_guardrail_id,
                 "PITADV_GUARDRAIL_VERSION": "DRAFT",
+                "PITADV_ASK_DAILY_LIMIT": str(ask_daily_limit),
             },
+            # the dashboard is public through cloudfront, so the blast radius of a burst is
+            # capped in two places: the daily counter, and the number of these that can run
+            reserved_concurrency=2,
         )
 
         lake_access = iam.ManagedPolicy.from_managed_policy_name(
@@ -359,8 +365,20 @@ class AgentStack(Stack):
             )
         )
 
+        # the counter the daily cap is kept in. one row per utc day, incremented under a
+        # condition, expired by the table's ttl
+        self.ask_function.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["dynamodb:UpdateItem"],
+                resources=[
+                    f"arn:aws:dynamodb:{self.region}:{self.account}:table/{ledger_table_name}"
+                ],
+            )
+        )
+
         # IAM auth, not public: an open url in front of a function that spends bedrock tokens
-        # is a bill someone else can run up
+        # is a bill someone else can run up. cloudfront signs each request with an origin access
+        # control, so the browser never holds a credential and the url itself stays shut
         self.url = self.ask_function.add_function_url(auth_type=lambda_.FunctionUrlAuthType.AWS_IAM)
 
         dev_user = iam.User.from_user_name(
@@ -410,6 +428,7 @@ class AgentStack(Stack):
         memory: int,
         timeout: Duration,
         extra_environment: dict[str, str] | None = None,
+        reserved_concurrency: int | None = None,
     ) -> lambda_.DockerImageFunction:
         environment = {
             "PITADV_ENV": env_name,
@@ -463,6 +482,7 @@ class AgentStack(Stack):
             environment=environment,
             role=role,
             log_group=log_group,
+            reserved_concurrent_executions=reserved_concurrency,
         )
 
     def _global_inference_statements(self) -> list[iam.PolicyStatement]:
