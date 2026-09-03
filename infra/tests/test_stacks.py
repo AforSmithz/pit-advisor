@@ -568,9 +568,31 @@ def test_the_publish_role_trusts_one_repo_and_one_branch(web_template: Template)
     assert trust["Action"] == "sts:AssumeRoleWithWebIdentity"
     conditions = trust["Condition"]["StringEquals"]
     assert conditions["token.actions.githubusercontent.com:aud"] == "sts.amazonaws.com"
-    subject = conditions["token.actions.githubusercontent.com:sub"]
-    assert subject.endswith(":ref:refs/heads/main")
-    assert subject.startswith("repo:")
+    subjects = conditions["token.actions.githubusercontent.com:sub"]
+    assert isinstance(subjects, list)
+    assert all(subject.startswith("repo:") for subject in subjects)
+    assert all(subject.endswith(":ref:refs/heads/main") for subject in subjects)
+
+
+def test_the_publish_role_trusts_the_immutable_subject_too(web_template: Template) -> None:
+    # github mints repo:owner@<id>/name@<id>:ref:... for repositories on the immutable claim,
+    # and a trust policy that only knows the plain form can never be assumed
+    from stacks.web_stack import WebStack
+
+    app = cdk.App(
+        context={
+            "githubRepo": "octocat/example",
+            "githubSubjectPrefix": "repo:octocat@1/example@2",
+        }
+    )
+    stack = WebStack(app, "web", env_name="dev")
+    template = Template.from_stack(stack)
+    trust = next(iter(template.find_resources("AWS::IAM::Role").values()))
+    conditions = trust["Properties"]["AssumeRolePolicyDocument"]["Statement"][0]["Condition"]
+    assert conditions["StringEquals"]["token.actions.githubusercontent.com:sub"] == [
+        "repo:octocat/example:ref:refs/heads/main",
+        "repo:octocat@1/example@2:ref:refs/heads/main",
+    ]
 
 
 def test_the_publish_role_cannot_write_to_the_lake(web_template: Template) -> None:

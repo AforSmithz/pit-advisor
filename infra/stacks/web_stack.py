@@ -243,6 +243,15 @@ class WebStack(Stack):
     def _publisher(self, env_name: str) -> None:
         """The role GitHub Actions assumes to publish. No static key exists anywhere."""
         repo = self.node.try_get_context("githubRepo") or PLACEHOLDER_REPO
+        # github is rolling out immutable subject claims, which put the numeric owner and repo
+        # ids in the sub: repo:owner@1234/name@5678:ref:refs/heads/main. the plain form is what
+        # every guide still shows and what the docs describe, so both are trusted and nothing
+        # else is. read the repo's own prefix from
+        # /repos/{owner}/{repo}/actions/oidc/customization/sub and pass it as githubSubjectPrefix
+        prefix = self.node.try_get_context("githubSubjectPrefix")
+        subjects = [f"repo:{repo}:ref:refs/heads/main"]
+        if prefix and f"{prefix}:ref:refs/heads/main" not in subjects:
+            subjects.append(f"{prefix}:ref:refs/heads/main")
 
         # the account is shared, so a provider for this issuer may already exist. creating a
         # second one for the same url fails, which is why the arn can be passed in instead.
@@ -280,9 +289,8 @@ class WebStack(Stack):
                         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
                         # the branch is part of the boundary: a pull request from a fork
                         # carries a different sub and cannot assume this role
-                        "token.actions.githubusercontent.com:sub": (
-                            f"repo:{repo}:ref:refs/heads/main"
-                        ),
+                        # a list under StringEquals is an or, so this is still an allowlist
+                        "token.actions.githubusercontent.com:sub": subjects,
                     }
                 },
             ),
