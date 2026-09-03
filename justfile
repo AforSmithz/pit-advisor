@@ -1,13 +1,13 @@
-# CI assumes a role by OIDC and has no ~/.aws at all. an empty AWS_PROFILE is not the same as
-# an unset one: the cli reads it and answers "The config profile () could not be found", so CI
-# gets "default", which the cli accepts without a config section when the credentials are in the
-# environment
-export AWS_PROFILE := if env_var_or_default("CI", "") == "" { "pitadvisor" } else { "default" }
+# not exported. CI assumes a role by OIDC and has no ~/.aws at all, and AWS_PROFILE is read
+# whatever it is set to: empty answers "The config profile () could not be found" and so does
+# "default" with no config file. only cdk needs it in the environment, and cdk never runs in CI,
+# so those recipes set it themselves
+AWS_PROFILE := "pitadvisor"
 export AWS_REGION := "ap-southeast-1"
 
 account := "352445792687"
 
-# and the explicit flag is dropped there for the same reason
+# CI assumes a role by OIDC, so there is no profile to name there
 profile := if env_var_or_default("CI", "") == "" { "--profile pitadvisor" } else { "" }
 
 default:
@@ -29,14 +29,15 @@ cost:
       --profile {{AWS_PROFILE}} --region us-east-1
 
 synth:
-    uv run --directory infra cdk synth
+    AWS_PROFILE={{AWS_PROFILE}} uv run --directory infra cdk synth
 
 diff:
-    uv run --directory infra cdk diff
+    AWS_PROFILE={{AWS_PROFILE}} uv run --directory infra cdk diff
 
 # budgets are useless without a subscriber, so the address is required to deploy
 deploy stack email:
-    uv run --directory infra cdk deploy {{stack}} -c alertEmail={{email}} --require-approval broadening
+    AWS_PROFILE={{AWS_PROFILE}} uv run --directory infra cdk deploy {{stack}} \
+      -c alertEmail={{email}} --require-approval broadening
 
 doctor:
     uv run pitadv doctor
@@ -111,7 +112,7 @@ check:
 
 infra-check:
     uv run --directory infra pytest
-    uv run --directory infra cdk synth --quiet
+    AWS_PROFILE={{AWS_PROFILE}} uv run --directory infra cdk synth --quiet
 
 transform-check:
     uv run dbt build --project-dir transform --target local
