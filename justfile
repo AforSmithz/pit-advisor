@@ -1,9 +1,13 @@
-export AWS_PROFILE := "pitadvisor"
+# CI assumes a role by OIDC and has no ~/.aws at all. an empty AWS_PROFILE is not the same as
+# an unset one: the cli reads it and answers "The config profile () could not be found", so CI
+# gets "default", which the cli accepts without a config section when the credentials are in the
+# environment
+export AWS_PROFILE := if env_var_or_default("CI", "") == "" { "pitadvisor" } else { "default" }
 export AWS_REGION := "ap-southeast-1"
 
 account := "352445792687"
 
-# CI assumes a role by OIDC, so there is no profile to name there
+# and the explicit flag is dropped there for the same reason
 profile := if env_var_or_default("CI", "") == "" { "--profile pitadvisor" } else { "" }
 
 default:
