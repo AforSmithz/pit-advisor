@@ -29,7 +29,11 @@ jobs:
           role-to-assume: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
           aws-region: ap-southeast-1
       - uses: extractions/setup-just@v3
+      # the dashboard is not at the repo root, so the action has nowhere to read the
+      # version from unless it is pointed at web/package.json
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
       - uses: actions/setup-node@v6
         with:
           node-version: 22

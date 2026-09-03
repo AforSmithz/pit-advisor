@@ -1,6 +1,7 @@
 {
   "name": "pit-advisor-web",
   "private": true,
+  "packageManager": "pnpm@10.14.0",
   "type": "module",
   "scripts": {
     "dev": "next dev",
