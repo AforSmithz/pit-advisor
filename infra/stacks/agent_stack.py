@@ -306,9 +306,6 @@ class AgentStack(Stack):
                 "PITADV_GUARDRAIL_VERSION": "DRAFT",
                 "PITADV_ASK_DAILY_LIMIT": str(ask_daily_limit),
             },
-            # the dashboard is public through cloudfront, so the blast radius of a burst is
-            # capped in two places: the daily counter, and the number of these that can run
-            reserved_concurrency=2,
         )
 
         lake_access = iam.ManagedPolicy.from_managed_policy_name(
@@ -428,7 +425,6 @@ class AgentStack(Stack):
         memory: int,
         timeout: Duration,
         extra_environment: dict[str, str] | None = None,
-        reserved_concurrency: int | None = None,
     ) -> lambda_.DockerImageFunction:
         environment = {
             "PITADV_ENV": env_name,
@@ -482,7 +478,9 @@ class AgentStack(Stack):
             environment=environment,
             role=role,
             log_group=log_group,
-            reserved_concurrent_executions=reserved_concurrency,
+            # no reserved concurrency: this account denies lambda:PutFunctionConcurrency at the
+            # organisation level, so the daily counter in the ledger is the only cap. it is the
+            # one that bounds spend anyway; concurrency would only have bounded the burst
         )
 
     def _global_inference_statements(self) -> list[iam.PolicyStatement]:

@@ -815,16 +815,17 @@ def test_the_agent_stack_is_tagged_as_its_own_component(agent_template: Template
     assert tags.get("component") == "agent"
 
 
-def test_the_ask_function_is_capped_in_two_places(agent_template: Template) -> None:
+def test_the_ask_function_carries_its_daily_cap(agent_template: Template) -> None:
     functions = agent_template.find_resources("AWS::Lambda::Function")
     ask = next(
         body
         for body in functions.values()
         if str(body["Properties"].get("FunctionName", "")).startswith("pitadvisor-ask")
     )
-    # a burst cannot outrun the daily counter if only two of these can run at once
-    assert ask["Properties"]["ReservedConcurrentExecutions"] == 2
     assert ask["Properties"]["Environment"]["Variables"]["PITADV_ASK_DAILY_LIMIT"] == "20"
+    # the account denies lambda:PutFunctionConcurrency at the organisation level, so the daily
+    # counter is the only cap and nothing here should claim a second one
+    assert "ReservedConcurrentExecutions" not in ask["Properties"]
 
 
 def test_the_ask_function_url_is_never_public(agent_template: Template) -> None:
