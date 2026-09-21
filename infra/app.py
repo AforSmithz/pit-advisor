@@ -1,3 +1,5 @@
+import os
+
 import aws_cdk as cdk
 from cdk_nag import AwsSolutionsChecks
 from stacks import (
@@ -9,7 +11,8 @@ from stacks import (
     WebStack,
 )
 
-ACCOUNT = "352445792687"
+# same source as the cli and the justfile: PITADV_ACCOUNT_ID, then this default
+ACCOUNT = os.environ.get("PITADV_ACCOUNT_ID", "189575358467")
 REGION = "ap-southeast-1"
 
 app = cdk.App()
