@@ -61,6 +61,17 @@ def test_standings_fall_back_to_last_season_in_round_one():
     assert ranked[CODES[19]] is not None
 
 
+def test_drivers_level_on_points_rank_by_countback_every_time():
+    # fifteen drivers never score, so all of their order comes from the tie-break
+    history = lake(races=3)
+    tables = {tuple(baselines.entries(history, 2024, 3).standings) for _ in range(30)}
+    assert len(tables) == 1
+    ranked = dict(zip(CODES, next(iter(tables)), strict=True))
+    # D05 has finished sixth every time, D19 last, and both are on zero
+    assert ranked[CODES[5]] == 6
+    assert ranked[CODES[19]] == 20
+
+
 def test_a_perfectly_predictable_grid_gives_a_confident_lookup():
     fitted = baselines.fit(lake(), START + timedelta(days=400))
     table = np.asarray(fitted.lookups["grid"].table)

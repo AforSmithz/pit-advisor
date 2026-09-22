@@ -71,8 +71,14 @@ def _standings(history: pl.DataFrame, season: int) -> dict[str, int]:
         return {}
     totals = (
         table.group_by("driver_code")
-        .agg(pl.col("points").sum().alias("points"))
-        .sort("points", descending=True)
+        .agg(pl.col("points").sum().alias("points"), pl.col("position").min().alias("best"))
+        # ties break on countback the way the championship does, best finish first. without
+        # it half the pointless field ranked in whatever order the group_by hashed them
+        .sort(
+            ["points", "best", "driver_code"],
+            descending=[True, False, False],
+            nulls_last=True,
+        )
     )
     return {
         str(row["driver_code"]): min(rank, FIELD)
