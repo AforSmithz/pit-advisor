@@ -45,21 +45,32 @@ export class AskError extends Error {
   }
 }
 
+// cloudfront signs the request to the function url, and for a POST it can only do that when
+// the viewer supplies the payload hash. without it lambda answers 403
+export async function payloadHash(body: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 /** The backend owns every figure, so this parses and never computes. */
 export async function ask(question: string, signal?: AbortSignal): Promise<Answer> {
+  const body = JSON.stringify({ question });
   const response = await fetch("/api/ask", {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ question }),
+    headers: {
+      "content-type": "application/json",
+      "x-amz-content-sha256": await payloadHash(body),
+    },
+    body,
     signal,
   });
-  const body: unknown = await response.json().catch(() => null);
+  const reply: unknown = await response.json().catch(() => null);
   if (!response.ok) {
-    const parsed = refusal.safeParse(body);
+    const parsed = refusal.safeParse(reply);
     if (parsed.success) {
       throw new AskError(parsed.data.error, parsed.data.resets_at);
     }
     throw new AskError(`the agent answered ${response.status}`);
   }
-  return answer.parse(body);
+  return answer.parse(reply);
 }
