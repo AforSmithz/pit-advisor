@@ -108,6 +108,15 @@ def test_a_car_that_stopped_being_the_same_car_is_flagged_out():
     assert fitted.pairs == frame.height // 2 - 1
 
 
+def test_rounding_noise_is_not_a_spread_to_flag_a_team_against():
+    # two teams with identical cars and one with a real gap. on a noiseless lake the spread is
+    # zero on one blas and ~1e-13 on another, and the second used to flag the real team out
+    gaps = {"A1": -0.2, "A2": 0.2, "B1": 0.0, "B2": 0.0, "C1": 0.0, "C2": 0.0}
+    fitted = fit(season(gaps, noise=1e-13), as_of=date(2025, 1, 1))
+    assert fitted.flagged_pairs == 0
+    assert len(fitted.drivers) == 6
+
+
 def test_a_field_of_single_car_teams_has_nothing_to_compare():
     frame = pl.DataFrame(
         [

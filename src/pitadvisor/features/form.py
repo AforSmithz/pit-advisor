@@ -13,6 +13,9 @@ RIDGE = 0.05
 # a team's two cars are only the same car until one of them has damage or a new floor
 OUTLIER_MAD_MULTIPLE = 4.0
 MIN_PAIRS_FOR_OUTLIERS = 8
+# relative to the deltas themselves. a noiseless lake leaves a spread of zero on one blas
+# and 1e-17 on another, and a limit that small flags whole teams for rounding
+SPREAD_FLOOR = 1e-9
 CONFIDENCE_Z = 1.96
 
 COLUMNS = ("season", "round", "race_date", "driver_code", "constructor_id", "value")
@@ -97,7 +100,7 @@ def flag_outliers(pairs: pl.DataFrame, multiple: float = OUTLIER_MAD_MULTIPLE) -
     delta = pairs["delta"].to_numpy()
     centre = float(np.median(delta))
     spread = float(np.median(np.abs(delta - centre)))
-    if spread == 0.0:
+    if spread <= SPREAD_FLOOR * max(abs(centre), float(np.max(np.abs(delta))), 1.0):
         return pairs.with_columns(pl.lit(False).alias("is_outlier"))
     limit = multiple * 1.4826 * spread
     return pairs.with_columns(((pl.col("delta") - centre).abs() > limit).alias("is_outlier"))
