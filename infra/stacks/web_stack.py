@@ -199,6 +199,19 @@ class WebStack(Stack):
             ],
         )
 
+        if ask_url is not None:
+            # FunctionUrlOrigin grants cloudfront lambda:InvokeFunctionUrl only. a signed request
+            # through an origin access control also needs lambda:InvokeFunction, and without it
+            # lambda answers 403, which the error mapping below then serves as the 404 page
+            lambda_.CfnPermission(
+                self,
+                "AskInvokeFromCloudFront",
+                action="lambda:InvokeFunction",
+                function_name=ask_url.function_arn,
+                principal="cloudfront.amazonaws.com",
+                source_arn=self.distribution.distribution_arn,
+            )
+
         Validations.of(self.bucket).acknowledge(
             Acknowledgment(id="AwsSolutions-S1", reason=NO_ACCESS_LOGS)
         )

@@ -846,6 +846,14 @@ def test_the_dashboard_signs_its_way_to_the_agent() -> None:
     # an answer is never the same twice, and a cached one would also hide the daily counter
     assert ask["CachePolicyId"] == "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
     assert "OriginAccessControlId" in str(distribution["Properties"]["DistributionConfig"])
+    permissions = template.find_resources("AWS::Lambda::Permission").values()
+    granted = {
+        body["Properties"]["Action"]
+        for body in permissions
+        if body["Properties"]["Principal"] == "cloudfront.amazonaws.com"
+    }
+    # the url grant alone is refused with a 403 once the request is signed
+    assert granted == {"lambda:InvokeFunctionUrl", "lambda:InvokeFunction"}
 
 
 def test_the_dashboard_has_no_agent_route_when_it_is_not_given_one(web_template: Template) -> None:
