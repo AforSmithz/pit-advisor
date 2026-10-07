@@ -1,29 +1,29 @@
-pit advisor backtest, run 20260922T042629-dc64ea, generated 2026-09-22 04:28
-60 races held out from 2021 onwards, 1198 driver-races, 4000 paths a race, seed 11
+pit advisor backtest, run 20261007T181403-a3a6cd, generated 2026-10-07 18:16
+58 races held out from 2021 onwards, 1187 driver-races, 4000 paths a race, seed 11
 
 multiclass over classified finishing position, intervals bootstrapped at the race
 level because drivers inside one race share a car, a strategy and a safety car
 
-simulation  log loss 2.5881 [2.5512, 2.6251]  brier 0.8979 [0.8911, 0.9050]  ece win 0.011  ece podium 0.045  ece points 0.087
-grid        log loss 2.6017 [2.5529, 2.6545]  brier 0.9035 [0.8977, 0.9097]  ece win 0.023  ece podium 0.035  ece points 0.044
-standings   log loss 2.7004 [2.6574, 2.7422]  brier 0.9191 [0.9144, 0.9237]  ece win 0.013  ece podium 0.027  ece points 0.040
-last_race   log loss 2.7923 [2.7612, 2.8250]  brier 0.9286 [0.9250, 0.9323]  ece win 0.010  ece podium 0.022  ece points 0.039
+simulation  log loss 2.5946 [2.5517, 2.6387]  brier 0.8978 [0.8908, 0.9045]  ece win 0.014  ece podium 0.039  ece points 0.076
+grid        log loss 2.6105 [2.5613, 2.6608]  brier 0.9028 [0.8973, 0.9085]  ece win 0.025  ece podium 0.039  ece points 0.036
+standings   log loss 2.7285 [2.6861, 2.7728]  brier 0.9224 [0.9181, 0.9266]  ece win 0.011  ece podium 0.024  ece points 0.035
+last_race   log loss 2.8260 [2.7927, 2.8610]  brier 0.9315 [0.9280, 0.9350]  ece win 0.004  ece podium 0.023  ece points 0.030
 
 the simulation beats grid, standings, last_race on log loss
 this holdout separates it from standings, last_race, the rest are inside bootstrap noise
 
 how much better than each baseline, resampled over the same races. an
 interval that straddles zero means the two are not separated by this holdout
-  vs grid        log loss +0.0137 [-0.0184, +0.0472]  brier +0.0056 [+0.0011, +0.0098]
-  vs standings   log loss +0.1123 [+0.0731, +0.1551]  brier +0.0212 [+0.0146, +0.0285]
-  vs last_race   log loss +0.2042 [+0.1651, +0.2455]  brier +0.0307 [+0.0236, +0.0379]
+  vs grid        log loss +0.0159 [-0.0204, +0.0502]  brier +0.0050 [+0.0006, +0.0094]
+  vs standings   log loss +0.1339 [+0.0889, +0.1740]  brier +0.0245 [+0.0173, +0.0318]
+  vs last_race   log loss +0.2314 [+0.1847, +0.2761]  brier +0.0337 [+0.0266, +0.0408]
 
 assumptions the simulation was run under
-  laps                               70.000  race distance the simulation runs
-  reference_lap_millis            81425.438  dry benchmark the percentage ratings are scaled against
-  degradation_millis_per_lap         48.870  shrunk from 54 races, field 46
-  pit_loss_millis                 23648.867  in-lap plus out-lap against the driver's own green pace
-  safety_car_per_green_lap            0.011  field rate 0.0150, period 4.6 laps
-  pass_probability_at_parity          0.133  within 143 weighted attempts inside striking range, slope 1.02 per percent
-  dirty_air_millis                  735.248  what a lap inside the following gap costs against the driver's own clean pace, field 978
-  race_day_sd_percent                 0.592  how far a driver's Sunday drifts from his own rating
+  laps                               58.000  race distance the simulation runs
+  reference_lap_millis            92802.590  dry benchmark the percentage ratings are scaled against
+  degradation_millis_per_lap         46.295  shrunk from 70 races, field 46
+  pit_loss_millis                 24126.000  in-lap plus out-lap against the driver's own green pace
+  safety_car_per_green_lap            0.013  field rate 0.0134, period 4.4 laps
+  pass_probability_at_parity          0.099  within 0 weighted attempts inside striking range, slope 1.09 per percent
+  dirty_air_millis                 1039.542  what a lap inside the following gap costs against the driver's own clean pace, field 1040
+  race_day_sd_percent                 0.595  how far a driver's Sunday drifts from his own rating
