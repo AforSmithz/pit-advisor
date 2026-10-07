@@ -495,7 +495,8 @@ class ScenarioShare(BaseModel, frozen=True):
 class ForecastDriver(BaseModel, frozen=True):
     driver_code: str
     constructor_id: str
-    grid: int
+    # none before qualifying: there is no slot yet, and the simulation sampled one per path
+    grid: int | None
     win: float
     podium: float
     points: float
@@ -566,6 +567,7 @@ class ForecastView(BaseModel, frozen=True):
     by_scenario: list[ScenarioDriver]
     assumptions: list[Assumption]
     evidence: Evidence | None
+    grid_sampled: bool = False
 
 
 def _quantile(row: list[float], share: float) -> int:
@@ -591,7 +593,7 @@ def forecast_view(
         ForecastDriver(
             driver_code=code,
             constructor_id=seats.get(code, "unknown"),
-            grid=grid.get(code, len(outcome.driver_code)),
+            grid=None if predicted.grid_sampled else grid.get(code, len(outcome.driver_code)),
             win=outcome.win[index],
             podium=outcome.podium[index],
             points=outcome.points[index],
@@ -633,6 +635,7 @@ def forecast_view(
         ],
         assumptions=predicted.assumptions,
         evidence=evidence,
+        grid_sampled=predicted.grid_sampled,
     )
 
 

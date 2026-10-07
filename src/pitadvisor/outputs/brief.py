@@ -34,7 +34,7 @@ class Source(BaseModel, frozen=True):
 class Favourite(BaseModel, frozen=True):
     driver_code: str
     constructor_id: str
-    grid: int
+    grid: int | None
     win: float
     podium: float
     position_low: int
@@ -69,6 +69,7 @@ class BriefView(BaseModel, frozen=True):
     weather: ScenarioWeights | None
     favourites: list[Favourite]
     simulated_paths: int
+    grid_sampled: bool
     beats_baselines: bool | None
     separated_from: list[str]
     form_leaders: list[FormLeader]
@@ -116,6 +117,7 @@ def brief_view(
             for row in favourites
         ],
         simulated_paths=forecast.paths,
+        grid_sampled=forecast.grid_sampled,
         beats_baselines=forecast.evidence.beats_baselines if forecast.evidence else None,
         separated_from=forecast.evidence.separated_from if forecast.evidence else [],
         form_leaders=[

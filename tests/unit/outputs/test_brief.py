@@ -83,3 +83,32 @@ def test_the_brief_is_read_back_off_the_emitted_views(seeded, store):
     payload = json.loads(store.get("views/brief_view.json"))
     assert payload["run_id"] == "run-3"
     assert payload["simulated_paths"] == 200
+
+
+def test_before_qualifying_the_brief_says_the_grid_was_sampled(seeded):
+    import dataclasses
+
+    import numpy as np
+    import polars as pl
+
+    from pitadvisor.model import backtest
+
+    built = seeded()
+    assembled = assembled_for(built)
+    pane = backtest.panel(built.store)
+    context = assembled.metrics.context
+    held = (pl.col("season") == context.season) & (pl.col("round") == context.round)
+    early = dataclasses.replace(
+        pane, results=pane.results.filter(~held), quali=pane.quali.filter(~held)
+    )
+    predicted = backtest.forecast(
+        early, context, context.race_date, np.random.default_rng(5), paths=200
+    )
+    seats, _ = backtest.seats_for(early, context, context.race_date)
+    grid = backtest.grid_for(early, context, predicted.outcome.driver_code)
+    forecast = forecast_view(predicted, context, "run-1", seats, grid, generated_at=NOW)
+    assert forecast.grid_sampled
+    assert all(row.grid is None for row in forecast.drivers)
+    brief = brief_view(weekend_view(assembled), forecast, track_view(assembled), "run-2", NOW)
+    assert brief.grid_sampled
+    assert all(row.grid is None for row in brief.favourites)
