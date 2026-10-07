@@ -424,12 +424,43 @@ def test_the_two_machines_share_one_role(transform_template: Template) -> None:
 
 def test_the_pipeline_builds_bronze_then_silver_then_views(transform_template: Template) -> None:
     definition = weekend_definition(transform_template)
-    for step in ("IngestJolpica", "QualityGate", "SyncCatalog", "DbtBuild", "CheckLineage"):
+    for step in ("IngestWeather", "IngestSessions", "QualityGate", "DbtBuild", "CheckLineage"):
         assert step in definition
     assert definition.index("QualityGate") < definition.index("DbtBuild")
     assert "dbt build --project-dir transform --target athena_task" in definition
-    # a weekend pipeline ingests its own weekend, a season would not fit the quota or the step
-    assert "pitadv ingest --source jolpica --season $SEASON --round $ROUND" in definition
+    # sessions walk from the plan, so a season's finale lands at the next season's first race
+    assert "pitadv backfill --source fastf1 --from $FROM --to $SEASON --session race" in definition
+
+
+def test_the_pipeline_plans_before_it_spends(transform_template: Template) -> None:
+    definition = weekend_definition(transform_template)
+    assert "pitadv weekend-plan" in definition
+    assert definition.index("PlanWeekend") < definition.index("ReadPlan")
+    assert "aws-sdk:s3:getObject" in definition
+    assert "cache/weekend_plan.json" in definition
+    # a week without a race ends at the choice, unless a manual run says force
+    assert "NoRaceThisWeek" in definition
+    assert "$.planned.plan.race_week" in definition
+    assert "$.force" in definition
+
+
+def test_the_plan_step_carries_no_season_of_its_own(transform_template: Template) -> None:
+    definition = weekend_definition(transform_template)
+    # the definition is an Fn::Join around tokens, so the state is cut out of the string
+    plan = definition[definition.index('"PlanWeekend":{') : definition.index('"ReadPlan":{')]
+    assert "PITADV_RUN_ID" in plan
+    assert "$.season" not in plan
+
+
+def test_the_state_machine_reads_only_the_plan(transform_template: Template) -> None:
+    statements = [
+        statement
+        for policy in transform_template.find_resources("AWS::IAM::Policy").values()
+        for statement in policy["Properties"]["PolicyDocument"]["Statement"]
+        if "s3:GetObject" in actions_of(statement)
+    ]
+    assert len(statements) == 1
+    assert str(statements[0]["Resource"]).endswith("/cache/weekend_plan.json")
 
 
 def test_the_pipeline_emits_every_view_the_dashboard_reads(transform_template: Template) -> None:
@@ -465,8 +496,22 @@ def test_the_pipeline_role_cannot_reach_another_task(transform_template: Templat
     )
 
 
-def test_the_schedule_is_off_until_it_is_asked_for(transform_template: Template) -> None:
+def test_the_schedule_runs_every_thursday_morning(transform_template: Template) -> None:
     _, rule = only(transform_template, "AWS::Events::Rule", ScheduleExpression=Match.any_value())
+    assert rule["Properties"]["State"] == "ENABLED"
+    assert rule["Properties"]["ScheduleExpression"] == "cron(0 6 ? * THU *)"
+    # the plan decides the event, so the rule carries no season or round of its own
+    assert rule["Properties"]["Targets"][0]["Input"] == "{}"
+
+
+def test_the_schedule_can_be_paused_from_context() -> None:
+    app = cdk.App(context={"env": ENV_NAME, "enableSchedule": "false"})
+    stack = TransformStack(
+        app, TRANSFORM_STACK, env_name=ENV_NAME, env=cdk.Environment(account=ACCOUNT, region=REGION)
+    )
+    _, rule = only(
+        Template.from_stack(stack), "AWS::Events::Rule", ScheduleExpression=Match.any_value()
+    )
     assert rule["Properties"]["State"] == "DISABLED"
 
 

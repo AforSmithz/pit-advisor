@@ -35,6 +35,9 @@ from aws_cdk import (
 )
 from constructs import Construct
 
+# where `pitadv weekend-plan` leaves its decision, read back by the ReadPlan state
+PLAN_KEY = "cache/weekend_plan.json"
+
 CATALOG_WILDCARD = (
     "dbt creates and drops silver and gold tables on every build, so the table grant cannot be "
     "enumerated. It is scoped to the pitadvisor database and to that database only. The lake "
@@ -269,10 +272,20 @@ class TransformStack(Stack):
             Acknowledgment(id="AwsSolutions-ECS2", reason=PLAIN_ENVIRONMENT)
         )
 
-        definition = (
-            self._step(
-                "IngestJolpica",
-                "pitadv ingest --source jolpica --season $SEASON --round $ROUND",
+        # every thursday: refresh the calendar and decide. a race week goes on to refresh the
+        # lake and the views, any other week ends at the choice having spent one small task
+        no_race = sfn.Succeed(self, "NoRaceThisWeek")
+        refresh = (
+            sfn.Chain.start(
+                sfn.Pass(
+                    self,
+                    "TakePlan",
+                    parameters={
+                        "season.$": "$.planned.plan.season",
+                        "round.$": "$.planned.plan.round",
+                        "walk_from.$": "$.planned.plan.walk_from",
+                    },
+                )
             )
             .next(
                 self._step(
@@ -281,9 +294,13 @@ class TransformStack(Stack):
                 )
             )
             .next(
-                self._step(
-                    "IngestSession",
-                    "pitadv ingest --source fastf1 --season $SEASON --round $ROUND --session race",
+                self._run(
+                    "IngestSessions",
+                    "pitadv backfill --source fastf1 --from $FROM --to $SEASON --session race",
+                    environment=[
+                        {"Name": "FROM", "Value.$": "States.Format('{}', $.walk_from)"},
+                        {"Name": "SEASON", "Value.$": "States.Format('{}', $.season)"},
+                    ],
                 )
             )
             .next(self._quality_gate())
@@ -295,7 +312,28 @@ class TransformStack(Stack):
             )
             .next(self._step("CheckLineage", "pitadv lineage --check"))
             .next(
-                self._step("EmitViews", "pitadv emit-views --views pipeline,weekend,driver,track")
+                self._step(
+                    "EmitViews",
+                    "pitadv emit-views --views pipeline,weekend,driver,track,forecast,brief",
+                )
+            )
+        )
+        definition = (
+            sfn.Chain.start(self._run("PlanWeekend", "pitadv weekend-plan", environment=[]))
+            .next(self._read_plan(bucket_name))
+            .next(
+                sfn.Choice(self, "RaceWeek")
+                .when(
+                    sfn.Condition.or_(
+                        sfn.Condition.boolean_equals("$.planned.plan.race_week", True),
+                        sfn.Condition.and_(
+                            sfn.Condition.is_present("$.force"),
+                            sfn.Condition.boolean_equals("$.force", True),
+                        ),
+                    ),
+                    refresh,
+                )
+                .otherwise(no_race)
             )
         )
 
@@ -317,6 +355,12 @@ class TransformStack(Stack):
                 ),
                 level=sfn.LogLevel.ALL,
             ),
+        )
+
+        self._pipeline_role(env_name).add_to_policy(
+            iam.PolicyStatement(
+                actions=["s3:GetObject"], resources=[f"arn:aws:s3:::{bucket_name}/{PLAN_KEY}"]
+            )
         )
 
         self.backfill_machine = sfn.StateMachine(
@@ -350,18 +394,18 @@ class TransformStack(Stack):
             ),
         )
 
-        # off unless asked for: every run costs fargate minutes and jolpica quota
+        # thursday, so fresh numbers are up before first practice. weeks without a race end at
+        # the plan, so about two dozen runs a year do real work. -c enableSchedule=false pauses it
         self.schedule = events.Rule(
             self,
-            "MondaySchedule",
+            "ThursdaySchedule",
             rule_name=f"pitadvisor-weekend-{env_name}",
-            description="runs the weekend pipeline the morning after a race",
-            schedule=events.Schedule.cron(minute="0", hour="6", week_day="MON"),
-            enabled=bool(self.node.try_get_context("enableSchedule")),
+            description="plans the coming weekend and refreshes the lake when a race is due",
+            schedule=events.Schedule.cron(minute="0", hour="6", week_day="THU"),
+            enabled=str(self.node.try_get_context("enableSchedule")).lower() != "false",
             targets=[
                 targets.SfnStateMachine(
-                    self.state_machine,
-                    input=events.RuleTargetInput.from_object({"season": 2025, "round": 1}),
+                    self.state_machine, input=events.RuleTargetInput.from_object({})
                 )
             ],
         )
@@ -462,10 +506,14 @@ class TransformStack(Stack):
         timeout_seconds: int = 1800,
     ) -> sfn.CustomState:
         # ecs wants strings, the execution input carries numbers
-        carried = environment or [
-            {"Name": "SEASON", "Value.$": "States.Format('{}', $.season)"},
-            {"Name": "ROUND", "Value.$": "States.Format('{}', $.round)"},
-        ]
+        carried = (
+            environment
+            if environment is not None
+            else [
+                {"Name": "SEASON", "Value.$": "States.Format('{}', $.season)"},
+                {"Name": "ROUND", "Value.$": "States.Format('{}', $.round)"},
+            ]
+        )
         return sfn.CustomState(
             self,
             task_id,
@@ -512,6 +560,21 @@ class TransformStack(Stack):
                 # output goes to a key of its own rather than over the season and round
                 "ResultPath": "$.lastTask",
                 "TimeoutSeconds": timeout_seconds,
+            },
+        )
+
+    def _read_plan(self, bucket_name: str) -> sfn.CustomState:
+        # the plan is a small json the fargate step leaves in the lake. reading it back through
+        # the sdk integration keeps the decision in the state machine without another function
+        return sfn.CustomState(
+            self,
+            "ReadPlan",
+            state_json={
+                "Type": "Task",
+                "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+                "Parameters": {"Bucket": bucket_name, "Key": PLAN_KEY},
+                "ResultSelector": {"plan.$": "States.StringToJson($.Body)"},
+                "ResultPath": "$.planned",
             },
         )
 

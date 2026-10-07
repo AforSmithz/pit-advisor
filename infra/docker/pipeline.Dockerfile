@@ -18,6 +18,8 @@ RUN uv sync --frozen --no-dev --group transform --extra sessions --extra lambda
 COPY transform ./transform
 # the circuit taxonomy only, not data/local: that is the laptop's lake
 COPY data/reference ./data/reference
+# the committed backtest, so the forecast view the pipeline emits says what judged it
+COPY results/backtest ./results/backtest
 # dbt only looks for profiles.yml in cwd or ~/.dbt, never in --project-dir
 RUN ln -s transform/profiles.yml profiles.yml
 
