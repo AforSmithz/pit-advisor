@@ -1,0 +1,10 @@
+cost for 2026-10, 2026-10-01 to 2026-10-07 (estimated, month still open)
+  usage before credits             0.46 USD
+  credits applied                 -0.46 USD
+  tagged project=pit-advisor       0.00 USD, untagged 0.46
+
+  Cohere Embed 3 Model - English (Amazon Bedrock Edition)    0.2415
+  Amazon Simple Storage Service                              0.1976
+  Amazon EC2 Container Registry (ECR)                        0.0249
+
+under the 20 USD ceiling

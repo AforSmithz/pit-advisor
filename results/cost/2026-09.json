@@ -1,0 +1,42 @@
+{
+  "month": "2026-09",
+  "start": "2026-09-01",
+  "end": "2026-10-01",
+  "estimated": false,
+  "usage_usd": 0.827,
+  "credits_usd": -0.827,
+  "tagged_usd": 0.0,
+  "ceiling_usd": 20.0,
+  "services": [
+    {
+      "service": "Amazon Simple Storage Service",
+      "usage_usd": 0.4595,
+      "tagged_usd": 0.0
+    },
+    {
+      "service": "Amazon Elastic Container Service",
+      "usage_usd": 0.2874,
+      "tagged_usd": 0.0
+    },
+    {
+      "service": "Amazon Virtual Private Cloud",
+      "usage_usd": 0.0584,
+      "tagged_usd": 0.0
+    },
+    {
+      "service": "Amazon EC2 Container Registry (ECR)",
+      "usage_usd": 0.0124,
+      "tagged_usd": 0.0
+    },
+    {
+      "service": "Amazon DynamoDB",
+      "usage_usd": 0.005,
+      "tagged_usd": 0.0
+    },
+    {
+      "service": "Amazon Athena",
+      "usage_usd": 0.0042,
+      "tagged_usd": 0.0
+    }
+  ]
+}

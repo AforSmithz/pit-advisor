@@ -1,0 +1,13 @@
+cost for 2026-09, 2026-09-01 to 2026-09-30 (final)
+  usage before credits             0.83 USD
+  credits applied                 -0.83 USD
+  tagged project=pit-advisor       0.00 USD, untagged 0.83
+
+  Amazon Simple Storage Service                              0.4595
+  Amazon Elastic Container Service                           0.2874
+  Amazon Virtual Private Cloud                               0.0584
+  Amazon EC2 Container Registry (ECR)                        0.0124
+  Amazon DynamoDB                                            0.0050
+  Amazon Athena                                              0.0042
+
+under the 20 USD ceiling

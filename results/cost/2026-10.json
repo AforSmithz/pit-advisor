@@ -1,0 +1,27 @@
+{
+  "month": "2026-10",
+  "start": "2026-10-01",
+  "end": "2026-10-08",
+  "estimated": true,
+  "usage_usd": 0.464,
+  "credits_usd": -0.464,
+  "tagged_usd": 0.0,
+  "ceiling_usd": 20.0,
+  "services": [
+    {
+      "service": "Cohere Embed 3 Model - English (Amazon Bedrock Edition)",
+      "usage_usd": 0.2415,
+      "tagged_usd": 0.0
+    },
+    {
+      "service": "Amazon Simple Storage Service",
+      "usage_usd": 0.1976,
+      "tagged_usd": 0.0
+    },
+    {
+      "service": "Amazon EC2 Container Registry (ECR)",
+      "usage_usd": 0.0249,
+      "tagged_usd": 0.0
+    }
+  ]
+}
