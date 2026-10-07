@@ -46,11 +46,14 @@ export function Brief({ brief }: { brief: BriefView }) {
               <span key={row.driver_code}>
                 {index ? "; " : ""}
                 <span className="figure">{row.driver_code}</span> {percentOf(row.win)} to win,{" "}
-                {percentOf(row.podium)} podium, {places(row.position_low, row.position_high)} from
-                grid {row.grid}
+                {percentOf(row.podium)} podium, {places(row.position_low, row.position_high)}
+                {row.grid === null ? "" : ` from grid ${row.grid}`}
               </span>
             ))}
-            . Over {brief.simulated_paths.toLocaleString("en-GB")} simulated races.
+            . Over {brief.simulated_paths.toLocaleString("en-GB")} simulated races
+            {brief.grid_sampled
+              ? ", each running its own qualifying first, since the grid is not set yet."
+              : "."}
           </span>
           <span className="mt-1 block text-xs leading-relaxed text-lume-dim">{evidence}</span>
         </li>

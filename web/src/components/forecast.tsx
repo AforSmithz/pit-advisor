@@ -45,12 +45,14 @@ export function Order({
   const left = at(driver.position_low, field);
   const right = at(driver.position_high, field);
   const mark = at(driver.expected_position, field);
-  const grid = at(driver.grid, field);
+  const grid = driver.grid === null ? null : at(driver.grid, field);
 
   return (
     <div
       className={`${COLUMNS} border-t border-engrave py-2 hover:bg-subplate`}
-      aria-label={`${driver.driver_code} starts ${driver.grid}, expected ${plain(
+      aria-label={`${driver.driver_code} ${
+        driver.grid === null ? "has no grid slot yet" : `starts ${driver.grid}`
+      }, expected ${plain(
         driver.expected_position,
         1,
       )}, eight paths in ten finish between ${driver.position_low} and ${driver.position_high}`}
@@ -90,11 +92,13 @@ export function Order({
         />
         {/* where the car actually starts, so the plate shows what the race is expected to
             do to the grid rather than only where it ends up */}
-        <span
-          className="absolute top-1/2 h-5 w-px -translate-y-1/2 border-l border-dashed border-steel"
-          style={{ left: `${grid}%` }}
-          title={`starts P${driver.grid}`}
-        />
+        {grid !== null && (
+          <span
+            className="absolute top-1/2 h-5 w-px -translate-y-1/2 border-l border-dashed border-steel"
+            style={{ left: `${grid}%` }}
+            title={`starts P${driver.grid}`}
+          />
+        )}
         <span
           className="absolute top-1/2 h-5 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-split"
           style={{ left: `${mark}%` }}

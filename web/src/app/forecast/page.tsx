@@ -66,7 +66,11 @@ export default async function ForecastPage() {
         <div className="flex flex-col gap-10">
           <Plate
             title="Where the paths finish"
-            note="The split mark is the mean finishing place over every path. The bar spans the middle eight paths in ten, and the dashed rule is the grid slot the car starts from."
+            note={
+              view.grid_sampled
+                ? "The split mark is the mean finishing place over every path, and the bar spans the middle eight paths in ten. Qualifying has not run, so each path drew its own grid from qualifying pace and there is no slot to mark."
+                : "The split mark is the mean finishing place over every path. The bar spans the middle eight paths in ten, and the dashed rule is the grid slot the car starts from."
+            }
           >
             <OrderRuler field={field} />
             {view.drivers.map((driver) => (

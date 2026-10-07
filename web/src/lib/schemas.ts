@@ -143,7 +143,7 @@ export const trackView = z
       corners: z.number().int(),
       direction: z.string(),
       altitude_m: z.number(),
-      reprofiled: z.string().nullable(),
+      reprofiled: z.number().int().nullable(),
       demand: z.record(z.string(), z.number()),
     }),
     neighbours: z.array(neighbour),
@@ -189,11 +189,12 @@ export const forecastView = z
       }),
     ),
     weights_are_forecast: z.boolean(),
+    grid_sampled: z.boolean(),
     drivers: z.array(
       z.object({
         driver_code: z.string(),
         constructor_id: z.string(),
-        grid: z.number().int(),
+        grid: z.number().int().nullable(),
         win: z.number(),
         podium: z.number(),
         points: z.number(),
@@ -333,7 +334,7 @@ export const briefView = z
       z.object({
         driver_code: z.string(),
         constructor_id: z.string(),
-        grid: z.number().int(),
+        grid: z.number().int().nullable(),
         win: z.number().min(0).max(1),
         podium: z.number().min(0).max(1),
         position_low: z.number().int(),
@@ -341,6 +342,7 @@ export const briefView = z
       }),
     ),
     simulated_paths: z.number().int().positive(),
+    grid_sampled: z.boolean(),
     beats_baselines: z.boolean().nullable(),
     separated_from: z.array(z.string()),
     form_leaders: z.array(
