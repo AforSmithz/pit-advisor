@@ -1,3 +1,4 @@
+import dataclasses
 from datetime import date
 
 import numpy as np
@@ -126,6 +127,30 @@ def test_a_nineteen_car_race_does_not_get_mass_on_a_place_that_cannot_happen():
     assert np.allclose(trimmed.sum(axis=1), 1.0)
 
 
+def test_a_22_car_race_keeps_all_22_places_and_a_20_car_race_pads_to_it():
+    wide = backtest._renormalised(np.full((2, 22), 1.0 / 22), 22, 22)
+    assert np.allclose(wide.sum(axis=1), 1.0)
+    assert (wide[:, 20:] > 0).all()
+    narrow = backtest._renormalised(np.full((2, 20), 1.0 / 20), 20, 22)
+    assert narrow.shape == (2, 22)
+    assert narrow[:, 20:].sum() == 0.0
+    assert np.allclose(narrow.sum(axis=1), 1.0)
+
+
+def test_a_race_on_the_calendar_that_has_not_run_does_not_shrink_the_holdout(pane):
+    last = pane.events.sort("race_date").tail(1)
+    unrun = last.with_columns(
+        (pl.col("round") + 100).alias("round"),
+        (pl.col("race_date") + pl.duration(days=30)).alias("race_date"),
+    )
+    ahead = dataclasses.replace(pane, events=pl.concat([pane.events, unrun]))
+    before = backtest.run(pane, 2024, 3, np.random.default_rng(SEED), "a", paths=100)
+    after = backtest.run(ahead, 2024, 3, np.random.default_rng(SEED), "b", paths=100)
+    assert [item.race_date for item in after.per_race] == [
+        item.race_date for item in before.per_race
+    ]
+
+
 def test_the_pit_lane_starter_is_put_at_the_back(pane, store):
     context = event_at(store, 2024, 1)
     codes = sorted(
@@ -153,7 +178,10 @@ def test_before_qualifying_the_grid_is_sampled_not_set_to_last(pane, store):
     early = before_qualifying(pane, context)
     built = backtest.setup(early, context, context.race_date, "dry")
     assert not built.grid_known
-    assert built.quali_noise_millis > 0
+    # the synthetic lake converts quali to race with no noise at all, so the measured spread
+    # is whatever the past says, which can be zero, and never one measured on later races
+    expected = backtest.quali_anchor_sd(early, context.race_date)
+    assert built.quali_noise_millis == pytest.approx(built.reference_millis * expected / 100.0)
     predicted = backtest.forecast(
         early, context, context.race_date, np.random.default_rng(SEED), paths=300
     )
@@ -190,3 +218,41 @@ def test_an_unrun_race_takes_the_last_race_entry_list(pane, store):
     }
     # not every pairing the lake has ever seen
     assert len(seats) == last.height
+
+
+def test_the_race_day_spread_is_measured_on_the_past_only(pane):
+    first = date(2024, 1, 1)
+    calm = [{"driver_code": "AAA", "race_date": first, "is_wet": False, "value": 0.1}] * 5
+    wild = [
+        {"driver_code": "AAA", "race_date": date(2024, 6, day), "is_wet": False, "value": value}
+        for day, value in zip(range(1, 6), [3.0, -3.0, 2.0, -2.0, 4.0], strict=True)
+    ]
+    rows = [{**row, "race_date": date(2024, 1, index + 1)} for index, row in enumerate(calm)]
+    later = dataclasses.replace(pane, pace=pl.DataFrame(rows + wild))
+    # the wild june races are after the cutoff, so they say nothing about march
+    assert backtest.race_day_sd(later, date(2024, 3, 1)) == pytest.approx(0.0)
+    assert backtest.race_day_sd(later, date(2024, 7, 1)) > 1.0
+    assert backtest.race_day_sd(later, first) == backtest.DEFAULT_RACE_DAY_SD
+
+
+def test_the_quali_anchor_spread_is_measured_on_the_past_only(pane):
+    assert backtest.quali_anchor_sd(pane, date(2000, 1, 1)) == backtest.DEFAULT_QUALI_ANCHOR_SD
+
+
+def test_a_circuits_first_race_takes_its_distance_from_the_past_not_the_lake(pane, store):
+    context = event_at(store, 2024, 4)
+    first = context.model_copy(update={"circuit_id": "nowhere"})
+    later = {
+        key: 999
+        for key, row in zip(
+            pane.events.select("season", "round").iter_rows(),
+            pane.events.iter_rows(named=True),
+            strict=True,
+        )
+        if row["race_date"] >= context.race_date
+    }
+    padded = dataclasses.replace(pane, laps={**pane.laps, **later})
+    assert backtest._race_laps(padded, first, context.race_date) == backtest._race_laps(
+        pane, first, context.race_date
+    )
+    assert backtest._race_laps(padded, first, context.race_date) < 999

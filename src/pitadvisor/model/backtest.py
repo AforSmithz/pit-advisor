@@ -70,8 +70,6 @@ class Panel:
     regimes: pl.DataFrame
     laps: dict[tuple[int, int], int]
     entries: dict[tuple[int, int], baselines.Entries]
-    race_day_sd: float
-    quali_anchor_sd: float
 
 
 def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:
@@ -115,8 +113,6 @@ def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:
             .iter_rows(named=True)
         },
         entries=baselines.all_entries(outcome.select(baselines.COLUMNS)),
-        race_day_sd=_race_day_sd(pace),
-        quali_anchor_sd=_quali_anchor_sd(stacked),
     )
 
 
@@ -307,11 +303,14 @@ def _regime_frame(paces: list[SessionPace], dated: pl.DataFrame) -> pl.DataFrame
     return pl.DataFrame(rows).join(dated, on=["season", "round"])
 
 
-def _quali_anchor_sd(stacked: list[tuple[date, quali_race.EventQualiRace]]) -> float:
+def quali_anchor_sd(pane: Panel, as_of: date) -> float:
     """How far a driver's quali-to-race conversion moves from one weekend to the next. It is
-    what the anchor does not know, and it is what decides how much weight the anchor gets."""
+    what the anchor does not know, and it is what decides how much weight the anchor gets.
+    Measured on weekends before as_of only, like every other fit behind a forecast."""
     seen: dict[str, list[float]] = {}
-    for _, event in stacked:
+    for when, event in pane.quali_events:
+        if when >= as_of:
+            continue
         for driver in event.drivers:
             if driver.delta is not None:
                 seen.setdefault(driver.driver_code, []).append(driver.delta)
@@ -321,9 +320,9 @@ def _quali_anchor_sd(stacked: list[tuple[date, quali_race.EventQualiRace]]) -> f
     return float(np.median(spreads))
 
 
-def _race_day_sd(pace: pl.DataFrame) -> float:
+def race_day_sd(pane: Panel, as_of: date) -> float:
     """How much a driver's own Sunday moves around his own average, in percent of a lap."""
-    dry = pace.filter(~pl.col("is_wet"))
+    dry = pane.pace.filter((pl.col("race_date") < as_of) & ~pl.col("is_wet"))
     spread = (
         dry.group_by("driver_code")
         .agg(pl.col("value").std().alias("sd"), pl.len().alias("races"))
@@ -381,12 +380,13 @@ def grid_for(pane: Panel, context: EventContext, codes: list[str]) -> dict[str, 
     entered = pane.results.filter(
         (pl.col("season") == context.season) & (pl.col("round") == context.round)
     ).drop_nulls("driver_code")
+    back = max(FIELD, len(codes))
     known = {
-        str(row["driver_code"]): (int(row["grid"]) if int(row["grid"]) > 0 else FIELD)
+        str(row["driver_code"]): (int(row["grid"]) if int(row["grid"]) > 0 else back)
         for row in entered.iter_rows(named=True)
     }
     # a car with no grid slot starts from the back, which is where a pit lane start begins
-    return {code: known.get(code, FIELD) for code in codes}
+    return {code: known.get(code, back) for code in codes}
 
 
 def _reference_millis(pane: Panel, circuit_id: str, as_of: date) -> float:
@@ -439,19 +439,22 @@ def setup(
     )
     reference = _reference_millis(pane, context.circuit_id, as_of)
     codes = sorted(seats)
+    back = max(FIELD, len(codes))
     slots = grid or grid_for(pane, context, codes)
     # before qualifying nobody has a slot, and a field of twenty cars all starting last is not a
     # forecast. §5.7 step 1: each path then samples its grid from qualifying pace instead
-    unknown = grid is None and all(slot == FIELD for slot in slots.values())
+    unknown = grid is None and all(slot == back for slot in slots.values())
     shifts = quali_shifts(pane, as_of, codes) if unknown else {}
 
-    percent, error = _ratings(shape, track, rain, seats, codes, scenario, pane.race_day_sd)
-    percent, error = _anchored(pane, context, as_of, codes, percent, error, scenario)
+    drift = race_day_sd(pane, as_of)
+    anchor_sd = quali_anchor_sd(pane, as_of)
+    percent, error = _ratings(shape, track, rain, seats, codes, scenario, drift)
+    percent, error = _anchored(pane, context, as_of, codes, percent, error, scenario, anchor_sd)
     drivers = [
         race.Driver(
             driver_code=code,
             constructor_id=seats[code],
-            grid=slots.get(code, FIELD),
+            grid=slots.get(code, back),
             pace_millis=reference * (1.0 + percent[code] / 100.0),
             pace_sd_millis=reference * error[code] / 100.0,
             quali_shift_millis=reference * shifts.get(code, 0.0) / 100.0,
@@ -476,7 +479,7 @@ def setup(
         safety_car=caution,
         retirement=dnf.build(hazard, seats, ids),
         grid_known=not unknown,
-        quali_noise_millis=reference * pane.quali_anchor_sd / 100.0 if unknown else 0.0,
+        quali_noise_millis=reference * anchor_sd / 100.0 if unknown else 0.0,
     )
 
 
@@ -496,18 +499,19 @@ def _race_laps(pane: Panel, context: EventContext, as_of: date) -> int:
     """How long the race is scheduled to be, taken from what this circuit has run before.
     The distance this particular race actually went is not known until it has been run: a
     red flag shortens it, and reading that off the result would be a leak."""
-    before = pane.events.filter(
-        (pl.col("circuit_id") == context.circuit_id) & (pl.col("race_date") < as_of)
-    )
-    known = [
-        pane.laps[(int(row["season"]), int(row["round"]))]
+    before = pane.events.filter(pl.col("race_date") < as_of)
+    run = {
+        (int(row["season"]), int(row["round"])): str(row["circuit_id"])
         for row in before.iter_rows(named=True)
         if (int(row["season"]), int(row["round"])) in pane.laps
-    ]
+    }
+    known = [pane.laps[key] for key, circuit in run.items() if circuit == context.circuit_id]
     if known:
         return int(np.median(known))
-    if pane.laps:
-        return int(np.median(list(pane.laps.values())))
+    # a circuit's first race falls back to every race before it. falling back to the whole lake
+    # let vegas 2023 and shanghai 2024 read the length of races that had not happened yet
+    if run:
+        return int(np.median([pane.laps[key] for key in run]))
     return 57
 
 
@@ -575,6 +579,7 @@ def _anchored(
     percent: dict[str, float],
     error: dict[str, float],
     scenario: str,
+    anchor_sd: float,
 ) -> tuple[dict[str, float], dict[str, float]]:
     """This weekend's qualifying is the freshest reading of the car there is, and §5.3 exists
     to convert it: a driver's race pace is his quali gap less his own quali-to-race delta.
@@ -611,7 +616,7 @@ def _anchored(
         delta = own.delta if own else field_delta
         delta_error = own.standard_error if own else field_error
         anchor = driver.quali_percent_off - delta
-        anchor_var = (np.hypot(delta_error, pane.quali_anchor_sd) * widen) ** 2
+        anchor_var = (np.hypot(delta_error, anchor_sd) * widen) ** 2
         rating_var = error[code] ** 2
         if anchor_var <= 0.0 or rating_var <= 0.0:
             continue
@@ -655,12 +660,12 @@ def forecast(
         weights_are_forecast=weights_are_forecast,
         outcome=blended,
         scenarios=outcomes,
-        assumptions=_assumptions(reference, pane),
+        assumptions=_assumptions(reference, race_day_sd(pane, as_of)),
         grid_sampled=not reference.grid_known,
     )
 
 
-def _assumptions(built: race.RaceSetup, pane: Panel) -> list[Assumption]:
+def _assumptions(built: race.RaceSetup, drift: float) -> list[Assumption]:
     return [
         Assumption(
             name="laps",
@@ -703,7 +708,7 @@ def _assumptions(built: race.RaceSetup, pane: Panel) -> list[Assumption]:
         ),
         Assumption(
             name="race_day_sd_percent",
-            value=pane.race_day_sd,
+            value=drift,
             detail="how far a driver's Sunday drifts from his own rating",
         ),
     ]
@@ -761,14 +766,15 @@ class Report(BaseModel, frozen=True):
     assumptions: list[Assumption]
 
 
-def _renormalised(grid: np.ndarray, starters: int) -> np.ndarray:
+def _renormalised(grid: np.ndarray, starters: int, width: int = FIELD) -> np.ndarray:
     """A twenty class forecast on a nineteen car race puts mass on a position that cannot
     happen. Moving it back onto the positions that can is fairer to every predictor, model
-    and baseline alike. The array stays FIELD wide so races of different sizes still stack."""
-    kept = min(starters, FIELD)
+    and baseline alike. The array stays width wide, the widest field in the holdout, so
+    nineteen, twenty and twenty two car races still stack."""
+    kept = min(starters, width, grid.shape[1])
     trimmed = np.array(grid[:, :kept], dtype=float)
     total = trimmed.sum(axis=1, keepdims=True)
-    padded = np.zeros((grid.shape[0], FIELD))
+    padded = np.zeros((grid.shape[0], width))
     padded[:, :kept] = np.divide(trimmed, np.where(total > 0.0, total, 1.0))
     return padded
 
@@ -785,10 +791,26 @@ def run(
 ) -> Report:
     """Time forward, one race at a time. Every fit behind a prediction sees only what had
     happened when it was made, which is why the panel is filtered by date and never shuffled."""
-    calendar = pane.events.filter(pl.col("season") >= from_season).sort("race_date").tail(holdout)
+    # the calendar runs to the end of the season, and a race that has not been run has nothing
+    # to score. counting it would shrink the holdout every time the schedule landed early
+    played = pane.results.select("season", "round").unique()
+    calendar = (
+        pane.events.filter(pl.col("season") >= from_season)
+        .join(played, on=["season", "round"], how="semi")
+        .sort("race_date")
+        .tail(holdout)
+    )
     if not calendar.height:
         raise NoForecastError(f"no races from {from_season} to hold out")
     entries = pane.results.select(baselines.COLUMNS)
+    width = max(
+        (
+            pane.entries[key].width
+            for key in calendar.select("season", "round").iter_rows()
+            if key in pane.entries
+        ),
+        default=FIELD,
+    )
 
     grids: dict[str, list[np.ndarray]] = {MODEL: [], **{name: [] for name in baselines.FEATURES}}
     truth: list[np.ndarray] = []
@@ -818,13 +840,13 @@ def run(
         starters = len(predicted.outcome.driver_code)
         seen = {code: slot for slot, code in enumerate(predicted.outcome.driver_code)}
         keep = [seen[code] for code in codes]
-        grids[MODEL].append(_renormalised(predicted.outcome.probabilities()[keep], starters))
+        grids[MODEL].append(_renormalised(predicted.outcome.probabilities()[keep], starters, width))
 
         field = pane.entries.get((context.season, context.round))
         if field is None:
             grids[MODEL].pop()
             continue
-        fitted = baselines.fit(entries, context.race_date, known=pane.entries)
+        fitted = baselines.fit(entries, context.race_date, known=pane.entries, width=field.width)
         guessed = fitted.predict(field)
         order = {code: slot for slot, code in enumerate(field.driver_code)}
         rows = [order[code] for code in codes if code in order]
@@ -832,7 +854,7 @@ def run(
             grids[MODEL].pop()
             continue
         for name in baselines.FEATURES:
-            grids[name].append(_renormalised(guessed[name][rows], starters))
+            grids[name].append(_renormalised(guessed[name][rows], starters, width))
 
         actual = np.array([finished[code] for code in codes]) - 1
         truth.append(actual)
@@ -876,7 +898,7 @@ def run(
         from_season=from_season,
         holdout=holdout,
         paths=paths,
-        field=FIELD,
+        field=width,
         seed=seed,
         scored=scored,
         paired=paired,
