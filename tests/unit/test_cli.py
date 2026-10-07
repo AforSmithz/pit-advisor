@@ -799,3 +799,41 @@ def test_a_curated_drop_refuses_a_date_that_is_not_one(lake, tmp_path):
     )
     assert result.exit_code != 0
     assert "not a date" in plain(result.stderr)
+
+
+def test_cost_report_writes_the_report_and_the_view(runner, aws, monkeypatch, tmp_path):
+    from tests.unit.outputs.test_cost import OCTOBER, SEPTEMBER, FakeCostExplorer
+
+    explorer = FakeCostExplorer({"2026-09": SEPTEMBER, "2026-10": OCTOBER})
+    regions = []
+
+    def client(_session, service, region=None):
+        regions.append((service, region))
+        return explorer
+
+    lake = LocalObjectStore(tmp_path / "lake")
+    monkeypatch.setattr(cli, "_client", client)
+    monkeypatch.setattr(cli, "object_store", lambda *_: lake)
+    result = runner.invoke(cli.app, ["cost-report", "--month", "2026-10"])
+    assert result.exit_code == 0, result.output
+    assert regions == [("ce", "us-east-1")]
+    assert json.loads((tmp_path / "results/cost/2026-10.json").read_text())["usage_usd"] == 0.464
+    assert "under the 20 USD ceiling" in (tmp_path / "results/cost/2026-10.txt").read_text()
+    view = json.loads(lake.get("views/cost_view.json"))
+    assert [item["month"] for item in view["history"]] == ["2026-09", "2026-10"]
+
+
+def test_cost_report_exits_1_over_the_ceiling(runner, aws, monkeypatch):
+    from tests.unit.outputs.test_cost import OCTOBER, FakeCostExplorer
+
+    monkeypatch.setattr(cli, "_client", lambda *_: FakeCostExplorer({"2026-10": OCTOBER}))
+    result = runner.invoke(
+        cli.app, ["cost-report", "--month", "2026-10", "--ceiling", "0.1", "--no-view"]
+    )
+    assert result.exit_code == 1
+    assert "OVER" in result.output
+
+
+def test_cost_report_refuses_a_bad_month(runner, aws):
+    result = runner.invoke(cli.app, ["cost-report", "--month", "october"])
+    assert result.exit_code == 2

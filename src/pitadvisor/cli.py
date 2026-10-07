@@ -43,6 +43,7 @@ from pitadvisor.ingest.weather import Circuit, WeatherClient, event_circuits
 from pitadvisor.ingest.weather import ingest_event as weather_ingest_event
 from pitadvisor.model import backtest as forecast_model
 from pitadvisor.model import calibrate
+from pitadvisor.outputs import cost as cost_outputs
 from pitadvisor.outputs.view_contracts import (
     Evidence,
     ForecastView,
@@ -775,6 +776,41 @@ def calibration_report(
     summary.write_text(calibrate.summarise(report))
     typer.echo(calibrate.summarise(report), nl=False)
     typer.echo(f"\nwrote {figure} and {summary}")
+
+
+COST_RESULTS = Path("results/cost")
+
+
+@app.command(
+    name="cost-report", help="Measured spend for a month from Cost Explorer, gated on a ceiling."
+)
+def cost_report(
+    month: Annotated[str, typer.Option(help="'current' or YYYY-MM.")] = "current",
+    ceiling: Annotated[float, typer.Option(help="Fail above this many USD of usage.")] = 20.0,
+    output: Annotated[Path, typer.Option(help="Where the report and summary go.")] = COST_RESULTS,
+    view: Annotated[
+        bool, typer.Option("--view/--no-view", help="Also write cost_view to the lake.")
+    ] = True,
+) -> None:
+    settings = get_settings()
+    today = datetime.now(UTC).date()
+    try:
+        start, end = cost_outputs.period(month, today)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    # cost explorer has one endpoint, in us-east-1, whatever region the rest of the project is in
+    client = _client(boto_session(settings), "ce", "us-east-1")
+    report = cost_outputs.fetch(client, start, end, ceiling)
+    output.mkdir(parents=True, exist_ok=True)
+    (output / f"{report.month}.json").write_text(report.model_dump_json(indent=2) + "\n")
+    summary = cost_outputs.summarise(report)
+    (output / f"{report.month}.txt").write_text(summary)
+    typer.echo(summary, nl=False)
+    if view:
+        months = cost_outputs.history(client, end)
+        typer.echo(f"wrote {emit(object_store(settings), cost_outputs.cost_view(report, months))}")
+    if not report.under_ceiling:
+        raise typer.Exit(1)
 
 
 @app.command(name="catalog-sync", help="Point the Glue catalog at the bronze tables.")
