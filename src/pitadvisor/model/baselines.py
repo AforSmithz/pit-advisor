@@ -6,8 +6,8 @@ import numpy as np
 import polars as pl
 from pydantic import BaseModel
 
-# the grid has held twenty cars for every season in the lake, and a classified position
-# never exceeds it. anything wider is a season this model has not seen
+# the narrowest a grid gets. 2021 to 2025 ran twenty cars and 2026 added an eleventh team, so
+# a race's width is its own entry count, never less than this
 FIELD = 20
 # a driver starting eleventh and one starting twelfth are the same problem, so neighbouring
 # slots pool. without it a twenty way split of two thousand rows is a hundred rows a bucket
@@ -23,6 +23,7 @@ class Entries(BaseModel, frozen=True):
 
     season: int
     round: int
+    width: int
     driver_code: list[str]
     grid: list[int]
     # None is a driver the history cannot rank: a debutant, or anyone before the first race
@@ -31,9 +32,9 @@ class Entries(BaseModel, frozen=True):
     last_race: list[int | None]
 
 
-def _slot(value: pl.Expr) -> pl.Expr:
+def _slot(value: pl.Expr, width: int) -> pl.Expr:
     # a pit lane start is reported as grid zero, which is the back of the field, not the front
-    return pl.when(value < 1).then(FIELD).otherwise(value.clip(1, FIELD))
+    return pl.when(value < 1).then(width).otherwise(value.clip(1, width))
 
 
 def entries(results: pl.DataFrame, season: int, round_: int) -> Entries:
@@ -43,14 +44,16 @@ def entries(results: pl.DataFrame, season: int, round_: int) -> Entries:
     if not field.height:
         raise NoHistoryError(f"{season} round {round_} has no result rows")
     when = field["race_date"][0]
+    width = max(FIELD, field.height)
     history = results.filter(pl.col("race_date") < when)
-    standings = _standings(history, season)
-    last = _last_race(history)
+    standings = _standings(history, season, width)
+    last = _last_race(history, width)
     codes = field["driver_code"].to_list()
-    grid = field.select(_slot(pl.col("grid")).alias("slot"))["slot"].to_list()
+    grid = field.select(_slot(pl.col("grid"), width).alias("slot"))["slot"].to_list()
     return Entries(
         season=season,
         round=round_,
+        width=width,
         driver_code=[str(code) for code in codes],
         grid=[int(value) for value in grid],
         standings=[standings.get(str(code)) for code in codes],
@@ -63,7 +66,7 @@ class NoHistoryError(RuntimeError):
         super().__init__(detail)
 
 
-def _standings(history: pl.DataFrame, season: int) -> dict[str, int]:
+def _standings(history: pl.DataFrame, season: int, width: int) -> dict[str, int]:
     current = history.filter(pl.col("season") == season)
     # round one has no championship yet, so last season's final table is the standing
     table = current if current.height else history.filter(pl.col("season") == season - 1)
@@ -81,12 +84,12 @@ def _standings(history: pl.DataFrame, season: int) -> dict[str, int]:
         )
     )
     return {
-        str(row["driver_code"]): min(rank, FIELD)
+        str(row["driver_code"]): min(rank, width)
         for rank, row in enumerate(totals.iter_rows(named=True), start=1)
     }
 
 
-def _last_race(history: pl.DataFrame) -> dict[str, int]:
+def _last_race(history: pl.DataFrame, width: int) -> dict[str, int]:
     if not history.height:
         return {}
     latest = (
@@ -95,7 +98,7 @@ def _last_race(history: pl.DataFrame) -> dict[str, int]:
         .agg(pl.col("position").last().alias("position"))
     )
     return {
-        str(row["driver_code"]): int(min(max(int(row["position"]), 1), FIELD))
+        str(row["driver_code"]): int(min(max(int(row["position"]), 1), width))
         for row in latest.iter_rows(named=True)
         if row["position"] is not None
     }
@@ -109,36 +112,60 @@ class Lookup(BaseModel, frozen=True):
     rows: int
     table: list[list[float]]
 
-    def predict(self, rank: list[int | None]) -> np.ndarray:
+    def predict(self, rank: list[int | None], width: int = FIELD) -> np.ndarray:
         grid = np.asarray(self.table, dtype=float)
-        filled = [FIELD if value is None else value for value in rank]
-        index = np.clip(np.asarray(filled, dtype=int), 1, FIELD) - 1
+        filled = [width if value is None else value for value in rank]
+        index = np.clip(np.asarray(filled, dtype=int), 1, grid.shape[0]) - 1
         return grid[index]
+
+
+def stretch(size: int, width: int) -> np.ndarray:
+    """(size, width): how much of place i in a size car race lands on place k of a width car
+    one, by the share of the field each covers. last of twenty is last of twenty two, not 20th
+    of 22 with two places behind it nobody has ever finished in."""
+    if size == width:
+        return np.eye(width)
+    low = np.arange(size)[:, None] / size
+    high = (np.arange(size)[:, None] + 1) / size
+    left = np.arange(width)[None, :] / width
+    right = (np.arange(width)[None, :] + 1) / width
+    return size * np.clip(np.minimum(high, right) - np.maximum(low, left), 0.0, None)
 
 
 def fit_lookup(
     rank: np.ndarray,
     finished: np.ndarray,
     name: str,
+    width: int = FIELD,
     bandwidth: float = BANDWIDTH,
     prior: float = PRIOR,
+    sizes: np.ndarray | None = None,
 ) -> Lookup:
-    observed = np.clip(np.asarray(rank, dtype=int), 1, FIELD)
-    outcome = np.clip(np.asarray(finished, dtype=int), 1, FIELD)
-    counts = np.zeros((FIELD, FIELD))
-    for slot, place in zip(observed, outcome, strict=True):
-        counts[slot - 1, place - 1] += 1.0
-    axis = np.arange(FIELD)
+    ranks = np.asarray(rank, dtype=int)
+    places = np.asarray(finished, dtype=int)
+    fields = np.full(ranks.shape[0], width) if sizes is None else np.asarray(sizes, dtype=int)
+    counts = np.zeros((width, width))
+    for size in np.unique(fields):
+        mine = fields == size
+        raw = np.zeros((size, size))
+        np.add.at(
+            raw,
+            (np.clip(ranks[mine], 1, size) - 1, np.clip(places[mine], 1, size) - 1),
+            1.0,
+        )
+        spread = stretch(int(size), width)
+        counts += raw if size == width else spread.T @ raw @ spread
+    axis = np.arange(width)
     kernel = np.exp(-np.abs(axis[:, None] - axis[None, :]) / bandwidth)
     pooled = kernel @ counts
     marginal = counts.sum(axis=0)
-    marginal = marginal / marginal.sum() if marginal.sum() else np.full(FIELD, 1.0 / FIELD)
+    marginal = marginal / marginal.sum() if marginal.sum() else np.full(width, 1.0 / width)
     smoothed = pooled + prior * marginal
     table = smoothed / smoothed.sum(axis=1, keepdims=True)
     return Lookup(
         name=name,
         bandwidth=bandwidth,
-        rows=int(observed.shape[0]),
+        rows=int(ranks.shape[0]),
         table=[[float(value) for value in row] for row in table],
     )
 
@@ -151,7 +178,10 @@ class Baselines(BaseModel, frozen=True):
     lookups: dict[str, Lookup]
 
     def predict(self, field: Entries) -> dict[str, np.ndarray]:
-        return {name: lookup.predict(getattr(field, name)) for name, lookup in self.lookups.items()}
+        return {
+            name: lookup.predict(getattr(field, name), field.width)
+            for name, lookup in self.lookups.items()
+        }
 
 
 def all_entries(results: pl.DataFrame) -> dict[tuple[int, int], Entries]:
@@ -173,13 +203,16 @@ def fit(
     as_of: date,
     bandwidth: float = BANDWIDTH,
     known: dict[tuple[int, int], Entries] | None = None,
+    width: int = FIELD,
 ) -> Baselines:
     """Fitted on races strictly before as_of. §4.4: a baseline that has seen the race it is
-    scored on is not a baseline, it is a leak with a low score."""
+    scored on is not a baseline, it is a leak with a low score. width is the race about to be
+    predicted, and every race in the history is stretched onto it by share of the field."""
     history = results.filter(pl.col("race_date") < as_of).drop_nulls(["driver_code", "position"])
     table = known if known is not None else all_entries(history)
     rows: dict[str, list[int]] = {name: [] for name in FEATURES}
     outcomes: dict[str, list[int]] = {name: [] for name in FEATURES}
+    sizes: dict[str, list[int]] = {name: [] for name in FEATURES}
     for (season, round_), race in history.group_by("season", "round"):
         field = table.get((int(str(season)), int(str(round_))))
         if field is None:
@@ -197,6 +230,7 @@ def fit(
                 if rank is not None:
                     rows[name].append(rank)
                     outcomes[name].append(place[code])
+                    sizes[name].append(field.width)
     return Baselines(
         as_of=as_of,
         lookups={
@@ -204,7 +238,9 @@ def fit(
                 np.asarray(rows[name], dtype=int),
                 np.asarray(outcomes[name], dtype=int),
                 name,
+                width,
                 bandwidth,
+                sizes=np.asarray(sizes[name], dtype=int),
             )
             for name in FEATURES
         },

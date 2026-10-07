@@ -120,3 +120,63 @@ def test_a_missing_rank_predicts_as_the_back_of_the_field():
     fitted = baselines.fit(lake(), START + timedelta(days=400))
     lookup = fitted.lookups["grid"]
     assert np.allclose(lookup.predict([None]), lookup.predict([baselines.FIELD]))
+
+
+def eleven_teams(rows: pl.DataFrame, round_: int) -> pl.DataFrame:
+    race = rows.filter(pl.col("round") == round_)
+    extra = race.head(2).with_columns(
+        pl.Series("driver_code", ["X20", "X21"]),
+        pl.Series("grid", [0, 22]),
+        pl.Series("position", [21, 22]),
+        pl.lit(0.0).alias("points"),
+    )
+    return pl.concat([rows, extra])
+
+
+def test_a_22_car_race_is_22_wide_and_a_pit_lane_start_is_22nd():
+    field = baselines.entries(eleven_teams(lake(races=2), 2), 2024, 2)
+    assert field.width == 22
+    assert max(field.grid) == 22
+    assert 0 not in field.grid
+
+
+def test_a_20_car_race_is_still_20_wide():
+    assert baselines.entries(lake(races=2), 2024, 2).width == baselines.FIELD
+
+
+def test_the_first_22_car_race_can_still_finish_21st():
+    # the history has only ever had twenty places, the race about to run has twenty two
+    fitted = baselines.fit(lake(), START + timedelta(days=400), width=22)
+    for lookup in fitted.lookups.values():
+        table = np.asarray(lookup.table)
+        assert table.shape == (22, 22)
+        assert (table[:, 20:] > 0).all()
+        assert np.allclose(table.sum(axis=1), 1.0)
+
+
+def test_last_of_twenty_is_last_of_twenty_two():
+    spread = baselines.stretch(20, 22)
+    assert np.allclose(spread.sum(axis=1), 1.0)
+    assert spread[-1, -1] > 0.5
+    assert spread[0, 0] > 0.5
+    assert np.allclose(baselines.stretch(20, 20), np.eye(20))
+
+
+def test_a_grid_that_decides_everything_still_does_on_a_wider_field():
+    fitted = baselines.fit(lake(), START + timedelta(days=400), width=22)
+    table = np.asarray(fitted.lookups["grid"].table)
+    assert table[0].argmax() == 0
+    assert table[21].argmax() == 21
+
+
+def test_a_22_car_history_squeezes_onto_a_20_car_race():
+    fitted = baselines.fit(eleven_teams(lake(), 5), START + timedelta(days=400))
+    table = np.asarray(fitted.lookups["grid"].table)
+    assert table.shape == (20, 20)
+    assert np.allclose(table.sum(axis=1), 1.0)
+
+
+def test_a_missing_rank_predicts_as_the_back_of_its_own_field():
+    fitted = baselines.fit(lake(), START + timedelta(days=400), width=22)
+    lookup = fitted.lookups["standings"]
+    assert np.allclose(lookup.predict([None], 22), lookup.predict([22], 22))
