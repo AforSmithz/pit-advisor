@@ -3,6 +3,7 @@
   "output": "cdk.out",
   "context": {
     "env": "dev",
+    "lambdaMemoryCap": 512,
     "@aws-cdk/core:checkSecretUsage": true,
     "@aws-cdk/core:target-partitions": ["aws"],
     "@aws-cdk/aws-iam:minimizePolicies": true,

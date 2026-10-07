@@ -473,7 +473,9 @@ class AgentStack(Stack):
                 cmd=[entry],
             ),
             architecture=lambda_.Architecture.ARM_64,
-            memory_size=memory,
+            # a new account refuses anything over 512 until its lambda quotas are raised,
+            # so cdk.json caps it there for now. drop lambdaMemoryCap once they are
+            memory_size=min(memory, int(self.node.try_get_context("lambdaMemoryCap") or memory)),
             timeout=timeout,
             environment=environment,
             role=role,
