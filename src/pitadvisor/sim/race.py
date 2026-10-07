@@ -35,6 +35,9 @@ class Driver(BaseModel, frozen=True):
     # everything we do not know about Sunday: the rating's own error and the driver's
     # week to week scatter around it
     pace_sd_millis: float
+    # qualifying lap minus race pace, the driver's own saturday-to-sunday conversion. only read
+    # when the grid has not been set yet
+    quali_shift_millis: float = 0.0
 
 
 class RaceSetup(BaseModel, frozen=True):
@@ -50,6 +53,9 @@ class RaceSetup(BaseModel, frozen=True):
     passing: PassModel
     safety_car: SafetyCarModel
     retirement: RetirementModel
+    # false before qualifying: each path then runs its own qualifying off the pace it drew
+    grid_known: bool = True
+    quali_noise_millis: float = 0.0
 
 
 class Outcome(BaseModel, frozen=True):
@@ -59,7 +65,8 @@ class Outcome(BaseModel, frozen=True):
     scenario: str
     paths: int
     driver_code: list[str]
-    # (drivers, FIELD) probability of each classified finishing position
+    # (drivers, places) probability of each classified finishing position. places is FIELD, or
+    # the number of cars when more than that start, which 2026's eleven teams do
     position: list[list[float]]
     win: list[float]
     podium: list[float]
@@ -86,7 +93,16 @@ def simulate(
     # one draw per path, not per lap: a driver who has a quick Sunday has it all afternoon
     pace = rng.normal(mean.reshape(1, -1), np.maximum(spread, 1.0).reshape(1, -1), (paths, cars))
 
-    grid = np.asarray([driver.grid for driver in setup.drivers])
+    if setup.grid_known:
+        grid = np.asarray([driver.grid for driver in setup.drivers])
+    else:
+        shift = np.asarray([driver.quali_shift_millis for driver in setup.drivers])
+        lap = (
+            pace
+            + shift.reshape(1, -1)
+            + rng.normal(0.0, max(setup.quali_noise_millis, 1.0), (paths, cars))
+        )
+        grid = np.argsort(np.argsort(lap, axis=1), axis=1) + 1
     opening = starts.sample(setup.start, grid, rng, paths)
     retire = sample_retirements(setup.retirement, codes, laps, paths, rng)
     pitting = tyres.sample_stops(setup.tyre, paths, cars, laps, rng)
@@ -194,9 +210,10 @@ def _aggregate(
     paths: int,
     scenario: str,
 ) -> Outcome:
-    grid = np.zeros((len(codes), FIELD))
+    places = max(FIELD, len(codes))
+    grid = np.zeros((len(codes), places))
     for driver in range(len(codes)):
-        counts = np.bincount(np.clip(place[:, driver], 1, FIELD) - 1, minlength=FIELD)
+        counts = np.bincount(np.clip(place[:, driver], 1, places) - 1, minlength=places)
         grid[driver] = counts / paths
     return Outcome(
         season=setup.season,
@@ -210,7 +227,7 @@ def _aggregate(
         podium=[float(row[:3].sum()) for row in grid],
         points=[float(row[:10].sum()) for row in grid],
         finish=[float(value) for value in finished.mean(axis=0)],
-        expected_position=[float((row * np.arange(1, FIELD + 1)).sum()) for row in grid],
+        expected_position=[float((row * np.arange(1, places + 1)).sum()) for row in grid],
     )
 
 
@@ -225,7 +242,9 @@ def blend(outcomes: dict[str, Outcome], weights: dict[str, float], scenario: str
     if any(outcomes[name].driver_code != first.driver_code for name in names):
         raise ValueError("scenarios were run over different fields")
     mixed = sum((weights[name] / total) * outcomes[name].probabilities() for name in names)
-    grid = np.asarray(mixed)
+    grid: npt.NDArray[np.float64] = np.asarray(mixed, dtype=np.float64)
+    places = int(grid.shape[1])
+    rank = np.arange(1, places + 1, dtype=np.float64)
     return Outcome(
         season=first.season,
         round=first.round,
@@ -241,5 +260,5 @@ def blend(outcomes: dict[str, Outcome], weights: dict[str, float], scenario: str
             float(sum((weights[name] / total) * outcomes[name].finish[index] for name in names))
             for index in range(len(first.driver_code))
         ],
-        expected_position=[float((row * np.arange(1, FIELD + 1)).sum()) for row in grid],
+        expected_position=[float(np.dot(row, rank)) for row in grid],
     )

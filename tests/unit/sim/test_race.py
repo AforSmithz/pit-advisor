@@ -197,3 +197,56 @@ def test_blending_two_different_fields_is_refused():
     other = dry.model_copy(update={"driver_code": list(reversed(CODES))})
     with pytest.raises(ValueError, match="different fields"):
         race.blend({"dry": dry, "wet": other}, {"dry": 0.5, "wet": 0.5}, "blended")
+
+
+def unknown_grid(built: race.RaceSetup, shift: list[float] | None = None, noise: float = 50.0):
+    drivers = [
+        driver.model_copy(
+            update={"grid": race.FIELD, "quali_shift_millis": (shift or [0.0] * len(CODES))[i]}
+        )
+        for i, driver in enumerate(built.drivers)
+    ]
+    return built.model_copy(
+        update={"drivers": drivers, "grid_known": False, "quali_noise_millis": noise}
+    )
+
+
+def test_before_qualifying_the_quick_car_qualifies_and_wins():
+    pace = [0.0] + [1.0] * (len(CODES) - 1)
+    outcome = run(unknown_grid(setup(pace=pace, pass_base=-6.0, dirty_air=1_500.0)))
+    # with the grid unknown nobody starts last by default: the quick car earns the front
+    assert outcome.win[0] > 0.8
+
+
+def test_a_saturday_specialist_starts_ahead_on_a_track_with_no_passing():
+    even = setup(pass_base=-6.0, dirty_air=1_500.0, laps=10)
+    # same race pace, but the first car loses a second a lap on saturday to everyone else
+    slow_saturday = [1_000.0] + [0.0] * (len(CODES) - 1)
+    outcome = run(unknown_grid(even, slow_saturday))
+    assert outcome.expected_position[0] > sum(outcome.expected_position) / len(CODES)
+
+
+def test_a_known_grid_draws_exactly_what_it_did_before():
+    # the backtest runs on the actual grid, and its committed numbers must not move
+    built = setup(pace=[0.1 * i for i in range(len(CODES))])
+    assert built.grid_known
+    assert (
+        run(built).position == run(built.model_copy(update={"quali_noise_millis": 99.0})).position
+    )
+
+
+def test_a_field_bigger_than_twenty_gets_every_place():
+    codes = [f"X{index:02d}" for index in range(22)]
+    base = setup()
+    drivers = [
+        base.drivers[0].model_copy(update={"driver_code": code, "grid": index + 1})
+        for index, code in enumerate(codes)
+    ]
+    retirement = base.retirement.model_copy(update={"per_lap": {code: 0.0 for code in codes}})
+    outcome = run(base.model_copy(update={"drivers": drivers, "retirement": retirement}), paths=300)
+    grid = outcome.probabilities()
+    # eleven teams, twenty-two cars: twenty-first and twenty-second are real places, not a
+    # pile-up at twentieth
+    assert grid.shape == (22, 22)
+    assert np.allclose(grid.sum(axis=0), 1.0)
+    assert grid[:, 20:].sum() == pytest.approx(2.0)
