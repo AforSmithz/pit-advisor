@@ -859,3 +859,31 @@ def test_the_dashboard_signs_its_way_to_the_agent() -> None:
 def test_the_dashboard_has_no_agent_route_when_it_is_not_given_one(web_template: Template) -> None:
     distribution = sole(web_template, "AWS::CloudFront::Distribution")
     assert "CacheBehaviors" not in distribution["Properties"]["DistributionConfig"]
+
+
+def dashboard_body(template: Template) -> str:
+    body = sole(template, "AWS::CloudWatch::Dashboard")["Properties"]["DashboardBody"]
+    return json.dumps(body)
+
+
+def test_the_dashboard_watches_every_moving_part(observability_template: Template) -> None:
+    body = dashboard_body(observability_template)
+    for name in (
+        f"pitadvisor-weekend-{ENV_NAME}",
+        f"pitadvisor-backfill-{ENV_NAME}",
+        f"pitadvisor-ask-{ENV_NAME}",
+        f"pitadvisor-race-sim-{ENV_NAME}",
+        "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "cohere.embed-english-v3",
+        "ProcessedBytes",
+        "InvocationThrottles",
+    ):
+        assert name in body, name
+
+
+def test_the_dashboard_finds_resources_by_name_not_by_reference(
+    observability_template: Template,
+) -> None:
+    # a cross-stack import would make the observability stack wait on the others, and it is
+    # the one that has to deploy first so the budgets exist before anything can spend
+    assert "Fn::ImportValue" not in dashboard_body(observability_template)
