@@ -1,8 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
 from pitadvisor.ingest.raw_store import write_bronze, write_quarantine
-from pitadvisor.quality.checks import Status, report
+from pitadvisor.quality.checks import NATURAL_KEYS, Status, report
 from pitadvisor.quality.contracts import (
+    TABLES,
     LapRow,
     PitStopRow,
     QualifyingRow,
@@ -210,3 +211,10 @@ def test_a_full_column_does_not_warn(store):
     assert outcome_for(report(store, Layer.BRONZE, now=NOW), "null_rate", "pitstops").status is (
         Status.OK
     )
+
+
+def test_every_bronze_table_has_a_natural_key():
+    # a table missing here crashes the whole report the first time it lands in bronze
+    assert set(TABLES) <= set(NATURAL_KEYS)
+    for table, row in TABLES.items():
+        assert set(NATURAL_KEYS[table]) <= set(row.model_fields), table
