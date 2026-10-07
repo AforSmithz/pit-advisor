@@ -79,12 +79,26 @@ failed on a single case each, always the same shape: the model subtracts one too
 another and states the difference, which is a figure no tool returned. The check withholds that
 answer every time, which is the gate doing its job rather than a gate worth lowering.
 
-The forecast clears its own bar too, though by less than a chart would suggest. Over a sixty-race
-time-forward holdout the simulation's multiclass log loss is 2.588 [2.551, 2.625], against 2.602
-for grid position alone, 2.700 for championship standings and 2.792 for last race's result.
-Resampled at the race level, it is separated from standings and from last race, and it is not
-separated from the grid: sixty races cannot tell the simulation and the starting order apart.
+The forecast clears its own bar too, though by less than a chart would suggest. The holdout is
+the last sixty races run, from the 2024 Chinese Grand Prix to the sixteenth round of 2026, so
+sixteen of them are in 2026's twenty-two-car field. Fifty-eight are scored; the other two are at
+circuits new in 2026 that the hand-maintained circuit taxonomy does not cover yet. The
+simulation's multiclass log loss is 2.595 [2.552, 2.639], against 2.611 for grid position
+alone, 2.729 for championship standings and 2.826 for last race's result. Resampled at the race
+level, it is separated from standings and from last race, and it is not separated from the grid
+on log loss, only on Brier: sixty races cannot tell the simulation and the starting order apart.
 That is the finding, and the calibration page leads with it.
+
+Two things are worth knowing about how that number was reached. A race in a twenty-two-car field
+is not scored against a baseline that has only ever seen twenty places: each past race is
+stretched onto the field being predicted by share of the field, so last of twenty counts as last
+of twenty-two. An earlier version gave the baselines a token floor for the two new places
+instead, and the simulation came out separated from the grid by a wide margin. Almost all of that
+margin was the two places the baselines could not imagine, and it was a bug rather than a result.
+The same re-run also closed two small leaks the first backtest had: two spread parameters were
+measured over the whole lake rather than as of each race, and a circuit's first race took its
+distance from every race in the lake, later ones included. Fixed and re-run on the original sixty
+races, they move the simulation's log loss in the fifth decimal place.
 
 ## Architecture
 
@@ -360,8 +374,9 @@ The Thursday forecast runs before qualifying, so the grid is not known. Each sim
 then runs its own qualifying first, drawn from the same pace the race uses plus each driver's
 Saturday-to-Sunday conversion, which spreads the favourites further than a grid-conditioned
 forecast would. The published backtest is unaffected: it scores races on the grid they actually
-had, and it covers 2021 to 2025, all twenty-car seasons. Scoring 2026's twenty-two-car field
-needs the baselines widened to match, which has not been done yet.
+had. Madrid and Sepang, both new to the 2026 calendar, are not in the circuit taxonomy, so the
+track fit refuses them and neither the backtest nor a weekend forecast covers them until their
+entries are researched and added by hand.
 
 The agent is built and has passed its gate, but in the account it runs in today it cannot
 answer: a new AWS account ships with Bedrock's text-generation quota at zero, and lifting it is a
