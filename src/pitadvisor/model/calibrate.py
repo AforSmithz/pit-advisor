@@ -50,7 +50,7 @@ def render(report: Report, output: Path, figure: str = FIGURE) -> Path:
     for text in legend.get_texts():
         text.set_color(LUME_DIM)
     fig.suptitle(
-        f"reliability over {report.holdout} time-forward races, {report.paths} paths",
+        f"reliability over {len(report.per_race)} time-forward races, {report.paths} paths",
         color=LUME,
         fontsize=10,
     )

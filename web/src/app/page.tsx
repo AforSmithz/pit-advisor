@@ -35,11 +35,11 @@ export default async function CalibrationPage() {
       </div>
 
       <p className="mt-6 max-w-[74ch] text-sm leading-relaxed text-lume-dim">
-        The holdout is the last {view.holdout} races in the lake, scored one at
-        a time with every fit behind the forecast seeing only what had happened
-        when it was made. Intervals are bootstrapped over races rather than
-        drivers, because twenty cars in one race share a track, a strategy and a
-        safety car, and resampling them independently reports a spread several
+        The holdout is the last {view.holdout} races run, of which the{" "}
+        {ours?.races ?? 0} at circuits in the taxonomy are scored, one at a time,
+        with every fit behind the forecast seeing only what had happened when it
+        was made. Intervals are bootstrapped over races rather than drivers,
+        because the cars in one race share a track, a strategy and a safety car, and resampling them independently reports a spread several
         times tighter than the evidence supports.{" "}
         {separated.length
           ? `This holdout separates the simulation from ${separated
