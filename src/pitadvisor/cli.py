@@ -808,7 +808,8 @@ def cost_report(
     typer.echo(summary, nl=False)
     if view:
         months = cost_outputs.history(client, end)
-        typer.echo(f"wrote {emit(object_store(settings), cost_outputs.cost_view(report, months))}")
+        written = emit(object_store(settings), cost_outputs.cost_view(report, months, _run_id()))
+        typer.echo(f"wrote {written}")
     if not report.under_ceiling:
         raise typer.Exit(1)
 

@@ -164,10 +164,15 @@ def test_the_view_carries_the_report_and_the_history():
         services=[ServiceCost(service="Amazon S3", usage_usd=0.464, tagged_usd=0.2225)],
     )
     client = FakeCostExplorer({"2026-09": SEPTEMBER, "2026-10": OCTOBER})
-    view = cost_view(report, history(client, date(2026, 10, 8)), datetime(2026, 10, 7, tzinfo=UTC))
+    view = cost_view(
+        report, history(client, date(2026, 10, 8)), "run-1", datetime(2026, 10, 7, tzinfo=UTC)
+    )
     payload = view.model_dump(mode="json")
     assert payload["view"] == "cost_view"
+    assert payload["run_id"] == "run-1"
     assert payload["untagged_usd"] == pytest.approx(0.2415)
+    # the exclusive end is a query detail; the page shows the last day counted
+    assert payload["through"] == "2026-10-07"
     assert payload["under_ceiling"] is True
     assert [item["month"] for item in payload["history"]] == ["2026-09", "2026-10"]
 

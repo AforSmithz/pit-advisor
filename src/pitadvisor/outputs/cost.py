@@ -45,14 +45,20 @@ class CostReport(BaseModel, frozen=True):
     def untagged_usd(self) -> float:
         return round(self.usage_usd - self.tagged_usd, 4)
 
+    @property
+    def through(self) -> date:
+        return self.end - timedelta(days=1)
+
 
 class CostView(BaseModel, frozen=True):
     view: str = "cost_view"
     schema_version: str = SCHEMA_VERSION
     generated_at: datetime
+    run_id: str
     month: str
     start: date
     end: date
+    through: date
     estimated: bool
     usage_usd: float
     credits_usd: float
@@ -187,13 +193,18 @@ def history(client: Any, end: date, since: date = FIRST_MONTH) -> list[MonthTota
 
 
 def cost_view(
-    report: CostReport, months: list[MonthTotal], generated_at: datetime | None = None
+    report: CostReport,
+    months: list[MonthTotal],
+    run_id: str,
+    generated_at: datetime | None = None,
 ) -> CostView:
     return CostView(
         generated_at=generated_at or datetime.now(UTC),
+        run_id=run_id,
         month=report.month,
         start=report.start,
         end=report.end,
+        through=report.through,
         estimated=report.estimated,
         usage_usd=report.usage_usd,
         credits_usd=report.credits_usd,
@@ -207,10 +218,9 @@ def cost_view(
 
 
 def summarise(report: CostReport) -> str:
-    through = report.end - timedelta(days=1)
     status = "estimated, month still open" if report.estimated else "final"
     lines = [
-        f"cost for {report.month}, {report.start} to {through} ({status})",
+        f"cost for {report.month}, {report.start} to {report.through} ({status})",
         f"  {'usage before credits':<28}{report.usage_usd:>9.2f} USD",
         f"  {'credits applied':<28}{report.credits_usd:>9.2f} USD",
         f"  {f'tagged {TAG_KEY}={TAG_VALUE}':<28}{report.tagged_usd:>9.2f} USD, "
