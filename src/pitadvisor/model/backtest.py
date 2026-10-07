@@ -354,6 +354,8 @@ class Forecast(BaseModel, frozen=True):
     outcome: race.Outcome
     scenarios: dict[str, race.Outcome]
     assumptions: list[Assumption]
+    # true before qualifying, when every path sampled its own grid
+    grid_sampled: bool = False
 
 
 def seats_for(
@@ -363,14 +365,11 @@ def seats_for(
         (pl.col("season") == context.season) & (pl.col("round") == context.round)
     ).drop_nulls("driver_code")
     if not entered.height:
-        # the event has not been run, so the entry list is whoever was last in each car
-        entered = (
-            pane.results.filter(pl.col("race_date") < as_of)
-            .drop_nulls("driver_code")
-            .sort("race_date")
-            .group_by("constructor_id", "driver_code")
-            .last()
-        )
+        # the event has not been run, so the entry list is the last race's. grouping every
+        # driver and team pair ever seen instead put five seasons of drivers on one grid
+        before = pane.results.filter(pl.col("race_date") < as_of).drop_nulls("driver_code")
+        if before.height:
+            entered = before.filter(pl.col("race_date") == before["race_date"].max())
     seats = {
         str(row["driver_code"]): str(row["constructor_id"]) for row in entered.iter_rows(named=True)
     }
@@ -441,6 +440,10 @@ def setup(
     reference = _reference_millis(pane, context.circuit_id, as_of)
     codes = sorted(seats)
     slots = grid or grid_for(pane, context, codes)
+    # before qualifying nobody has a slot, and a field of twenty cars all starting last is not a
+    # forecast. §5.7 step 1: each path then samples its grid from qualifying pace instead
+    unknown = grid is None and all(slot == FIELD for slot in slots.values())
+    shifts = quali_shifts(pane, as_of, codes) if unknown else {}
 
     percent, error = _ratings(shape, track, rain, seats, codes, scenario, pane.race_day_sd)
     percent, error = _anchored(pane, context, as_of, codes, percent, error, scenario)
@@ -451,6 +454,7 @@ def setup(
             grid=slots.get(code, FIELD),
             pace_millis=reference * (1.0 + percent[code] / 100.0),
             pace_sd_millis=reference * error[code] / 100.0,
+            quali_shift_millis=reference * shifts.get(code, 0.0) / 100.0,
         )
         for code in codes
     ]
@@ -471,7 +475,21 @@ def setup(
         passing=overtake.fit(pane.passes, context.circuit_id, as_of, traffic=pane.traffic),
         safety_car=caution,
         retirement=dnf.build(hazard, seats, ids),
+        grid_known=not unknown,
+        quali_noise_millis=reference * pane.quali_anchor_sd / 100.0 if unknown else 0.0,
     )
+
+
+def quali_shifts(pane: Panel, as_of: date, codes: list[str]) -> dict[str, float]:
+    """Each driver's quali-to-race delta in percent, the field's mean for anyone without one.
+    Race pace is the quali gap less the delta, so a qualifying lap is the race pace plus it."""
+    history = [item for item in pane.quali_events if item[0] < as_of]
+    if not history:
+        return {}
+    trend = quali_race.trend(history, as_of)
+    own = {item.driver_code: item.delta for item in trend.drivers}
+    field = float(np.mean(list(own.values()))) if own else 0.0
+    return {code: own.get(code, field) for code in codes}
 
 
 def _race_laps(pane: Panel, context: EventContext, as_of: date) -> int:
@@ -638,6 +656,7 @@ def forecast(
         outcome=blended,
         scenarios=outcomes,
         assumptions=_assumptions(reference, pane),
+        grid_sampled=not reference.grid_known,
     )
 
 

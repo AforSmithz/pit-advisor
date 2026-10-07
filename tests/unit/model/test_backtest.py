@@ -136,3 +136,57 @@ def test_the_pit_lane_starter_is_put_at_the_back(pane, store):
     slots = backtest.grid_for(pane, context, codes)
     assert min(slots.values()) >= 1
     assert max(slots.values()) <= backtest.FIELD
+
+
+def before_qualifying(pane, context):
+    import dataclasses
+
+    # the race has not run: no grid, no result, and no qualifying either
+    held = (pl.col("season") == context.season) & (pl.col("round") == context.round)
+    return dataclasses.replace(
+        pane, results=pane.results.filter(~held), quali=pane.quali.filter(~held)
+    )
+
+
+def test_before_qualifying_the_grid_is_sampled_not_set_to_last(pane, store):
+    context = event_at(store, 2024, 3)
+    early = before_qualifying(pane, context)
+    built = backtest.setup(early, context, context.race_date, "dry")
+    assert not built.grid_known
+    assert built.quali_noise_millis > 0
+    predicted = backtest.forecast(
+        early, context, context.race_date, np.random.default_rng(SEED), paths=300
+    )
+    assert predicted.grid_sampled
+    assert sum(predicted.outcome.win) == pytest.approx(1.0)
+    # every car starting from the back would flatten the field; a sampled grid does not
+    assert max(predicted.outcome.win) > 1.5 / len(predicted.outcome.driver_code)
+
+
+def test_with_the_grid_known_nothing_is_sampled(pane, store):
+    context = event_at(store, 2024, 3)
+    built = backtest.setup(pane, context, context.race_date, "dry")
+    assert built.grid_known
+    assert built.quali_noise_millis == 0.0
+    assert not backtest.forecast(
+        pane, context, context.race_date, np.random.default_rng(SEED), paths=100
+    ).grid_sampled
+
+
+def test_quali_shifts_fall_back_to_the_field(pane, store):
+    context = event_at(store, 2024, 3)
+    shifts = backtest.quali_shifts(pane, context.race_date, ["NOBODY"])
+    assert set(shifts) == {"NOBODY"}
+
+
+def test_an_unrun_race_takes_the_last_race_entry_list(pane, store):
+    context = event_at(store, 2024, 3)
+    early = before_qualifying(pane, context)
+    seats, _ = backtest.seats_for(early, context, context.race_date)
+    before = early.results.filter(pl.col("race_date") < context.race_date).drop_nulls("driver_code")
+    last = before.filter(pl.col("race_date") == before["race_date"].max())
+    assert seats == {
+        str(row["driver_code"]): str(row["constructor_id"]) for row in last.iter_rows(named=True)
+    }
+    # not every pairing the lake has ever seen
+    assert len(seats) == last.height
