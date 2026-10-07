@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     aws_region: str = "ap-southeast-1"
     # the one place the account lives. everything else derives it or reads
     # PITADV_ACCOUNT_ID, so moving accounts is this line plus a .env entry
-    account_id: str = "189575358467"
+    account_id: str = "229032673380"
     data_bucket: str = ""
     glue_database: str = ""
     athena_workgroup: str = "pitadvisor"

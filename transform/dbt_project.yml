@@ -28,9 +28,9 @@ models:
       +tags: ["silver"]
       +table_type: iceberg
       +format: parquet
-      +s3_data_dir: "{{ env_var('PITADV_SILVER_DIR', 's3://pit-advisor-data-dev-' ~ env_var('PITADV_ACCOUNT_ID', '189575358467') ~ '/silver/') }}"
+      +s3_data_dir: "{{ env_var('PITADV_SILVER_DIR', 's3://pit-advisor-data-dev-' ~ env_var('PITADV_ACCOUNT_ID', '229032673380') ~ '/silver/') }}"
     gold:
       +tags: ["gold"]
       +table_type: iceberg
       +format: parquet
-      +s3_data_dir: "{{ env_var('PITADV_GOLD_DIR', 's3://pit-advisor-data-dev-' ~ env_var('PITADV_ACCOUNT_ID', '189575358467') ~ '/gold/') }}"
+      +s3_data_dir: "{{ env_var('PITADV_GOLD_DIR', 's3://pit-advisor-data-dev-' ~ env_var('PITADV_ACCOUNT_ID', '229032673380') ~ '/gold/') }}"

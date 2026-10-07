@@ -33,7 +33,7 @@ def test_defaults():
     assert s.env == "dev"
     assert s.aws_profile == "pitadvisor"
     assert s.aws_region == "ap-southeast-1"
-    assert s.account_id == "189575358467"
+    assert s.account_id == "229032673380"
     assert s.data_bucket == f"pit-advisor-data-dev-{s.account_id}"
     assert s.glue_database == "pitadvisor_dev"
     assert s.athena_workgroup == "pitadvisor"

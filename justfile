@@ -5,7 +5,7 @@
 AWS_PROFILE := "pitadvisor"
 export AWS_REGION := "ap-southeast-1"
 
-account := env_var_or_default("PITADV_ACCOUNT_ID", "189575358467")
+account := env_var_or_default("PITADV_ACCOUNT_ID", "229032673380")
 
 # CI assumes a role by OIDC, so there is no profile to name there
 profile := if env_var_or_default("CI", "") == "" { "--profile pitadvisor" } else { "" }
