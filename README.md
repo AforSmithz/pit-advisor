@@ -15,39 +15,33 @@ twenty dollar per month budget, which is a design constraint rather than an afte
 
 ## What exists today
 
-This is early. What works today is the foundation and the ingest half of the pipeline. The
-foundation is the Python package with typed configuration and shared key and provenance types,
-a `pitadv` CLI, a CDK application covering the lake, the budgets and the ingest ledger, a
-pre-commit setup, and CI that lints, type checks, tests and synthesizes the infrastructure.
+All of it, end to end, in one AWS account. Three sources land in the lake: Jolpica results,
+qualifying, pit stops and schedules, Open-Meteo weather snapshots per event, and FastF1 race
+session laps. They all go through the same path: a conditional HTTP GET under a token bucket, the
+response written to `raw/` verbatim with its request metadata, a parse into typed rows, a pydantic
+contract per table, and Parquet in `bronze/` partitioned by season and round. Rows that fail their
+contract land in `quarantine/` with the reason attached instead of failing the load. The FIA's
+stewards' decisions are crawled the same way and parsed into incidents, sanctions and the
+regulation articles they cite.
 
-On top of that, three sources now land in the lake. Jolpica results, qualifying, laps, pit
-stops and schedules, Open-Meteo weather snapshots per event, and FastF1 session laps all go
-through the same path: a conditional HTTP GET under a token bucket, the response written to
-`raw/` verbatim with its request metadata, a parse into typed rows, a pydantic contract per
-table, and Parquet in `bronze/` partitioned by season and round. Rows that fail their contract
-land in `quarantine/` with the reason attached instead of failing the load. `pitadv
-quality-report` checks row counts, freshness, duplicate natural keys, referential integrity
-between tables and null rates on the columns that should be nearly always present, and
-`pitadv emit-views` writes the first view artifact, `pipeline_view.json`, which carries table
-health, quarantine counts by reason and the remaining request quota per source.
-
-Above bronze there is now a transform layer. A dbt project builds conformed silver tables with
-surrogate keys and amendment-aware deduplication, and three gold marts on top of them: race
-results with the finishing status classified, qualifying gaps to pole and to the teammate, and
-pit stop summaries against the event average. The same models run two ways: on duckdb against
-the local Parquet, which is how they are developed and tested, and on Athena as Iceberg tables
-with MERGE, which is how they run in the account. The Glue tables that Athena reads bronze
-through are generated from the same pydantic contracts that validate the rows, so the catalog
-cannot drift from the schema. `pitadv lineage --check` reads the dbt manifest and walks every
+Above bronze, a dbt project builds conformed silver tables with surrogate keys and
+amendment-aware deduplication, and gold marts on top of them. The same models run on duckdb
+against local Parquet, which is how they are developed and tested, and on Athena as Iceberg
+tables with MERGE, which is how they run in the account. `pitadv lineage --check` walks every
 gold model back through silver to the bronze sources and on to the raw objects each one was
-built from; a gold model that cannot be traced to raw fails the command.
+built from, and fails if any cannot be traced.
 
-Raw and bronze cover 2021 to 2025 for results, qualifying, laps, pit stops, race-session timing
-and weather. The gold marts hold 114 races and 2,278 result rows across the five seasons, and
-the same models build on duckdb locally and on Athena in the account, where a full rebuild of
-twelve models and fifty-seven tests takes eighty-four seconds. All six stacks are deployed. The knowledge base holds 142
-documents, every race report and circuit page the results feed links to, indexed into S3
-Vectors with none failed.
+On top of the marts sit the metrics: teammate-normalised clean-air race pace, the qualifying to
+race delta, two independent track-fit estimators that are shown side by side and never blended,
+a weather scenario mix, and a pooled retirement hazard. A Monte Carlo race simulation turns them
+into a finishing-position distribution for the next race, and a time-forward backtest judges it.
+Each of these is published as a versioned JSON view that passed the quality gate, and a static
+Next.js dashboard renders the views. A Bedrock agent answers questions over the same views, the
+marts and a regulations and race-report corpus, with citations.
+
+The lake covers 2021 to the current race of 2026. Every Thursday a state machine checks the
+calendar, and in a race week it refreshes the weather, the sessions, the marts and every view,
+including a short weekend brief at the top of the weekend page.
 
 ## The honesty constraint
 
@@ -77,28 +71,38 @@ the answer is checked against the numbers the tools returned, the numbers in the
 numbers in the tool arguments, and an answer carrying anything else is withheld and says which
 figures were loose. A golden set of sixty-four questions scores the agent: exact match on numeric
 answers against the marts, retrieval hit-rate, tool-selection accuracy, and a count of ungrounded
-figures that has to be zero. The most recent run, against the deployed system, scores 97.4%, 100% and 98.4% against floors
-of 95%, 90% and 90%, and fails the last one by a single case. About once in sixty-four questions the
-model subtracts one tool result from another and states the difference, which is a figure no tool
-returned. The check catches it and withholds the answer every time, and the agent stays out of the
-dashboard until a run comes back clean. That is the gate doing its job rather than a gate worth
-lowering.
+figures that has to be zero. The run that cleared the gate scored 95.1% on numeric exact match
+against a 95% floor, 100% on retrieval and 98.6% on tool selection against 90% floors, with zero
+ungrounded figures across seventy-one cases. The numeric score sits one case above its floor, and
+the two cases it missed are written up in `results/evals/` rather than tuned away. Earlier runs
+failed on a single case each, always the same shape: the model subtracts one tool result from
+another and states the difference, which is a figure no tool returned. The check withholds that
+answer every time, which is the gate doing its job rather than a gate worth lowering.
+
+The forecast clears its own bar too, though by less than a chart would suggest. Over a sixty-race
+time-forward holdout the simulation's multiclass log loss is 2.588 [2.551, 2.625], against 2.602
+for grid position alone, 2.700 for championship standings and 2.792 for last race's result.
+Resampled at the race level, it is separated from standings and from last race, and it is not
+separated from the grid: sixty races cannot tell the simulation and the starting order apart.
+That is the finding, and the calibration page leads with it.
 
 ## Architecture
 
 ```
-EventBridge rule (weekly, off by default)
+EventBridge rule (Thursday 06:00 UTC)
   |
   +-- Step Functions  weekend-pipeline        one Fargate task definition, one image
         |
-        +-- ingest jolpica       results, quali, laps, pitstops, schedules
-        +-- ingest open-meteo    forecast and archive around each session
-        +-- ingest fastf1        session laps, heavy deps, S3-backed cache
+        +-- weekend plan         refresh the calendar, refetch the last result, decide
+        +-- read plan            S3 integration, no Lambda
+        +-- race week?           no: stop here, one small task spent
+        +-- ingest open-meteo    forecast for the coming race
+        +-- ingest fastf1        race sessions not yet in the lake, S3-backed cache
         +-- quality gate         contracts, freshness, keys, references
         +-- catalog sync         glue bronze tables from the contracts
         +-- dbt build            silver and gold, Iceberg MERGE
         +-- lineage check        every gold model traced back to raw
-        +-- emit views           gold into versioned view JSON
+        +-- emit views           weekend, driver, track, forecast, brief, pipeline
 
 S3 (one bucket, prefix separated)
   raw/  bronze/  silver/  gold/  views/  quarantine/  docs/  cache/
@@ -108,7 +112,8 @@ Athena                   SQL, byte-scan capped workgroup
 DynamoDB                 request ledger, run state
 Bedrock                  Knowledge Base on S3 Vectors, agent runtime, Guardrails
 CloudFront + S3          static Next.js dashboard reading views/*.json
-CloudWatch + Budgets     logs, alarms, the spend ceiling
+CloudWatch + Budgets     logs, a latency dashboard, the spend ceiling
+Cost Explorer            measured spend, read by pitadv cost-report
 ```
 
 The data flow is a medallion lake. Every upstream response lands in `raw/` verbatim, with its
@@ -205,11 +210,11 @@ scanned, so an unpartitioned table plus a generated join is the single most plau
 budget dies.
 
 The orchestration loop is written here rather than handed to a managed agent runtime, and it
-uses the AWS SDK directly rather than an agent framework. Both are the same argument. The eval
-suite is what decides whether the agent is allowed in front of anyone, it runs on every push,
-and the job that runs it holds no AWS credentials; a managed loop would put the thing being
-scored inside the account and force either credentials in CI or a local reimplementation of the
-loop, which is the loop. Owning it also turns the rule about figures into an assertion: after
+uses the AWS SDK directly rather than an agent framework. Both are the same argument. The loop
+is what the eval suite scores, so it has to run under test without an account: the unit suite
+drives it with a stubbed Bedrock client on every push, and the CI job holds no AWS credentials. A
+managed loop would put the thing being scored inside the account and force either credentials in
+CI or a local reimplementation of the loop, which is the loop. Owning it also turns the rule about figures into an assertion: after
 the model stops, every number in the answer is checked against the numbers the tools returned,
 the numbers in the question and the numbers in the tool arguments, and an answer carrying
 anything else is withheld and says which figures were loose. A framework would have bought
@@ -224,6 +229,12 @@ published after passing the quality gate. Reading them means a figure in an answ
 on the dashboard cannot disagree, and it means no tool contains a second implementation of a
 metric. The cost is that those tools speak about the current event and the most recent fits;
 anything historical goes through the guarded SQL, and the tools say so rather than guessing.
+
+The weekly run decides before it works. A Fargate step reads the calendar and leaves a small plan
+in the lake, the state machine reads it back through its S3 integration, and a week without a
+race ends there. The alternative was a Lambda whose only job is a date comparison, or a list of
+race dates copied into EventBridge Scheduler, which would put the calendar in two places. The
+plan file also means any past Thursday's decision can be read back after the fact.
 
 Some of this is deliberately over-engineered for the data volume. A medallion lake and a dbt
 project for two hundred megabytes is more machinery than the problem needs, which is the point:
@@ -289,19 +300,40 @@ uv run pitadv lineage --check --local
 Against the account the same models run on Athena with `--target athena`, after
 `pitadv catalog-sync` has pointed the Glue catalog at the bronze prefixes.
 
+Two commands only make sense against the account. `pitadv weekend-plan` is the first step of the
+Thursday run and can be run by hand to see what it would decide, and `pitadv cost-report` reads
+Cost Explorer and fails above the ceiling:
+
+```bash
+uv run pitadv weekend-plan --no-refresh
+uv run pitadv cost-report --month current
+```
+
 ## Cost
 
-There is no cost table yet, because nothing has been deployed. It gets filled in from Cost
-Explorer at the end of each phase, scoped to the `project=pit-advisor` tag that every resource
-carries, and it reports measured spend by service rather than estimates. `just cost` prints the
-current month.
+Measured from Cost Explorer by `pitadv cost-report`, not estimated. The figures are usage before
+credits, because the account runs on credits and a net figure would read zero every month. The
+account hosts nothing but this project, so the whole-account figure is the project's figure.
 
-The design targets under six dollars a month of infrastructure against a hard ceiling of one
-hundred dollars of credits for the life of the project, with a Budgets alarm at twenty dollars a
-month. The only line item that can plausibly break that is Bedrock token spend, which is why the
-default model is the cheapest one that passes the eval thresholds, prompt caching is on for the
-system prompt and tool schemas, and the full eval suite runs on release tags rather than on every
-push.
+| | September 2026 | October 2026, to the 7th |
+|---|---|---|
+| S3 | $0.46 | $0.20 |
+| Fargate (ECS) | $0.29 | |
+| VPC (public IPv4 for the tasks) | $0.06 | |
+| Bedrock embeddings (Cohere) | | $0.24 |
+| ECR | $0.01 | $0.02 |
+| DynamoDB and Athena | $0.01 | |
+| **Total** | **$0.83** | **$0.46** |
+
+September includes refetching the entire lake from upstream after moving accounts, which is the
+most expensive thing the system ever does. October so far is mostly the one-off embedding of the
+corpus into the knowledge base. Both measured months are under a dollar against a ceiling of
+twenty, and both carry one-off work, so neither is a steady state yet; the budgets alarm at eighty
+percent of the ceiling. The only line
+that can plausibly break that is Bedrock token spend, which is why the answering model is the
+cheapest one that passes the eval thresholds and the full eval suite is a deliberate command
+rather than a per-push job. `pitadv cost-report` exits non-zero above the ceiling, and its
+reports are committed under `results/cost/`.
 
 ## Limitations
 
@@ -319,6 +351,22 @@ discarding most of the field's laps produces a very clean model of almost nothin
 
 Historical coverage is limited by what FastF1 exposes, which is roughly 2018 onward for
 lap-level detail, and regulation changes in 2022 and 2026 mean older data describes cars that no
-longer exist, so time decay does most of the work of forgetting. None of that timing data is
+longer exist, so time decay does most of the work of forgetting. 2026 is the hard case: it is a
+full regulation reset, and every prior the early-season numbers lean on was fitted on the
+previous generation of cars. The intervals widen as evidence thins, but they do not know about
+the reset.
+
+The Thursday forecast runs before qualifying, so the grid is not known. Each simulated race
+then runs its own qualifying first, drawn from the same pace the race uses plus each driver's
+Saturday-to-Sunday conversion, which spreads the favourites further than a grid-conditioned
+forecast would. The published backtest is unaffected: it scores races on the grid they actually
+had, and it covers 2021 to 2025, all twenty-car seasons. Scoring 2026's twenty-two-car field
+needs the baselines widened to match, which has not been done yet.
+
+The agent is built and has passed its gate, but in the account it runs in today it cannot
+answer: a new AWS account ships with Bedrock's text-generation quota at zero, and lifting it is a
+sales conversation rather than a quota request. Embeddings work, so the knowledge base is
+indexed and ready. Until the quota opens, the weekend brief is assembled deterministically from
+the views; an agent-written brief is the intended version. None of that timing data is
 redistributed here: the repository contains code, infrastructure, tests, and small result
 artifacts only.
