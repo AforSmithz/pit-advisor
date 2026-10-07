@@ -33,6 +33,11 @@ def is_forecast(race_date: date, today: date) -> bool:
     return today <= race_date <= today + FORECAST_HORIZON
 
 
+def fetchable(race_date: date, today: date) -> bool:
+    # beyond the horizon there is no forecast yet and the archive has nothing either
+    return race_date <= today + FORECAST_HORIZON
+
+
 def endpoint(latitude: float, longitude: float, day: date, forecast: bool) -> str:
     base = FORECAST_URL if forecast else ARCHIVE_URL
     hourly = ",".join(

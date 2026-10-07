@@ -5,6 +5,7 @@ from pitadvisor.ingest.weather import (
     WeatherClient,
     endpoint,
     event_circuits,
+    fetchable,
     ingest_event,
     is_forecast,
     parse,
@@ -31,6 +32,13 @@ def test_a_race_last_year_comes_from_the_archive():
 
 def test_a_race_beyond_the_horizon_is_not_a_forecast_yet():
     assert not is_forecast(date(2024, 6, 30), date(2024, 4, 30))
+
+
+def test_only_a_race_beyond_the_horizon_cannot_be_fetched():
+    today = date(2024, 4, 30)
+    assert fetchable(date(2023, 5, 5), today)
+    assert fetchable(date(2024, 5, 16), today)
+    assert not fetchable(date(2024, 5, 17), today)
 
 
 def test_forecast_endpoint_asks_for_the_probability():
