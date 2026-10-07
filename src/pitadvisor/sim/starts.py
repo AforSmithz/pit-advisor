@@ -99,11 +99,18 @@ def sample(
     slots = np.asarray(grid, dtype=int)
     index = _bucket_of(slots)
     table = np.asarray([bucket.gain for bucket in model.buckets])
-    intent = np.empty((paths, slots.shape[0]))
     values = np.arange(-MAX_GAIN, MAX_GAIN + 1)
-    for driver, bucket in enumerate(index):
-        drawn = rng.choice(values, size=paths, p=table[bucket])
-        intent[:, driver] = slots[driver] - drawn
+    if slots.ndim == 1:
+        intent = np.empty((paths, slots.shape[0]))
+        for driver, bucket in enumerate(index):
+            drawn = rng.choice(values, size=paths, p=table[bucket])
+            intent[:, driver] = slots[driver] - drawn
+    else:
+        # a grid sampled per path, before qualifying: every path has its own slots, so the
+        # gain is drawn by inverting each slot's cumulative table rather than per driver
+        cumulative = np.cumsum(table, axis=1)
+        drawn = (rng.uniform(size=slots.shape)[..., None] > cumulative[index]).sum(axis=-1)
+        intent = slots - values[np.minimum(drawn, values.shape[0] - 1)]
     # a tie between two cars that both want the same place is broken at random, not by name
     order = np.argsort(intent + rng.uniform(0.0, 0.5, intent.shape), axis=1, kind="stable")
     # argsort of an argsort is the rank, which is the running order read per driver

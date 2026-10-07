@@ -71,3 +71,15 @@ def test_the_sampled_order_tracks_the_gains_it_was_fitted_on():
     # running order is a permutation. what they can do is move up, and they do
     assert drawn[:, 14:].mean() < 17.5
     assert drawn[:, :3].mean() > 2.0
+
+
+def test_a_grid_sampled_per_path_still_comes_back_a_permutation():
+    model = starts.fit(frame({slot: 0 for slot in range(1, 21)}), AS_OF)
+    rng = np.random.default_rng(4)
+    grids = np.argsort(rng.uniform(size=(150, 20)), axis=1) + 1
+    drawn = starts.sample(model, grids, np.random.default_rng(5), paths=150)
+    assert drawn.shape == (150, 20)
+    for row in drawn:
+        assert sorted(row.tolist()) == list(range(1, 21))
+    # a field fitted to hold station starts lap one where each path's own grid put it
+    assert (drawn == grids).mean() > 0.9
