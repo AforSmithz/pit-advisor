@@ -399,7 +399,9 @@ class TransformStack(Stack):
         self.schedule = events.Rule(
             self,
             "ThursdaySchedule",
-            rule_name=f"pitadvisor-weekend-{env_name}",
+            # not the old monday rule's name: cloudformation creates the new rule before it
+            # deletes the old one, and two rules cannot share a name
+            rule_name=f"pitadvisor-weekend-plan-{env_name}",
             description="plans the coming weekend and refreshes the lake when a race is due",
             schedule=events.Schedule.cron(minute="0", hour="6", week_day="THU"),
             enabled=str(self.node.try_get_context("enableSchedule")).lower() != "false",
