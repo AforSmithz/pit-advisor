@@ -53,3 +53,10 @@ export function assumption(name: string, value: number): string {
 export function gain(value: number, digits = 4): string {
   return `${value >= 0 ? "+" : "\u2212"}${Math.abs(value).toFixed(digits)}`;
 }
+
+// a few tenths of a cent rounds to $0.00, which reads as free when it is not
+export function usd(value: number): string {
+  if (value > 0 && value < 0.005) return "<$0.01";
+  const fixed = Math.abs(value).toFixed(2);
+  return `${value < 0 && Number(fixed) !== 0 ? "\u2212" : ""}$${fixed}`;
+}

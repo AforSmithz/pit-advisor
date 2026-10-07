@@ -1,7 +1,7 @@
 import { Engraved, Plate } from "@/components/plate";
 import { Since } from "@/components/since";
-import { label } from "@/lib/format";
-import { loadPipeline } from "@/lib/load";
+import { label, usd } from "@/lib/format";
+import { loadCost, loadPipeline } from "@/lib/load";
 
 export const metadata = { title: "Pipeline · Pit Advisor" };
 
@@ -12,7 +12,7 @@ const MARK: Record<"ok" | "warn" | "fail", string> = {
 };
 
 export default async function PipelinePage() {
-  const view = await loadPipeline();
+  const [view, cost] = await Promise.all([loadPipeline(), loadCost()]);
 
   return (
     <div className="pt-2">
@@ -88,6 +88,69 @@ export default async function PipelinePage() {
                 <span className="engraved text-lume-dim">nothing to report</span>
               </div>
             )}
+          </Plate>
+
+          <Plate
+            title="Spend"
+            note="Usage before credits, from Cost Explorer. Credits zero the bill, so they cannot be what the ceiling measures."
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+              <span className="engraved">
+                {cost.month} · {cost.start} to {cost.through}
+                {cost.estimated ? " · month open" : " · final"}
+              </span>
+              <span className="engraved">
+                {cost.under_ceiling ? "under ceiling" : "OVER CEILING"}
+              </span>
+            </div>
+            <div className="mt-3 flex items-baseline gap-3">
+              <span className="figure text-4xl text-lume">{usd(cost.usage_usd)}</span>
+              <span className="figure text-sm text-lume-dim">of {usd(cost.ceiling_usd)}</span>
+            </div>
+            <div className="mt-3 h-1 bg-engrave">
+              <div
+                className="h-1 bg-steel"
+                style={{ width: `${Math.min(cost.usage_usd / cost.ceiling_usd, 1) * 100}%` }}
+              />
+            </div>
+            <dl className="mt-4 grid gap-x-10 sm:grid-cols-2">
+              <Engraved term="credits">{usd(cost.credits_usd)}</Engraved>
+              <Engraved term="tagged project">{usd(cost.tagged_usd)}</Engraved>
+              <Engraved term="untagged">{usd(cost.untagged_usd)}</Engraved>
+              <Engraved term="checked">
+                <Since iso={cost.generated_at} />
+              </Engraved>
+            </dl>
+            <ul className="mt-6">
+              {cost.services.map((row) => (
+                <li
+                  key={row.service}
+                  className="flex items-baseline justify-between gap-6 border-t border-engrave py-2"
+                >
+                  <span className="text-sm text-lume">
+                    {row.service}
+                    {row.tagged_usd === 0 ? (
+                      <span className="engraved ml-2 text-lume-dim">untagged</span>
+                    ) : null}
+                  </span>
+                  <span className="figure text-sm text-lume">{usd(row.usage_usd)}</span>
+                </li>
+              ))}
+            </ul>
+            <ul className="mt-6">
+              {cost.history.map((item) => (
+                <li
+                  key={item.month}
+                  className="flex items-baseline justify-between gap-6 border-t border-engrave py-2"
+                >
+                  <span className="engraved">
+                    {item.month}
+                    {item.estimated ? " · open" : ""}
+                  </span>
+                  <span className="figure text-sm text-lume">{usd(item.usage_usd)}</span>
+                </li>
+              ))}
+            </ul>
           </Plate>
         </div>
 

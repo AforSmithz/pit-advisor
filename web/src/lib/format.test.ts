@@ -7,6 +7,7 @@ import {
   percentOf,
   signed,
   staleness,
+  usd,
 } from "./format";
 
 describe("signed", () => {
@@ -71,5 +72,18 @@ describe("gain", () => {
     expect(gain(0.0137)).toBe("+0.0137");
     expect(gain(-0.0184)).toBe("−0.0184");
     expect(gain(0)).toBe("+0.0000");
+  });
+});
+
+describe("usd", () => {
+  it("prints dollars to the cent with a real minus for credits", () => {
+    expect(usd(0.464)).toBe("$0.46");
+    expect(usd(-0.464)).toBe("\u2212$0.46");
+    expect(usd(20)).toBe("$20.00");
+  });
+
+  it("does not round a real charge down to free", () => {
+    expect(usd(0.0042)).toBe("<$0.01");
+    expect(usd(0)).toBe("$0.00");
   });
 });

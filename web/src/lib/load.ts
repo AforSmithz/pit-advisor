@@ -3,6 +3,7 @@ import path from "node:path";
 import type { ZodType } from "zod";
 import {
   calibrationView,
+  costView,
   driverView,
   forecastView,
   pipelineView,
@@ -36,3 +37,4 @@ export const loadTrack = () => read("track_view", trackView);
 export const loadPipeline = () => read("pipeline_view", pipelineView);
 export const loadForecast = () => read("forecast_view", forecastView);
 export const loadCalibration = () => read("calibration_view", calibrationView);
+export const loadCost = () => read("cost_view", costView);

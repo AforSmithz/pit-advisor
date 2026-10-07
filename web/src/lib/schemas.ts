@@ -324,6 +324,38 @@ export const pipelineView = z
   })
   .strict();
 
+export const costView = z
+  .object({
+    ...viewHead,
+    month: z.string(),
+    start: z.string(),
+    end: z.string(),
+    through: z.string(),
+    estimated: z.boolean(),
+    usage_usd: z.number().nonnegative(),
+    credits_usd: z.number(),
+    tagged_usd: z.number(),
+    untagged_usd: z.number(),
+    ceiling_usd: z.number().positive(),
+    under_ceiling: z.boolean(),
+    services: z.array(
+      z.object({
+        service: z.string(),
+        usage_usd: z.number(),
+        tagged_usd: z.number(),
+      }),
+    ),
+    history: z.array(
+      z.object({
+        month: z.string(),
+        usage_usd: z.number(),
+        credits_usd: z.number(),
+        estimated: z.boolean(),
+      }),
+    ),
+  })
+  .strict();
+
 export type Estimate = z.infer<typeof estimate>;
 export type EventContext = z.infer<typeof eventContext>;
 export type Coverage = z.infer<typeof coverage>;
@@ -335,6 +367,7 @@ export type WeekendView = z.infer<typeof weekendView>;
 export type DriverView = z.infer<typeof driverView>;
 export type TrackView = z.infer<typeof trackView>;
 export type PipelineView = z.infer<typeof pipelineView>;
+export type CostView = z.infer<typeof costView>;
 export type Bounds = z.infer<typeof bounds>;
 export type Assumption = z.infer<typeof assumption>;
 export type ForecastView = z.infer<typeof forecastView>;
