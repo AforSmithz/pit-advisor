@@ -324,6 +324,46 @@ export const pipelineView = z
   })
   .strict();
 
+export const briefView = z
+  .object({
+    ...viewHead,
+    event: eventContext,
+    weather: scenarioWeights.nullable(),
+    favourites: z.array(
+      z.object({
+        driver_code: z.string(),
+        constructor_id: z.string(),
+        grid: z.number().int(),
+        win: z.number().min(0).max(1),
+        podium: z.number().min(0).max(1),
+        position_low: z.number().int(),
+        position_high: z.number().int(),
+      }),
+    ),
+    simulated_paths: z.number().int().positive(),
+    beats_baselines: z.boolean().nullable(),
+    separated_from: z.array(z.string()),
+    form_leaders: z.array(
+      z.object({ driver_code: z.string(), constructor_id: z.string(), form: estimate }),
+    ),
+    track: z.object({
+      circuit_id: z.string(),
+      length_km: z.number(),
+      corners: z.number().int(),
+      neighbours: z.array(z.string()),
+      disagreements: z.array(z.string()),
+    }),
+    sources: z.array(
+      z.object({
+        view: z.string(),
+        run_id: z.string(),
+        generated_at: z.string(),
+        as_of: z.string(),
+      }),
+    ),
+  })
+  .strict();
+
 export const costView = z
   .object({
     ...viewHead,
@@ -368,6 +408,7 @@ export type DriverView = z.infer<typeof driverView>;
 export type TrackView = z.infer<typeof trackView>;
 export type PipelineView = z.infer<typeof pipelineView>;
 export type CostView = z.infer<typeof costView>;
+export type BriefView = z.infer<typeof briefView>;
 export type Bounds = z.infer<typeof bounds>;
 export type Assumption = z.infer<typeof assumption>;
 export type ForecastView = z.infer<typeof forecastView>;

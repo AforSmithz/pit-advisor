@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ZodType } from "zod";
 import {
+  briefView,
   calibrationView,
   costView,
   driverView,
@@ -38,3 +39,4 @@ export const loadPipeline = () => read("pipeline_view", pipelineView);
 export const loadForecast = () => read("forecast_view", forecastView);
 export const loadCalibration = () => read("calibration_view", calibrationView);
 export const loadCost = () => read("cost_view", costView);
+export const loadBrief = () => read("brief_view", briefView);

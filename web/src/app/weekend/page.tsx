@@ -1,15 +1,16 @@
+import { Brief } from "@/components/brief";
 import { ChapterRing } from "@/components/chapter-ring";
 import { Neighbours, Scenario, Share } from "@/components/bars";
 import { Engraved, Plate } from "@/components/plate";
 import { Provenance } from "@/components/provenance";
 import { TrackGroup, type Row } from "@/components/track-group";
 import { isoDate, label, percentOf } from "@/lib/format";
-import { loadWeekend } from "@/lib/load";
+import { loadBrief, loadWeekend } from "@/lib/load";
 
 export const metadata = { title: "Weekend · Pit Advisor" };
 
 export default async function WeekendPage() {
-  const view = await loadWeekend();
+  const [view, brief] = await Promise.all([loadWeekend(), loadBrief()]);
   // the lake rates every driver it has ever seen, so the field this season leads and the rest
   // follow under their own rule rather than being dropped
   const drivers = [...view.drivers].sort(
@@ -75,6 +76,10 @@ export default async function WeekendPage() {
         runId={view.run_id}
         generatedAt={view.generated_at}
       />
+
+      <div className="mt-10">
+        <Brief brief={brief} />
+      </div>
 
       <div className="mt-10 grid gap-10 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="flex flex-col gap-10">
