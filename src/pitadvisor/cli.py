@@ -23,6 +23,7 @@ from pitadvisor.incidents.extract import extract as extract_decision
 from pitadvisor.incidents.parse import parse as parse_decision
 from pitadvisor.ingest import docs as doc_corpus
 from pitadvisor.ingest import fia_docs, jolpica
+from pitadvisor.ingest import schedule as weekend_schedule
 from pitadvisor.ingest.fastf1_session import backfill as session_backfill
 from pitadvisor.ingest.fastf1_session import ingest_session
 from pitadvisor.ingest.ratelimit import (
@@ -40,9 +41,11 @@ from pitadvisor.ingest.ratelimit import (
 from pitadvisor.ingest.raw_store import LocalObjectStore, ObjectStore, RawStore, object_store
 from pitadvisor.ingest.rebuild import latest_objects, rebuild_bronze
 from pitadvisor.ingest.weather import Circuit, WeatherClient, event_circuits
+from pitadvisor.ingest.weather import fetchable as weather_fetchable
 from pitadvisor.ingest.weather import ingest_event as weather_ingest_event
 from pitadvisor.model import backtest as forecast_model
 from pitadvisor.model import calibrate
+from pitadvisor.outputs import brief as brief_outputs
 from pitadvisor.outputs import cost as cost_outputs
 from pitadvisor.outputs.view_contracts import (
     Evidence,
@@ -378,6 +381,11 @@ def _ingest_weather(
     circuits = [c for c in event_circuits(store, season) if round_ is None or c.round == round_]
     if not circuits:
         raise typer.BadParameter("no circuits in bronze yet, ingest jolpica races first")
+    today = datetime.now(UTC).date()
+    later = [c for c in circuits if not weather_fetchable(c.race_date, today)]
+    if later:
+        typer.echo(f"{len(later)} events are past the forecast horizon, left for a later run")
+    circuits = [c for c in circuits if weather_fetchable(c.race_date, today)]
     client = WeatherClient(RawStore(store), ledger, limiter, run_id)
     return [
         weather_ingest_event(
@@ -391,6 +399,48 @@ def _ingest_weather(
         )
         for circuit in circuits
     ]
+
+
+@app.command(
+    name="weekend-plan", help="Refresh this season's calendar and decide whether a race is due."
+)
+def weekend_plan(
+    refresh: Annotated[
+        bool, typer.Option("--refresh/--no-refresh", help="Pull the calendar from jolpica first.")
+    ] = True,
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+) -> None:
+    settings = get_settings()
+    store, ledger, bucket_for = _runtime(local, settings)
+    today = datetime.now(UTC).date()
+    client = None
+    if refresh:
+        limiter = RateLimiter(bucket_for("jolpica"))
+        client = jolpica.JolpicaClient(RawStore(store), ledger, limiter, _run_id())
+        try:
+            _render_outcomes(jolpica.backfill(client, store, today.year, _resources(False)))
+        except QuotaExhaustedError as exc:
+            typer.echo(f"calendar refresh stopped: {exc}. planning on what is in the lake")
+    try:
+        weekend = weekend_schedule.plan(store, today)
+    except weekend_schedule.NoCalendarError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    if client is not None and weekend.last_season and weekend.last_round:
+        # penalties amend a result days after the race, and the backfill skips what it holds
+        last = EventKey(season=weekend.last_season, round=weekend.last_round)
+        try:
+            _render_outcomes(
+                jolpica.ingest_event(client, store, last, _resources(False), skip_present=False)
+            )
+        except QuotaExhaustedError as exc:
+            typer.echo(f"refetch of {last.season}:{last.round} stopped: {exc}")
+    typer.echo(weekend_schedule.write(store, weekend))
+    verdict = "race week" if weekend.race_week else "no race this weekend"
+    typer.echo(
+        f"{verdict}: next is {weekend.season}:{weekend.round} {weekend.race_name} "
+        f"on {weekend.race_date}"
+    )
 
 
 @app.command(help="Walk a range of seasons into raw and bronze, resuming where it stopped.")
@@ -581,7 +631,7 @@ def emit_views(
     settings = get_settings()
     store, _, bucket_for = _runtime(local, settings)
     wanted = [name.strip() for name in views.split(",") if name.strip()]
-    unknown = set(wanted) - {"pipeline"} - set(EVENT_VIEWS) - set(SIM_VIEWS)
+    unknown = set(wanted) - {"pipeline", "brief"} - set(EVENT_VIEWS) - set(SIM_VIEWS)
     if unknown:
         raise typer.BadParameter(f"no emitter yet for {', '.join(sorted(unknown))}")
     if "pipeline" in wanted:
@@ -598,6 +648,13 @@ def emit_views(
         typer.echo(emit(store, calibration_view(_report(results))))
     if "forecast" in wanted:
         typer.echo(emit(store, _forecast(store, event, paths, seed, results)))
+    # last, because it is read off the views written above rather than computed again
+    if "brief" in wanted:
+        try:
+            typer.echo(emit(store, brief_outputs.from_store(store, _run_id())))
+        except brief_outputs.StaleViewsError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(1) from exc
 
 
 def _report(results: Path) -> forecast_model.Report:

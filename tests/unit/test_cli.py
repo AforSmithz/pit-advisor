@@ -837,3 +837,38 @@ def test_cost_report_exits_1_over_the_ceiling(runner, aws, monkeypatch):
 def test_cost_report_refuses_a_bad_month(runner, aws):
     result = runner.invoke(cli.app, ["cost-report", "--month", "october"])
     assert result.exit_code == 2
+
+
+def test_weekend_plan_without_a_calendar_fails(lake):
+    result = CliRunner().invoke(cli.app, ["weekend-plan", "--no-refresh", "--local"])
+    assert result.exit_code == 1
+    assert "calendar has not landed" in plain(result.stderr)
+
+
+def test_weekend_plan_writes_the_plan_from_the_lake(lake, monkeypatch):
+    from datetime import date
+
+    from tests.unit.ingest.test_schedule import calendar
+
+    calendar(LocalObjectStore(lake))
+
+    class Thursday(cli.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cli.datetime(2026, 10, 8, 6, tzinfo=tz)
+
+    monkeypatch.setattr(cli, "datetime", Thursday)
+    result = CliRunner().invoke(cli.app, ["weekend-plan", "--no-refresh", "--local"])
+    assert result.exit_code == 0, result.output
+    assert "race week: next is 2026:2 Round 2 on 2026-10-11" in result.stdout
+    plan = json.loads((lake / "cache/weekend_plan.json").read_text())
+    assert plan["today"] == date(2026, 10, 8).isoformat()
+
+
+def test_emit_views_knows_the_brief(lake):
+    result = CliRunner().invoke(cli.app, ["emit-views", "--views", "nonsense", "--local"])
+    assert result.exit_code == 2
+    result = CliRunner().invoke(cli.app, ["emit-views", "--views", "brief", "--local"])
+    # nothing emitted yet, so the brief says what it is missing rather than crashing
+    assert result.exit_code == 1
+    assert "emit weekend_view, forecast_view, track_view before the brief" in plain(result.stderr)
