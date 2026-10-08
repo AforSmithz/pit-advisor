@@ -245,6 +245,22 @@ def test_alarm_email_follows_the_alert_email_context(email: str | None) -> None:
         )
 
 
+def test_cloudwatch_may_publish_to_the_alarm_topic(observability_template: Template) -> None:
+    # the ssl policy replaces the default one, so without this statement the alarms fire into
+    # a topic that refuses them, which is exactly what the first deploy did
+    policy = sole(observability_template, "AWS::SNS::TopicPolicy")
+    statements = policy["Properties"]["PolicyDocument"]["Statement"]
+    allowed = [
+        item
+        for item in statements
+        if item["Effect"] == "Allow"
+        and item["Principal"] == {"Service": "cloudwatch.amazonaws.com"}
+        and item["Action"] == "sns:Publish"
+    ]
+    assert len(allowed) == 1
+    assert allowed[0]["Condition"]["StringEquals"] == {"aws:SourceAccount": ACCOUNT}
+
+
 def test_the_alarm_topic_refuses_plaintext(observability_template: Template) -> None:
     policy = sole(observability_template, "AWS::SNS::TopicPolicy")
     statements = policy["Properties"]["PolicyDocument"]["Statement"]

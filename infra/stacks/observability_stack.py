@@ -136,6 +136,23 @@ class ObservabilityStack(Stack):
         Validations.of(topic).acknowledge(
             Acknowledgment(id="AwsSolutions-SNS2", reason=UNENCRYPTED_TOPIC)
         )
+        # enforce_ssl writes a topic policy, and any topic policy replaces the default one that
+        # let the account publish. without this the alarms fire and the email never leaves
+        topic.add_to_resource_policy(
+            iam.PolicyStatement(
+                sid="AllowThisAccountsAlarms",
+                principals=[iam.ServicePrincipal("cloudwatch.amazonaws.com")],
+                actions=["sns:Publish"],
+                resources=[topic.topic_arn],
+                conditions={
+                    "StringEquals": {"aws:SourceAccount": self.account},
+                    "ArnLike": {
+                        "aws:SourceArn": f"arn:aws:cloudwatch:{self.region}:{self.account}"
+                        ":alarm:pitadvisor-*"
+                    },
+                },
+            )
+        )
         if alert_email:
             topic.add_subscription(subscriptions.EmailSubscription(alert_email))
         notify = actions.SnsAction(topic)
