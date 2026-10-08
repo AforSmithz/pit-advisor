@@ -81,10 +81,9 @@ answer every time, which is the gate doing its job rather than a gate worth lowe
 
 The forecast clears its own bar too, though by less than a chart would suggest. The holdout is
 the last sixty races run, from the 2024 Chinese Grand Prix to the sixteenth round of 2026, so
-sixteen of them are in 2026's twenty-two-car field. Fifty-eight are scored; the other two are at
-circuits new in 2026 that the hand-maintained circuit taxonomy does not cover yet. The
-simulation's multiclass log loss is 2.595 [2.552, 2.639], against 2.611 for grid position
-alone, 2.729 for championship standings and 2.826 for last race's result. Resampled at the race
+sixteen of them are in 2026's twenty-two-car field. The simulation's multiclass log loss is
+2.589 [2.545, 2.635], against 2.608 for grid position alone, 2.726 for championship standings
+and 2.825 for last race's result. Resampled at the race
 level, it is separated from standings and from last race, and it is not separated from the grid
 on log loss, only on Brier: sixty races cannot tell the simulation and the starting order apart.
 That is the finding, and the calibration page leads with it.
@@ -374,9 +373,13 @@ The Thursday forecast runs before qualifying, so the grid is not known. Each sim
 then runs its own qualifying first, drawn from the same pace the race uses plus each driver's
 Saturday-to-Sunday conversion, which spreads the favourites further than a grid-conditioned
 forecast would. The published backtest is unaffected: it scores races on the grid they actually
-had. Madrid and Sepang, both new to the 2026 calendar, are not in the circuit taxonomy, so the
-track fit refuses them and neither the backtest nor a weekend forecast covers them until their
-entries are researched and added by hand.
+had.
+
+The circuit taxonomy is hand-maintained, and a circuit missing from it gets no track fit and no
+forecast. Madrid and Sepang joined in 2026. Their geometry and most of their demand bands come
+from the circuit owners, Brembo and Pirelli, but nobody publishes a traction or kerb rating for
+either, so those sit at the middle band rather than at a guess. Sepang's braking band rests on
+Brembo's 2017 figures, the last time Formula 1 raced there.
 
 The agent is built and has passed its gate, but in the account it runs in today it cannot
 answer: a new AWS account ships with Bedrock's text-generation quota at zero, and lifting it is a
