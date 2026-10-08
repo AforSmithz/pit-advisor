@@ -10,9 +10,10 @@ from pitadvisor.types import EventKey
 
 STAMP = datetime(2026, 10, 1, tzinfo=UTC)
 CALENDAR = ((1, date(2026, 9, 27)), (2, date(2026, 10, 11)), (3, date(2026, 10, 25)))
+CIRCUITS = {1: "sepang", 2: "marina_bay", 3: "americas"}
 
 
-def calendar(store, rounds=CALENDAR):
+def calendar(store, rounds=CALENDAR, circuits=CIRCUITS):
     for round_, day in rounds:
         row = RaceRow(
             run_id="run-1",
@@ -20,7 +21,7 @@ def calendar(store, rounds=CALENDAR):
             season=2026,
             round=round_,
             race_name=f"Round {round_}",
-            circuit_id=f"c{round_}",
+            circuit_id=circuits.get(round_, f"c{round_}"),
             circuit_name="Ring",
             latitude=1.0,
             longitude=2.0,
@@ -35,6 +36,7 @@ def test_the_thursday_before_a_race_is_a_race_week(store):
     assert weekend.race_week
     assert (weekend.season, weekend.round) == (2026, 2)
     assert (weekend.last_season, weekend.last_round) == (2026, 1)
+    assert weekend.circuit_id == "marina_bay"
 
 
 def test_an_empty_week_between_races_is_not(store):

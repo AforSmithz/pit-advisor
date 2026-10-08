@@ -865,6 +865,26 @@ def test_weekend_plan_writes_the_plan_from_the_lake(lake, monkeypatch):
     assert plan["today"] == date(2026, 10, 8).isoformat()
 
 
+def test_weekend_plan_refuses_a_race_week_at_a_circuit_it_has_never_heard_of(lake, monkeypatch):
+    from tests.unit.ingest.test_schedule import calendar
+
+    calendar(LocalObjectStore(lake), circuits={1: "sepang", 2: "nowhere_park"})
+
+    class Thursday(cli.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cli.datetime(2026, 10, 8, 6, tzinfo=tz)
+
+    monkeypatch.setattr(cli, "datetime", Thursday)
+    result = CliRunner().invoke(cli.app, ["weekend-plan", "--no-refresh", "--local"])
+    assert result.exit_code == 1
+    assert "nowhere_park is not in data/reference/circuits.yml" in plain(result.stderr)
+    # the plan is still written, so the run's decision can be read back afterwards
+    assert (
+        json.loads((lake / "cache/weekend_plan.json").read_text())["circuit_id"] == "nowhere_park"
+    )
+
+
 def test_emit_views_knows_the_brief(lake):
     result = CliRunner().invoke(cli.app, ["emit-views", "--views", "nonsense", "--local"])
     assert result.exit_code == 2

@@ -18,6 +18,7 @@ from pitadvisor.agent import tools as agent_tools
 from pitadvisor.agent.runtime import agent_for
 from pitadvisor.config import Settings, boto_session, get_settings
 from pitadvisor.features import assemble as feature_assemble
+from pitadvisor.features import track_fit
 from pitadvisor.incidents import lake as incident_lake
 from pitadvisor.incidents.extract import extract as extract_decision
 from pitadvisor.incidents.parse import parse as parse_decision
@@ -441,6 +442,16 @@ def weekend_plan(
         f"{verdict}: next is {weekend.season}:{weekend.round} {weekend.race_name} "
         f"on {weekend.race_date}"
     )
+    # caught on thursday rather than at emit-views on the far side of every ingest step, so
+    # the failed run alarms days before the weekend instead of after it
+    if weekend.race_week and weekend.circuit_id not in track_fit.load():
+        typer.echo(
+            f"{weekend.circuit_id} is not in data/reference/circuits.yml, so this weekend has no "
+            "track fit and no forecast. add it from published sources, rebuild the image, and "
+            "run the weekend pipeline again with force",
+            err=True,
+        )
+        raise typer.Exit(1)
 
 
 @app.command(help="Walk a range of seasons into raw and bronze, resuming where it stopped.")

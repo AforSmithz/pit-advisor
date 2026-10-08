@@ -25,6 +25,7 @@ class WeekendPlan(BaseModel, frozen=True):
     round: int
     race_name: str
     race_date: date
+    circuit_id: str
     last_season: int | None
     last_round: int | None
     # where the session walk starts. a season's last race is followed by months without a race
@@ -49,6 +50,7 @@ def plan(store: ObjectStore, today: date, now: datetime | None = None) -> Weeken
         round=int(upcoming["round"]),
         race_name=str(upcoming["race_name"]),
         race_date=upcoming["race_date"],
+        circuit_id=str(upcoming["circuit_id"]),
         last_season=int(last["season"]) if last else None,
         last_round=int(last["round"]) if last else None,
         walk_from=int(last["season"]) if last else int(upcoming["season"]),
