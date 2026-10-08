@@ -192,24 +192,27 @@ class ObservabilityStack(Stack):
                 treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
             ).add_alarm_action(notify)
 
-        rule = f"pitadvisor-weekend-plan-{env_name}"
-        cloudwatch.Alarm(
-            self,
-            "ScheduleDidNotStart",
-            alarm_name=f"{rule}-did-not-start",
-            alarm_description=f"{rule} fired and could not start the state machine.",
-            metric=cloudwatch.Metric(
-                namespace="AWS/Events",
-                metric_name="FailedInvocations",
-                dimensions_map={"RuleName": rule},
-                statistic="Sum",
-                period=PERIOD,
-            ),
-            threshold=1,
-            evaluation_periods=1,
-            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
-        ).add_alarm_action(notify)
+        for key, rule in (
+            ("Schedule", f"pitadvisor-weekend-plan-{env_name}"),
+            ("SaturdaySchedule", f"pitadvisor-after-quali-{env_name}"),
+        ):
+            cloudwatch.Alarm(
+                self,
+                f"{key}DidNotStart",
+                alarm_name=f"{rule}-did-not-start",
+                alarm_description=f"{rule} fired and could not start the state machine.",
+                metric=cloudwatch.Metric(
+                    namespace="AWS/Events",
+                    metric_name="FailedInvocations",
+                    dimensions_map={"RuleName": rule},
+                    statistic="Sum",
+                    period=PERIOD,
+                ),
+                threshold=1,
+                evaluation_periods=1,
+                comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+                treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+            ).add_alarm_action(notify)
         return topic
 
     def _dashboard(self, env_name: str) -> cloudwatch.Dashboard:

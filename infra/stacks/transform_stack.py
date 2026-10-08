@@ -272,9 +272,10 @@ class TransformStack(Stack):
             Acknowledgment(id="AwsSolutions-ECS2", reason=PLAIN_ENVIRONMENT)
         )
 
-        # every thursday: refresh the calendar and decide. a race week goes on to refresh the
-        # lake and the views, any other week ends at the choice having spent one small task
-        no_race = sfn.Succeed(self, "NoRaceThisWeek")
+        # thursday and saturday night: refresh the calendar and decide. thursday refreshes any
+        # race week, saturday only once qualifying is in. anything else ends at the choice
+        # having spent one small task
+        no_race = sfn.Succeed(self, "NothingToRefresh")
         refresh = (
             sfn.Chain.start(
                 sfn.Pass(
@@ -322,10 +323,10 @@ class TransformStack(Stack):
             sfn.Chain.start(self._run("PlanWeekend", "pitadv weekend-plan", environment=[]))
             .next(self._read_plan(bucket_name))
             .next(
-                sfn.Choice(self, "RaceWeek")
+                sfn.Choice(self, "Refresh")
                 .when(
                     sfn.Condition.or_(
-                        sfn.Condition.boolean_equals("$.planned.plan.race_week", True),
+                        sfn.Condition.boolean_equals("$.planned.plan.refresh", True),
                         sfn.Condition.and_(
                             sfn.Condition.is_present("$.force"),
                             sfn.Condition.boolean_equals("$.force", True),
@@ -404,6 +405,24 @@ class TransformStack(Stack):
             rule_name=f"pitadvisor-weekend-plan-{env_name}",
             description="plans the coming weekend and refreshes the lake when a race is due",
             schedule=events.Schedule.cron(minute="0", hour="6", week_day="THU"),
+            enabled=str(self.node.try_get_context("enableSchedule")).lower() != "false",
+            targets=[
+                targets.SfnStateMachine(
+                    self.state_machine, input=events.RuleTargetInput.from_object({})
+                )
+            ],
+        )
+
+        # the same machine again once qualifying is done, so the race forecast stands on the
+        # real order instead of one sampled per path. 23:30 utc saturday is an hour and a half
+        # after the latest session ends (mexico, austin) and four and a half before the earliest
+        # sunday start (melbourne). the plan step reads the day, so the input is still empty
+        self.after_qualifying = events.Rule(
+            self,
+            "SaturdaySchedule",
+            rule_name=f"pitadvisor-after-quali-{env_name}",
+            description="refreshes the forecast on the qualifying order once qualifying is in",
+            schedule=events.Schedule.cron(minute="30", hour="23", week_day="SAT"),
             enabled=str(self.node.try_get_context("enableSchedule")).lower() != "false",
             targets=[
                 targets.SfnStateMachine(

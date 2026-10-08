@@ -208,6 +208,7 @@ def test_every_pipeline_run_that_does_not_finish_raises_an_alarm(
     alarms = observability_template.find_resources("AWS::CloudWatch::Alarm")
     names = sorted(alarm["Properties"]["AlarmName"] for alarm in alarms.values())
     assert names == [
+        f"pitadvisor-after-quali-{ENV_NAME}-did-not-start",
         f"pitadvisor-backfill-{ENV_NAME}-did-not-finish",
         f"pitadvisor-weekend-plan-{ENV_NAME}-did-not-start",
         f"pitadvisor-weekend-{ENV_NAME}-did-not-finish",
@@ -506,9 +507,10 @@ def test_the_pipeline_plans_before_it_spends(transform_template: Template) -> No
     assert definition.index("PlanWeekend") < definition.index("ReadPlan")
     assert "aws-sdk:s3:getObject" in definition
     assert "cache/weekend_plan.json" in definition
-    # a week without a race ends at the choice, unless a manual run says force
-    assert "NoRaceThisWeek" in definition
-    assert "$.planned.plan.race_week" in definition
+    # a week without a race, or a saturday before qualifying, ends at the choice, unless a
+    # manual run says force
+    assert "NothingToRefresh" in definition
+    assert "$.planned.plan.refresh" in definition
     assert "$.force" in definition
 
 
@@ -564,12 +566,21 @@ def test_the_pipeline_role_cannot_reach_another_task(transform_template: Templat
     )
 
 
-def test_the_schedule_runs_every_thursday_morning(transform_template: Template) -> None:
-    _, rule = only(transform_template, "AWS::Events::Rule", ScheduleExpression=Match.any_value())
-    assert rule["Properties"]["State"] == "ENABLED"
-    assert rule["Properties"]["ScheduleExpression"] == "cron(0 6 ? * THU *)"
-    # the plan decides the event, so the rule carries no season or round of its own
-    assert rule["Properties"]["Targets"][0]["Input"] == "{}"
+def test_the_schedule_runs_thursday_morning_and_saturday_night(
+    transform_template: Template,
+) -> None:
+    rules = transform_template.find_resources("AWS::Events::Rule")
+    found = {rule["Properties"]["Name"]: rule["Properties"] for rule in rules.values()}
+    assert found[f"pitadvisor-weekend-plan-{ENV_NAME}"]["ScheduleExpression"] == (
+        "cron(0 6 ? * THU *)"
+    )
+    assert found[f"pitadvisor-after-quali-{ENV_NAME}"]["ScheduleExpression"] == (
+        "cron(30 23 ? * SAT *)"
+    )
+    for rule in found.values():
+        assert rule["State"] == "ENABLED"
+        # the plan decides the event and the day, so neither rule carries anything of its own
+        assert rule["Targets"][0]["Input"] == "{}"
 
 
 def test_the_schedule_can_be_paused_from_context() -> None:
@@ -577,10 +588,9 @@ def test_the_schedule_can_be_paused_from_context() -> None:
     stack = TransformStack(
         app, TRANSFORM_STACK, env_name=ENV_NAME, env=cdk.Environment(account=ACCOUNT, region=REGION)
     )
-    _, rule = only(
-        Template.from_stack(stack), "AWS::Events::Rule", ScheduleExpression=Match.any_value()
-    )
-    assert rule["Properties"]["State"] == "DISABLED"
+    rules = Template.from_stack(stack).find_resources("AWS::Events::Rule")
+    assert len(rules) == 2
+    assert all(rule["Properties"]["State"] == "DISABLED" for rule in rules.values())
 
 
 def test_the_pipeline_gets_the_lake_policy_from_the_data_stack(
