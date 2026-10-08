@@ -885,6 +885,31 @@ def test_weekend_plan_refuses_a_race_week_at_a_circuit_it_has_never_heard_of(lak
     )
 
 
+def test_a_saturday_run_reads_the_day_and_waits_for_qualifying(lake, monkeypatch):
+    from tests.unit.ingest.test_schedule import calendar, qualifying
+
+    store = LocalObjectStore(lake)
+    calendar(store)
+
+    class SaturdayNight(cli.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cli.datetime(2026, 10, 10, 23, 30, tzinfo=tz)
+
+    monkeypatch.setattr(cli, "datetime", SaturdayNight)
+    result = CliRunner().invoke(cli.app, ["weekend-plan", "--no-refresh", "--local"])
+    assert result.exit_code == 0, result.output
+    assert "qualifying is not in yet" in result.stdout
+    assert not json.loads((lake / "cache/weekend_plan.json").read_text())["refresh"]
+
+    qualifying(store, 2)
+    result = CliRunner().invoke(cli.app, ["weekend-plan", "--no-refresh", "--local"])
+    assert "qualifying is in, refreshing on the real grid" in result.stdout
+    plan = json.loads((lake / "cache/weekend_plan.json").read_text())
+    assert plan["after_qualifying"]
+    assert plan["refresh"]
+
+
 def test_emit_views_knows_the_brief(lake):
     result = CliRunner().invoke(cli.app, ["emit-views", "--views", "nonsense", "--local"])
     assert result.exit_code == 2

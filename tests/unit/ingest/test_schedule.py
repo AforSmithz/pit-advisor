@@ -26,6 +26,7 @@ def calendar(store, rounds=CALENDAR, circuits=CIRCUITS):
             latitude=1.0,
             longitude=2.0,
             race_date=day,
+            start_utc=datetime(day.year, day.month, day.day, 13, tzinfo=UTC),
         )
         write_bronze(store, "races", EventKey(season=2026, round=round_), [row])
 
@@ -93,3 +94,66 @@ def test_a_new_season_walks_back_to_the_last_one(store):
     assert (weekend.season, weekend.round) == (2027, 1)
     # the 2026 finale's session never had a race week of its own after it
     assert weekend.walk_from == 2026
+
+
+def qualifying(store, round_, codes=("AAA", "BBB")):
+    from pitadvisor.quality.contracts import QualifyingRow
+
+    rows = [
+        QualifyingRow(
+            run_id="run-1",
+            ingested_at=STAMP,
+            season=2026,
+            round=round_,
+            driver_id=code.lower(),
+            driver_code=code,
+            constructor_id="team",
+            position=place,
+            q1_millis=90_000 + place,
+        )
+        for place, code in enumerate(codes, start=1)
+    ]
+    write_bronze(store, "qualifying", EventKey(season=2026, round=round_), rows)
+
+
+SATURDAY = date(2026, 10, 10)
+SATURDAY_NIGHT = datetime(2026, 10, 10, 23, 30, tzinfo=UTC)
+
+
+def test_thursday_refreshes_any_race_week(store):
+    calendar(store)
+    weekend = plan(store, date(2026, 10, 8), STAMP)
+    assert weekend.refresh
+    assert not weekend.after_qualifying
+
+
+def test_saturday_before_qualifying_has_landed_does_nothing(store):
+    calendar(store)
+    weekend = plan(store, SATURDAY, SATURDAY_NIGHT, after_qualifying=True)
+    assert weekend.race_week
+    assert not weekend.qualified
+    assert not weekend.refresh
+
+
+def test_saturday_after_qualifying_refreshes(store):
+    calendar(store)
+    qualifying(store, 2)
+    weekend = plan(store, SATURDAY, SATURDAY_NIGHT, after_qualifying=True)
+    assert weekend.qualified
+    assert weekend.refresh
+
+
+def test_qualifying_for_another_round_does_not_count(store):
+    calendar(store)
+    qualifying(store, 1)
+    assert not plan(store, SATURDAY, SATURDAY_NIGHT, after_qualifying=True).qualified
+
+
+def test_a_race_that_has_already_started_is_not_forecast_again(store):
+    calendar(store)
+    qualifying(store, 2)
+    # a saturday race, run before the saturday night schedule fires
+    weekend = plan(store, date(2026, 10, 11), datetime(2026, 10, 11, 23, 30, tzinfo=UTC), True)
+    assert weekend.qualified
+    assert weekend.starts_at is not None
+    assert not weekend.refresh

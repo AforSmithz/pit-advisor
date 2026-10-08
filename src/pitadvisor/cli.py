@@ -410,10 +410,19 @@ def weekend_plan(
         bool, typer.Option("--refresh/--no-refresh", help="Pull the calendar from jolpica first.")
     ] = True,
     local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+    after_qualifying: Annotated[
+        bool | None,
+        typer.Option(
+            "--after-qualifying/--before-qualifying",
+            help="Saturday's run. Left out, it is read off the day: saturday in UTC is after.",
+        ),
+    ] = None,
 ) -> None:
     settings = get_settings()
     store, ledger, bucket_for = _runtime(local, settings)
-    today = datetime.now(UTC).date()
+    now = datetime.now(UTC)
+    today = now.date()
+    saturday = today.weekday() == 5 if after_qualifying is None else after_qualifying
     client = None
     if refresh:
         limiter = RateLimiter(bucket_for("jolpica"))
@@ -423,10 +432,21 @@ def weekend_plan(
         except QuotaExhaustedError as exc:
             typer.echo(f"calendar refresh stopped: {exc}. planning on what is in the lake")
     try:
-        weekend = weekend_schedule.plan(store, today)
+        weekend = weekend_schedule.plan(store, today, now, saturday)
     except weekend_schedule.NoCalendarError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
+    if client is not None and saturday and weekend.race_week:
+        # jolpica publishes qualifying within the hour or so after the session, and the
+        # thursday fetch of this round found nothing, so it is asked again rather than skipped
+        coming = EventKey(season=weekend.season, round=weekend.round)
+        try:
+            _render_outcomes(
+                jolpica.ingest_event(client, store, coming, ("qualifying",), skip_present=False)
+            )
+        except QuotaExhaustedError as exc:
+            typer.echo(f"qualifying for {coming.season}:{coming.round} stopped: {exc}")
+        weekend = weekend_schedule.plan(store, today, now, saturday)
     if client is not None and weekend.last_season and weekend.last_round:
         # penalties amend a result days after the race, and the backfill skips what it holds
         last = EventKey(season=weekend.last_season, round=weekend.last_round)
@@ -442,6 +462,12 @@ def weekend_plan(
         f"{verdict}: next is {weekend.season}:{weekend.round} {weekend.race_name} "
         f"on {weekend.race_date}"
     )
+    if saturday and weekend.race_week:
+        typer.echo(
+            "qualifying is in, refreshing on the real grid"
+            if weekend.refresh
+            else "qualifying is not in yet, or the race has started: nothing to refresh"
+        )
     # caught on thursday rather than at emit-views on the far side of every ingest step, so
     # the failed run alarms days before the weekend instead of after it
     if weekend.race_week and weekend.circuit_id not in track_fit.load():
