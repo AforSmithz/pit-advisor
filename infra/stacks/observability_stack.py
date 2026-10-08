@@ -3,7 +3,10 @@ from typing import Any
 from aws_cdk import Acknowledgment, CfnOutput, Duration, Stack, Tags, Validations
 from aws_cdk import aws_budgets as budgets
 from aws_cdk import aws_cloudwatch as cloudwatch
+from aws_cdk import aws_cloudwatch_actions as actions
 from aws_cdk import aws_iam as iam
+from aws_cdk import aws_sns as sns
+from aws_cdk import aws_sns_subscriptions as subscriptions
 from constructs import Construct
 
 PROJECT_LIMIT_USD = 20
@@ -12,6 +15,12 @@ ACCOUNT_LIMIT_USD = 40
 ANSWER_PROFILE = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
 EMBEDDING_MODEL = "cohere.embed-english-v3"
 PERIOD = Duration.hours(1)
+
+UNENCRYPTED_TOPIC = (
+    "CloudWatch alarms cannot publish to a topic encrypted with the AWS managed aws/sns key, and "
+    "a customer managed key costs more each month than every alarm here. The topic carries alarm "
+    "state changes only, never data."
+)
 
 COST_EXPLORER_WILDCARD = (
     "Cost Explorer has no resource-level permissions, so every ce: action is Resource '*' or "
@@ -110,11 +119,81 @@ class ObservabilityStack(Stack):
         )
 
         dashboard = self._dashboard(env_name)
+        topic = self._alarms(env_name, alert_email)
 
         CfnOutput(self, "DashboardName", value=dashboard.dashboard_name)
+        CfnOutput(self, "AlarmTopicArn", value=topic.topic_arn)
         CfnOutput(self, "ProjectBudgetName", value=project_budget_name)
         CfnOutput(self, "AccountBudgetName", value="pit-advisor-account-monthly")
         CfnOutput(self, "BudgetAlertsConfigured", value=str(notifications is not None).lower())
+
+    def _alarms(self, env_name: str, alert_email: str | None) -> sns.Topic:
+        """A run that failed, timed out or was stopped, and a thursday that never started. The
+        dashboard shows all of it, and nobody looks at a dashboard on a week nothing happens."""
+        topic = sns.Topic(
+            self, "Alarms", topic_name=f"pitadvisor-alarms-{env_name}", enforce_ssl=True
+        )
+        Validations.of(topic).acknowledge(
+            Acknowledgment(id="AwsSolutions-SNS2", reason=UNENCRYPTED_TOPIC)
+        )
+        if alert_email:
+            topic.add_subscription(subscriptions.EmailSubscription(alert_email))
+        notify = actions.SnsAction(topic)
+
+        for key, name in (
+            ("Weekend", f"pitadvisor-weekend-{env_name}"),
+            ("Backfill", f"pitadvisor-backfill-{env_name}"),
+        ):
+            arn = f"arn:aws:states:{self.region}:{self.account}:stateMachine:{name}"
+            ended = {
+                word: cloudwatch.Metric(
+                    namespace="AWS/States",
+                    metric_name=metric,
+                    dimensions_map={"StateMachineArn": arn},
+                    statistic="Sum",
+                    period=PERIOD,
+                )
+                for word, metric in (
+                    ("failed", "ExecutionsFailed"),
+                    ("timedout", "ExecutionsTimedOut"),
+                    ("aborted", "ExecutionsAborted"),
+                )
+            }
+            cloudwatch.Alarm(
+                self,
+                f"{key}RunDidNotFinish",
+                alarm_name=f"{name}-did-not-finish",
+                alarm_description=f"{name} failed, timed out or was aborted. The execution "
+                "history in Step Functions says which step.",
+                metric=cloudwatch.MathExpression(
+                    expression="failed + timedout + aborted", using_metrics=ended, period=PERIOD
+                ),
+                threshold=1,
+                evaluation_periods=1,
+                comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+                # a week without a run has no data at all, which is not a failure
+                treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+            ).add_alarm_action(notify)
+
+        rule = f"pitadvisor-weekend-plan-{env_name}"
+        cloudwatch.Alarm(
+            self,
+            "ScheduleDidNotStart",
+            alarm_name=f"{rule}-did-not-start",
+            alarm_description=f"{rule} fired and could not start the state machine.",
+            metric=cloudwatch.Metric(
+                namespace="AWS/Events",
+                metric_name="FailedInvocations",
+                dimensions_map={"RuleName": rule},
+                statistic="Sum",
+                period=PERIOD,
+            ),
+            threshold=1,
+            evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        ).add_alarm_action(notify)
+        return topic
 
     def _dashboard(self, env_name: str) -> cloudwatch.Dashboard:
         """Latency and failure for every moving part. Resources are found by the names the other

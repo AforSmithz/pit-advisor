@@ -202,6 +202,58 @@ def test_budget_alerts_follow_the_alert_email_context(email: str | None) -> None
             assert alert["Subscribers"] == [{"Address": email, "SubscriptionType": "EMAIL"}]
 
 
+def test_every_pipeline_run_that_does_not_finish_raises_an_alarm(
+    observability_template: Template,
+) -> None:
+    alarms = observability_template.find_resources("AWS::CloudWatch::Alarm")
+    names = sorted(alarm["Properties"]["AlarmName"] for alarm in alarms.values())
+    assert names == [
+        f"pitadvisor-backfill-{ENV_NAME}-did-not-finish",
+        f"pitadvisor-weekend-plan-{ENV_NAME}-did-not-start",
+        f"pitadvisor-weekend-{ENV_NAME}-did-not-finish",
+    ]
+    for alarm in alarms.values():
+        assert alarm["Properties"]["TreatMissingData"] == "notBreaching"
+        assert len(alarm["Properties"]["AlarmActions"]) == 1
+
+
+def test_a_run_alarm_counts_failed_timed_out_and_aborted(
+    observability_template: Template,
+) -> None:
+    alarms = observability_template.find_resources("AWS::CloudWatch::Alarm")
+    weekend = next(
+        alarm["Properties"]
+        for alarm in alarms.values()
+        if alarm["Properties"]["AlarmName"] == f"pitadvisor-weekend-{ENV_NAME}-did-not-finish"
+    )
+    counted = {
+        query["MetricStat"]["Metric"]["MetricName"]
+        for query in weekend["Metrics"]
+        if "MetricStat" in query
+    }
+    assert counted == {"ExecutionsFailed", "ExecutionsTimedOut", "ExecutionsAborted"}
+
+
+@pytest.mark.parametrize("email", [ALERT_EMAIL, None])
+def test_alarm_email_follows_the_alert_email_context(email: str | None) -> None:
+    template = Template.from_stack(build(email)[3])
+    template.resource_count_is("AWS::SNS::Topic", 1)
+    template.resource_count_is("AWS::SNS::Subscription", 1 if email else 0)
+    if email:
+        template.has_resource_properties(
+            "AWS::SNS::Subscription", {"Protocol": "email", "Endpoint": email}
+        )
+
+
+def test_the_alarm_topic_refuses_plaintext(observability_template: Template) -> None:
+    policy = sole(observability_template, "AWS::SNS::TopicPolicy")
+    statements = policy["Properties"]["PolicyDocument"]["Statement"]
+    assert any(
+        item["Effect"] == "Deny" and item["Condition"] == {"Bool": {"aws:SecureTransport": "false"}}
+        for item in statements
+    )
+
+
 def test_stacks_are_tagged() -> None:
     app = build()[0]
     assembly = app.synth()
