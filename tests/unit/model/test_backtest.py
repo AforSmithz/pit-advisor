@@ -164,13 +164,48 @@ def test_the_pit_lane_starter_is_put_at_the_back(pane, store):
 
 
 def before_qualifying(pane, context):
-    import dataclasses
-
     # the race has not run: no grid, no result, and no qualifying either
     held = (pl.col("season") == context.season) & (pl.col("round") == context.round)
     return dataclasses.replace(
-        pane, results=pane.results.filter(~held), quali=pane.quali.filter(~held)
+        pane,
+        results=pane.results.filter(~held),
+        quali=pane.quali.filter(~held),
+        qualified={
+            key: order
+            for key, order in pane.qualified.items()
+            if key != (context.season, context.round)
+        },
     )
+
+
+def after_qualifying(pane, context):
+    # saturday night: qualifying is in, the race and its result are not
+    held = (pl.col("season") == context.season) & (pl.col("round") == context.round)
+    return dataclasses.replace(pane, results=pane.results.filter(~held))
+
+
+def test_after_qualifying_the_grid_is_the_qualifying_order(pane, store):
+    context = event_at(store, 2024, 3)
+    saturday = after_qualifying(pane, context)
+    order = pane.qualified[(2024, 3)]
+    codes = sorted(order)
+    assert backtest.grid_for(saturday, context, codes) == {code: order[code] for code in codes}
+    built = backtest.setup(saturday, context, context.race_date, "dry")
+    assert built.grid_known
+    assert built.quali_noise_millis == 0.0
+    predicted = backtest.forecast(
+        saturday, context, context.race_date, np.random.default_rng(SEED), paths=200
+    )
+    assert not predicted.grid_sampled
+
+
+def test_a_result_grid_still_wins_over_qualifying(pane, store):
+    context = event_at(store, 2024, 1)
+    codes = sorted(pane.qualified[(2024, 1)])
+    run = pane.results.filter((pl.col("season") == 2024) & (pl.col("round") == 1))
+    expected = {str(row["driver_code"]): int(row["grid"]) for row in run.iter_rows(named=True)}
+    slots = backtest.grid_for(pane, context, codes)
+    assert all(slots[code] == expected[code] for code in codes if expected.get(code, 0) > 0)
 
 
 def test_before_qualifying_the_grid_is_sampled_not_set_to_last(pane, store):

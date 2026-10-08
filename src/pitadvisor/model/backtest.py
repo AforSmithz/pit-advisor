@@ -70,6 +70,8 @@ class Panel:
     regimes: pl.DataFrame
     laps: dict[tuple[int, int], int]
     entries: dict[tuple[int, int], baselines.Entries]
+    # qualifying's classified order per event, the grid before the race has a result to carry one
+    qualified: dict[tuple[int, int], dict[str, int]]
 
 
 def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:
@@ -113,7 +115,16 @@ def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:
             .iter_rows(named=True)
         },
         entries=baselines.all_entries(outcome.select(baselines.COLUMNS)),
+        qualified=_qualified(qualifying),
     )
+
+
+def _qualified(qualifying: pl.DataFrame) -> dict[tuple[int, int], dict[str, int]]:
+    order: dict[tuple[int, int], dict[str, int]] = {}
+    for row in qualifying.drop_nulls("driver_code").iter_rows(named=True):
+        key = (int(row["season"]), int(row["round"]))
+        order.setdefault(key, {})[str(row["driver_code"])] = int(row["position"])
+    return order
 
 
 def _start_frame(racing: pl.DataFrame, results: pl.DataFrame) -> pl.DataFrame:
@@ -385,6 +396,10 @@ def grid_for(pane: Panel, context: EventContext, codes: list[str]) -> dict[str, 
         str(row["driver_code"]): (int(row["grid"]) if int(row["grid"]) > 0 else back)
         for row in entered.iter_rows(named=True)
     }
+    if not known:
+        # saturday night: no result yet, but qualifying has set the order. grid penalties are
+        # not known until the start, so this is the qualifying order and not the grid
+        known = dict(pane.qualified.get((context.season, context.round), {}))
     # a car with no grid slot starts from the back, which is where a pit lane start begins
     return {code: known.get(code, back) for code in codes}
 

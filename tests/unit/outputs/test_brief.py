@@ -99,7 +99,14 @@ def test_before_qualifying_the_brief_says_the_grid_was_sampled(seeded):
     context = assembled.metrics.context
     held = (pl.col("season") == context.season) & (pl.col("round") == context.round)
     early = dataclasses.replace(
-        pane, results=pane.results.filter(~held), quali=pane.quali.filter(~held)
+        pane,
+        results=pane.results.filter(~held),
+        quali=pane.quali.filter(~held),
+        qualified={
+            key: order
+            for key, order in pane.qualified.items()
+            if key != (context.season, context.round)
+        },
     )
     predicted = backtest.forecast(
         early, context, context.race_date, np.random.default_rng(5), paths=200

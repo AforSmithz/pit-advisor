@@ -89,6 +89,7 @@ def test_no_fit_behind_a_forecast_has_seen_the_race_it_predicts(store, seeded):
         regimes=pane.regimes.filter(pl.col("race_date") < context.race_date),
         laps={key: laps for key, laps in pane.laps.items() if built.held(*key) < context.race_date},
         entries=pane.entries,
+        qualified=pane.qualified,
     )
     blind = backtest.forecast(
         truncated, context, context.race_date, np.random.default_rng(SEED), paths=400
