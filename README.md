@@ -41,7 +41,8 @@ marts and a regulations and race-report corpus, with citations.
 
 The lake covers 2021 to the current race of 2026. Every Thursday a state machine checks the
 calendar, and in a race week it refreshes the weather, the sessions, the marts and every view,
-including a short weekend brief at the top of the weekend page.
+including a short weekend brief at the top of the weekend page. On Saturday night it runs again,
+and once qualifying is in it refreshes the forecast on the qualifying order.
 
 ## The honesty constraint
 
@@ -102,7 +103,7 @@ races, they move the simulation's log loss in the fifth decimal place.
 ## Architecture
 
 ```
-EventBridge rule (Thursday 06:00 UTC)
+EventBridge rules (Thursday 06:00 UTC, Saturday 23:30 UTC)
   |
   +-- Step Functions  weekend-pipeline        one Fargate task definition, one image
         |
@@ -372,8 +373,13 @@ the reset.
 The Thursday forecast runs before qualifying, so the grid is not known. Each simulated race
 then runs its own qualifying first, drawn from the same pace the race uses plus each driver's
 Saturday-to-Sunday conversion, which spreads the favourites further than a grid-conditioned
-forecast would. The published backtest is unaffected: it scores races on the grid they actually
-had.
+forecast would. The Saturday night run replaces that with the qualifying order and anchors race
+pace on the session itself. The qualifying order is not quite the grid: penalties applied after
+qualifying only show up in the race result, so a driver dropped ten places starts from their
+qualifying slot in the forecast. The run is timed for the latest qualifying session on the
+calendar to have reached Jolpica and the earliest Sunday start to be hours away; if qualifying
+has not landed, it does nothing and the Thursday forecast stands. The published backtest is
+unaffected: it scores races on the grid they actually had.
 
 The circuit taxonomy is hand-maintained, and a circuit missing from it gets no track fit and no
 forecast. Madrid and Sepang joined in 2026. Their geometry and most of their demand bands come
