@@ -125,7 +125,7 @@ Athena                   SQL, byte-scan capped workgroup
 DynamoDB                 request ledger, run state
 Bedrock                  Knowledge Base on S3 Vectors, agent runtime, Guardrails
 CloudFront + S3          static Next.js dashboard reading views/*.json
-CloudWatch + Budgets     logs, a latency dashboard, the spend ceiling
+CloudWatch + Budgets     logs, a latency dashboard, run alarms by email, the spend ceiling
 Cost Explorer            measured spend, read by pitadv cost-report
 ```
 
