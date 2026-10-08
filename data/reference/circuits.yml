@@ -1,4 +1,5 @@
-# Hand-maintained circuit taxonomy. Geometry is the published layout as of the 2025 calendar.
+# Hand-maintained circuit taxonomy. Geometry is the published layout as of the 2025 calendar,
+# plus madring and sepang, added for 2026.
 # Where a circuit was reprofiled inside the 2021-2025 window, `reprofiled` names the first
 # season of the current layout, so history from before it can be down-weighted.
 #
@@ -87,6 +88,17 @@ losail:
   altitude_m: 15
   demand: {downforce: 4, traction: 2, braking: 2, top_speed: 3, abrasion: 4, kerbs: 4}
 
+# new for 2026. F1 circuit guide: 5.414 km, 22 turns. madring.com: clockwise, 671 to 697 m.
+# brembo rates it 4 of 5 for braking. pirelli: very smooth asphalt with low grip, lateral energy
+# among the five highest, comparable to barcelona and silverstone; 340 km/h on the straights.
+# no publication rates traction or kerbs, so both sit at the calendar's middle band
+madring:
+  length_km: 5.414
+  corners: 22
+  direction: clockwise
+  altitude_m: 684
+  demand: {downforce: 4, traction: 3, braking: 4, top_speed: 4, abrasion: 1, kerbs: 3}
+
 marina_bay:
   length_km: 4.940
   corners: 19
@@ -143,6 +155,19 @@ rodriguez:
   direction: clockwise
   altitude_m: 2240
   demand: {downforce: 5, traction: 3, braking: 4, top_speed: 5, abrasion: 2, kerbs: 3}
+
+# back for 2026 as the relocated bahrain grand prix. wikipedia: 5.543 km, 15 turns, clockwise,
+# last reprofiled in 2016, before the lake starts. altitude is klia's published elevation, next
+# door. brembo 2017: 7 of 10, level with budapest, barcelona and monaco. pirelli 2026: abrasive,
+# roughness comparable to bahrain, medium energy alongside spa and shanghai. mercedes' preview: a
+# high downforce setup despite the two long straights. traction and kerbs are unrated, so the
+# middle band
+sepang:
+  length_km: 5.543
+  corners: 15
+  direction: clockwise
+  altitude_m: 21
+  demand: {downforce: 4, traction: 3, braking: 3, top_speed: 4, abrasion: 4, kerbs: 3}
 
 shanghai:
   length_km: 5.451

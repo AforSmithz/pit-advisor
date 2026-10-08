@@ -107,7 +107,10 @@ def test_the_regression_recovers_a_known_circuit_sensitivity():
 def test_the_two_estimators_agree_when_the_signal_is_clean():
     profiles = track_fit.load()
     frame = history({"alpha": 1.5, "bravo": -0.8}, profiles)
-    fitted = track_fit.fit(frame, "monza", date(2025, 1, 1), profiles, half_life=HALF_LIFE)
+    # a mid-range circuit. at monza, the end of the downforce range, the similarity estimator
+    # averages neighbours that all sit inward of it, and over forty seeds the two part company
+    # in twenty six. that passed here on one lucky seed until the taxonomy grew
+    fitted = track_fit.fit(frame, "shanghai", date(2025, 1, 1), profiles, half_life=HALF_LIFE)
     assert fitted.disagreements == []
 
 
@@ -220,3 +223,9 @@ def test_a_real_gap_between_the_estimators_is_still_a_disagreement():
     )
     other = apart.model_copy(update={"estimate": 2.0, "interval_low": 1.9, "interval_high": 2.1})
     assert not track_fit._overlap(apart, other)
+
+
+def test_the_two_circuits_new_to_2026_are_in_the_taxonomy():
+    taxonomy = track_fit.load()
+    assert {"madring", "sepang"} <= set(taxonomy)
+    assert taxonomy["madring"].demand.abrasion < taxonomy["sepang"].demand.abrasion
