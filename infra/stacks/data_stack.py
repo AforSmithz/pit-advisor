@@ -95,7 +95,14 @@ class DataStack(Stack):
                     # 30 days is long enough to notice and replay, short enough not to accumulate.
                     noncurrent_version_expiration=Duration.days(30),
                     abort_incomplete_multipart_upload_after=Duration.days(7),
-                )
+                ),
+                s3.LifecycleRule(
+                    id="expire-panel-cache",
+                    # a cached panel is keyed by the bronze it was built from, so once bronze
+                    # moves on the old key is never read again
+                    prefix="cache/panel/",
+                    expiration=Duration.days(30),
+                ),
             ],
         )
 

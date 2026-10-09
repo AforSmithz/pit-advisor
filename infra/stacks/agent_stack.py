@@ -288,7 +288,9 @@ class AgentStack(Stack):
             env_name,
             bucket_name,
             memory=3008,
-            timeout=Duration.minutes(2),
+            # a cold call with no cached panel builds it from bronze, which at the 512 MB the
+            # account allows today takes most of two minutes on its own
+            timeout=Duration.minutes(5),
         )
         self.ask_function = self._function(
             "Ask",
