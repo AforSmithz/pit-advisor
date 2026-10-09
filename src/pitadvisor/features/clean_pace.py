@@ -77,6 +77,15 @@ def is_green(status: pl.Expr) -> pl.Expr:
 
 def with_elapsed(laps: pl.DataFrame) -> pl.DataFrame:
     ordered = laps.sort(["driver_code", "lap"])
+    if (
+        "session_time_millis" in ordered.columns
+        and ordered["session_time_millis"].is_not_null().any()
+    ):
+        # a red flag blanks a lap time for the whole field, the session clock keeps running
+        return ordered.with_columns(
+            pl.col("session_time_millis").alias("elapsed_millis"),
+            pl.col("session_time_millis").is_not_null().alias("elapsed_is_sound"),
+        )
     return ordered.with_columns(
         pl.col("lap_time_millis").cum_sum().over("driver_code").alias("elapsed_millis"),
         # one missing lap time and every elapsed after it is wrong, not just unknown

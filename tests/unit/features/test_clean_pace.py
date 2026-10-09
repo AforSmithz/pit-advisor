@@ -189,6 +189,37 @@ def test_the_gap_is_measured_against_the_car_one_place_ahead():
     assert gaps == [None, 2_000, 3_000]
 
 
+def test_a_red_flag_lap_does_not_blank_every_gap_after_it():
+    # 2024 suzuka: lap 2 has no lap time for anyone, and the race ran 51 more
+    rows = []
+    for lap in (1, 2, 3, 4):
+        for position, code in enumerate(("VER", "NOR", "HAM"), start=1):
+            rows.append(
+                {
+                    "driver_code": code,
+                    "position": position,
+                    "lap": lap,
+                    "lap_time_millis": None if lap == 2 else 90_000,
+                    "session_time_millis": lap * 1_000_000 + position * 1_500,
+                }
+            )
+    frame = pl.DataFrame(
+        [{**BASE, **row} for row in rows], schema={**SCHEMA, "session_time_millis": pl.Int64}
+    )
+    gapped = with_gap_ahead(frame).filter(pl.col("lap") == 4).sort("position")
+    assert gapped["gap_ahead_millis"].to_list() == [None, 1_500, 1_500]
+
+
+def test_without_a_session_clock_one_missing_lap_still_blanks_the_rest():
+    frame = laps(
+        {"driver_code": "VER", "position": 1, "lap": 1, "lap_time_millis": None},
+        {"driver_code": "NOR", "position": 2, "lap": 1, "lap_time_millis": None},
+        {"driver_code": "VER", "position": 1, "lap": 2, "lap_time_millis": 90_000},
+        {"driver_code": "NOR", "position": 2, "lap": 2, "lap_time_millis": 91_000},
+    )
+    assert with_gap_ahead(frame)["gap_ahead_millis"].drop_nulls().len() == 0
+
+
 def test_a_race_abandoned_behind_the_safety_car_leaves_no_pace_to_measure():
     # 2021 spa: three laps behind the sc, half points, and no lap that measures anything
     frame = laps(

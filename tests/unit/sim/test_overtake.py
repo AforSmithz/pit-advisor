@@ -97,3 +97,27 @@ def test_pairs_finds_a_pass_and_ignores_one_made_in_the_pits(seeded, store):
     # the fixture field never changes position, so every striking-range lap is a failed pass
     assert found.height >= 0
     assert not found["passed"].any()
+
+
+def test_a_red_flag_early_on_still_leaves_duels_to_count():
+    rows = []
+    for lap in range(1, 7):
+        swapped = lap >= 5
+        for code, position in (("NOR", 2 if swapped else 1), ("VER", 1 if swapped else 2)):
+            rows.append(
+                {
+                    "season": 2024,
+                    "round": 4,
+                    "driver_code": code,
+                    "lap": lap,
+                    "lap_time_millis": None if lap == 2 else 92_000,
+                    "session_time_millis": lap * 100_000 + (position - 1) * 600,
+                    "track_status": "1",
+                    "position": position,
+                    "pit_in": False,
+                    "pit_out": False,
+                }
+            )
+    found = overtake.pairs(pl.DataFrame(rows))
+    assert found.height > 0
+    assert found["passed"].any()
