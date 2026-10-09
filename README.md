@@ -80,14 +80,23 @@ failed on a single case each, always the same shape: the model subtracts one too
 another and states the difference, which is a figure no tool returned. The check withholds that
 answer every time, which is the gate doing its job rather than a gate worth lowering.
 
-The forecast clears its own bar too, though by less than a chart would suggest. The holdout is
-the last sixty races run, from the 2024 Chinese Grand Prix to the sixteenth round of 2026, so
-sixteen of them are in 2026's twenty-two-car field. The simulation's multiclass log loss is
-2.589 [2.544, 2.634], against 2.608 for grid position alone, 2.726 for championship standings
-and 2.825 for last race's result. Resampled at the race
-level, it is separated from standings and from last race, and it is not separated from the grid
-on log loss, only on Brier: sixty races cannot tell the simulation and the starting order apart.
-That is the finding, and the calibration page leads with it.
+The forecast clears its own bar too. The holdout is the last sixty races run, from the 2024
+Chinese Grand Prix to the sixteenth round of 2026, so sixteen of them are in 2026's
+twenty-two-car field. The published forecast's multiclass log loss is 2.550 [2.476, 2.621],
+against 2.608 for grid position alone, 2.726 for championship standings and 2.825 for last
+race's result. Resampled at the race level, the gain over the grid is +0.058 [+0.013, +0.101],
+so it is separated from all three baselines.
+
+It was not always. The simulation on its own scores 2.591 and cannot be told apart from the
+starting order, and the reason is measurable: it spreads the field wider than races do. In
+simulated races the pole-sitter wins 49% of the time against 58% in reality, and cars finish
+4.3 places from their grid slot on average against 3.3. The published forecast corrects that by
+pooling: each driver's distribution is raised to a power, multiplied by a small power of the
+grid baseline, and rebalanced so every place is taken exactly once. The two powers are refitted
+before every scored race on the races forecast before it, thirty of them warm-up races that are
+never scored, so the pool is as blind to the race it is judged on as the simulation is. The raw
+simulation stays on the calibration page next to the pooled one, so the correction is never
+mistaken for the model.
 
 Two things are worth knowing about how that number was reached. A race in a twenty-two-car field
 is not scored against a baseline that has only ever seen twenty places: each past race is
@@ -184,6 +193,15 @@ hand-authored measurements are not, so every numeric field in it is either a pub
 or regenerated from our own history by script.
 
 ## Trade-offs worth arguing about
+
+The published forecast is a statistical correction on top of a mechanistic model, and that is a
+real trade. The pool is what takes the forecast from level with the grid to clear of it, and its
+calibration error on points finishes falls from about seven points to two and a half. But a
+mechanistic model that has to be sharpened after the fact is telling you it is wrong somewhere,
+and the pool hides where. Showing the raw simulation beside it keeps that visible, and the
+better fix, finding which part of the race (the start, the passing model or the safety-car
+bunching) makes it too random, is still open. If that fix lands, the fitted power falls back
+toward one by itself.
 
 The transform layer is dbt on Athena with Iceberg tables, not Glue with PySpark. The dataset
 is on the order of a gigabyte across a few dozen models. Spark would spend most of its runtime
@@ -369,6 +387,13 @@ longer exist, so time decay does most of the work of forgetting. 2026 is the har
 full regulation reset, and every prior the early-season numbers lean on was fitted on the
 previous generation of cars. The intervals widen as evidence thins, but they do not know about
 the reset.
+
+Tyre strategy is drawn from what teams ran at each circuit, split by whether a car starts in
+the top ten, and each compound wears at its own measured rate. What it does not have is a speed
+difference between compounds: a fresh-tyre offset was built and measured, and its sign flipped
+from season to season, so it was taken out rather than trusted. A soft therefore carries its
+extra wear without its extra grip. Strategy is also drawn independently of the car's pace, and
+wear is linear with no cliff. On the backtest the tyre model is within noise of not having one.
 
 The Thursday forecast runs before qualifying, so the grid is not known. Each simulated race
 then runs its own qualifying first, drawn from the same pace the race uses plus each driver's
