@@ -106,3 +106,110 @@ def test_an_empty_history_still_produces_a_plan():
     model = tyres.fit(empty, degradation().filter(pl.col("season") > 9999), "monza", AS_OF)
     drawn = tyres.sample_stops(model, paths=50, drivers=20, laps=50, rng=np.random.default_rng(0))
     assert drawn.sum() > 0
+
+
+def plans(rows: list[tuple[str, int, str]], when: date = date(2024, 6, 1)) -> pl.DataFrame:
+    return pl.DataFrame(
+        [
+            {
+                "season": 2024,
+                "round": 1,
+                "race_date": when,
+                "circuit_id": circuit,
+                "driver_code": f"D{index}",
+                "grid": grid,
+                "sequence": sequence,
+            }
+            for index, (circuit, grid, sequence) in enumerate(rows)
+        ]
+    )
+
+
+def compound_model(**overrides) -> tyres.TyreModel:
+    base = tyres.fit(stops(), degradation(), "monza", AS_OF)
+    return base.model_copy(
+        update={
+            "strategies": [
+                tyres.Strategy(sequence="MH", front=1.0, back=0.0),
+                tyres.Strategy(sequence="SMH", front=0.0, back=1.0),
+            ],
+            "stint_weights": {"SOFT": 12.0, "MEDIUM": 18.0, "HARD": 26.0},
+            "stop_spread": 0.02,
+            **overrides,
+        }
+    )
+
+
+def test_a_one_compound_or_wet_race_is_not_a_dry_plan():
+    frame = plans([("monza", 1, "MH"), ("monza", 2, "M"), ("monza", 3, "MI"), ("monza", 4, "HHH")])
+    found = {item.sequence for item in tyres.fit_strategies(frame, "monza", AS_OF)}
+    assert found == {"MH"}
+
+
+def test_the_front_and_the_back_of_the_grid_keep_their_own_mix():
+    frame = plans([("monza", 1, "MH")] * 30 + [("monza", 15, "HM")] * 30)
+    found = {item.sequence: item for item in tyres.fit_strategies(frame, "monza", AS_OF)}
+    assert found["MH"].front > 0.9
+    assert found["HM"].back > 0.9
+    assert sum(item.front for item in found.values()) == pytest.approx(1.0)
+
+
+def test_a_circuit_with_little_history_leans_on_the_field():
+    frame = plans([("bahrain", 3, "SHH")] * 200 + [("monza", 3, "MH")] * 2)
+    found = {item.sequence: item for item in tyres.fit_strategies(frame, "monza", AS_OF)}
+    assert found["SHH"].front > found["MH"].front
+
+
+def test_a_plan_stops_once_less_than_it_has_compounds_and_runs_them_in_order():
+    model = compound_model()
+    grid = np.array([1, 2, 15, 16])
+    pitting, plan = tyres.sample_plan(model, grid, 200, 4, 50, np.random.default_rng(1))
+    stops_made = pitting.sum(axis=2)
+    assert (stops_made[:, :2] == 1).all()
+    assert (stops_made[:, 2:] == 2).all()
+    assert (plan[:, 0, :2] == [tyres.LETTERS["M"], tyres.LETTERS["H"]]).all()
+    assert (plan[:, 2, :3] == [tyres.LETTERS[x] for x in "SMH"]).all()
+
+
+def test_a_short_soft_stint_comes_in_earlier_than_a_long_hard_one():
+    model = compound_model(
+        strategies=[
+            tyres.Strategy(sequence="SH", front=1.0, back=1.0),
+        ]
+    )
+    pitting, _ = tyres.sample_plan(model, np.array([1]), 300, 1, 60, np.random.default_rng(2))
+    first = pitting[:, 0, :].argmax(axis=1)
+    assert np.median(first) < 30
+
+
+def test_a_safety_car_pulls_a_stop_that_was_due_forward():
+    pitting = np.zeros((2, 2, 30), dtype=bool)
+    pitting[:, 0, 14] = True
+    pitting[:, 1, 25] = True
+    under = np.array([True, False])
+    moved = tyres.pit_under_caution(pitting.copy(), under, 10)
+    assert moved[0, 0, 10]
+    assert not moved[0, 0, 14]
+    assert moved[0, 1, 25]
+    assert not moved[0, 1, 10]
+    assert moved[1, 0, 14]
+    assert not moved[1, 0, 10]
+
+
+def test_softs_wear_faster_than_hards_once_the_field_has_run_both():
+    rows = [
+        {
+            "season": 2024,
+            "round": 1,
+            "race_date": date(2024, 6, 1),
+            "circuit_id": "monza",
+            "driver_code": f"D{i}",
+            "compound": compound,
+            "laps": 20,
+            "wear_millis": wear,
+        }
+        for i in range(10)
+        for compound, wear in (("SOFT", 90.0), ("MEDIUM", 60.0), ("HARD", 40.0))
+    ]
+    ratio = tyres._wear_ratio(pl.DataFrame(rows), AS_OF, tyres.HALF_LIFE_EVENTS)
+    assert ratio["SOFT"] > ratio["MEDIUM"] > ratio["HARD"]

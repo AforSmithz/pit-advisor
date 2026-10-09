@@ -250,3 +250,25 @@ def test_a_field_bigger_than_twenty_gets_every_place():
     assert grid.shape == (22, 22)
     assert np.allclose(grid.sum(axis=0), 1.0)
     assert grid[:, 20:].sum() == pytest.approx(2.0)
+
+
+def test_a_race_run_on_compound_strategies_still_hands_out_every_place():
+    from pitadvisor.sim.tyres import Strategy
+
+    built = setup(safety_car=0.05)
+    tyre = built.tyre.model_copy(
+        update={
+            "strategies": [
+                Strategy(sequence="MH", front=0.7, back=0.4),
+                Strategy(sequence="SMH", front=0.3, back=0.6),
+            ],
+            "wear_ratio": {"SOFT": 1.45, "MEDIUM": 1.05, "HARD": 0.9},
+            "stint_weights": {"SOFT": 12.0, "MEDIUM": 18.0, "HARD": 26.0},
+        }
+    )
+    outcome = race.simulate(
+        built.model_copy(update={"tyre": tyre}), np.random.default_rng(4), paths=300
+    )
+    grid = outcome.probabilities()
+    assert np.allclose(grid.sum(axis=1), 1.0)
+    assert sum(outcome.win) == pytest.approx(1.0)

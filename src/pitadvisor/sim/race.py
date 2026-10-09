@@ -105,8 +105,17 @@ def simulate(
         grid = np.argsort(np.argsort(lap, axis=1), axis=1) + 1
     opening = starts.sample(setup.start, grid, rng, paths)
     retire = sample_retirements(setup.retirement, codes, laps, paths, rng)
-    pitting = tyres.sample_stops(setup.tyre, paths, cars, laps, rng)
     caution = sample_safety_car(setup.safety_car, laps, paths, rng)
+    compounds = bool(setup.tyre.strategies)
+    if compounds:
+        pitting, plan = tyres.sample_plan(setup.tyre, grid, paths, cars, laps, rng)
+    else:
+        pitting = tyres.sample_stops(setup.tyre, paths, cars, laps, rng)
+        plan = np.zeros((paths, cars, 1), dtype=np.int64)
+    wear = setup.tyre.degradation_millis * np.asarray(
+        [setup.tyre.wear_ratio.get(name, 1.0) for name in tyres.SLICKS]
+    )
+    stint = np.zeros((paths, cars), dtype=np.int64)
 
     # the grid itself is track position, so the race starts from the order lap one produced
     elapsed = opening.astype(float) * FOLLOWING_GAP_MILLIS
@@ -117,12 +126,17 @@ def simulate(
     for lap in range(1, laps + 1):
         running = retire > lap
         held = _in_traffic(elapsed, order, out)
-        time = (
-            pace
-            + setup.tyre.degradation_millis * age
-            + rng.normal(0.0, LAP_NOISE_MILLIS, (paths, cars))
-        )
         under = caution[:, lap - 1].reshape(-1, 1)
+        if compounds:
+            if under.any():
+                pitting = tyres.pit_under_caution(pitting, under.ravel(), lap - 1)
+            fitted = np.take_along_axis(
+                plan, np.minimum(stint, plan.shape[2] - 1)[..., None], axis=2
+            )[..., 0]
+            tyre = wear[fitted] * age
+        else:
+            tyre = setup.tyre.degradation_millis * age
+        time = pace + tyre + rng.normal(0.0, LAP_NOISE_MILLIS, (paths, cars))
         # dirty air is why the quick car behind stays behind: it does not get to spend the
         # advantage that closed the gap in the first place
         time = time + np.where(held & ~under, setup.passing.dirty_air_millis, 0.0)
@@ -131,10 +145,12 @@ def simulate(
         loss = setup.tyre.pit_loss_millis * np.where(under, setup.tyre.safety_car_discount, 1.0)
         time = time + np.where(stopping, loss, 0.0)
         age = np.where(stopping, 0.0, age) + 1.0
+        stint = stint + stopping
         elapsed = elapsed + np.where(running, time, 0.0)
         out = retire <= lap
 
-        elapsed = _resolve(setup, elapsed, pace, order, out, rows, rng)
+        # fresher rubber is what makes an undercut work, so the attack reads the tyres too
+        elapsed = _resolve(setup, elapsed, pace + tyre, order, out, rows, rng)
         if under.any():
             elapsed = _bunch(elapsed, order, out, under.ravel())
         order = np.argsort(elapsed + out * OUT_OF_RACE_MILLIS, axis=1, kind="stable")
