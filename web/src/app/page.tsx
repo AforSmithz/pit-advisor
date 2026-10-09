@@ -77,7 +77,7 @@ export default async function CalibrationPage() {
             title="Scores"
             note="Multiclass over the classified finishing position, so a retirement is a class like any other. Lower is better on both."
           >
-            <div className="grid grid-cols-[7rem_1fr_1fr] items-baseline gap-x-4 pb-1">
+            <div className="grid grid-cols-[7.5rem_1fr_1fr] items-baseline gap-x-4 pb-1">
               <span className="engraved">model</span>
               <span className="engraved">log loss</span>
               <span className="engraved">brier</span>
@@ -85,7 +85,7 @@ export default async function CalibrationPage() {
             {view.scored.map((model) => (
               <div
                 key={model.name}
-                className="grid grid-cols-[7rem_1fr_1fr] items-baseline gap-x-4 border-t border-engrave py-2.5"
+                className="grid grid-cols-[7.5rem_1fr_1fr] items-baseline gap-x-4 border-t border-engrave py-2.5"
               >
                 <span
                   className={`text-sm tracking-plate ${

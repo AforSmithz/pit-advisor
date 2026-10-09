@@ -6,6 +6,7 @@ const PAD = { top: 10, right: 10, bottom: 26, left: 30 };
 
 const INK: Record<string, string> = {
   simulation: "var(--color-split)",
+  raw_simulation: "var(--color-steel)",
   grid: "var(--color-lume)",
   standings: "var(--color-wet)",
   last_race: "var(--color-lume-dim)",
