@@ -1,5 +1,8 @@
 # polars types every expression argument as IntoExpr, which pyright reads as partly unknown
 # pyright: reportUnknownMemberType=false
+import hashlib
+import io
+import json
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from datetime import UTC, date, datetime
@@ -92,6 +95,104 @@ class Panel:
         default_factory=lambda: _empty(tyres.STRATEGY_COLUMNS)
     )
     stints: pl.DataFrame = dataclass_field(default_factory=lambda: _empty(tyres.STINT_COLUMNS))
+
+
+# bump when Panel changes shape, so a cache written by older code is never read by newer code
+PANEL_VERSION = 1
+PANEL_TABLES = ("races", "results", "session_laps", "qualifying")
+PANEL_PREFIX = f"{Layer.CACHE}/panel/"
+FRAMES = (
+    "events",
+    "results",
+    "pace",
+    "quali",
+    "starts",
+    "cautions",
+    "passes",
+    "traffic",
+    "stops",
+    "degradation",
+    "benchmarks",
+    "regimes",
+    "strategies",
+    "stints",
+)
+
+
+class _Cached(BaseModel):
+    """Everything in a Panel that is not a frame. JSON rather than pickle: the cache sits in
+    the lake, and a lake object should never be able to run code in whoever reads it."""
+
+    paces: list[SessionPace]
+    quali_events: list[tuple[date, quali_race.EventQualiRace]]
+    laps: list[tuple[int, int, int]]
+    entries: list[baselines.Entries]
+    qualified: list[tuple[int, int, dict[str, int]]]
+
+
+def fingerprint(store: ObjectStore, layer: Layer = Layer.BRONZE) -> str:
+    """Names the bronze a panel was built from. A rebuilt, amended or newly ingested
+    partition changes its size or its timestamp, and with it the key."""
+    digest = hashlib.sha256(f"panel-v{PANEL_VERSION}".encode())
+    for table in PANEL_TABLES:
+        for item in sorted(store.list(f"{layer}/table={table}/"), key=lambda found: found.key):
+            digest.update(f"{item.key}|{item.size}|{item.modified_at.isoformat()}\n".encode())
+    return digest.hexdigest()[:16]
+
+
+def save_panel(store: ObjectStore, pane: Panel, key: str) -> str:
+    base = f"{PANEL_PREFIX}{key}/"
+    for name in FRAMES:
+        buffer = io.BytesIO()
+        frame: pl.DataFrame = getattr(pane, name)
+        frame.write_parquet(buffer)
+        store.put(f"{base}{name}.parquet", buffer.getvalue())
+    state = _Cached(
+        paces=pane.paces,
+        quali_events=pane.quali_events,
+        laps=[(season, round_, laps) for (season, round_), laps in pane.laps.items()],
+        entries=list(pane.entries.values()),
+        qualified=[(season, round_, order) for (season, round_), order in pane.qualified.items()],
+    )
+    # written last, because its presence is what says the frames beside it are complete.
+    # stdlib json, because pydantic writes a nan or an inf as null and then will not read it
+    store.put(f"{base}state.json", json.dumps(state.model_dump(), default=_plain).encode())
+    return base
+
+
+def _plain(value: object) -> str:
+    return value.isoformat() if isinstance(value, date | datetime) else str(value)
+
+
+def load_panel(store: ObjectStore, key: str) -> Panel | None:
+    base = f"{PANEL_PREFIX}{key}/"
+    if not store.exists(f"{base}state.json"):
+        return None
+    state = _Cached.model_validate(json.loads(store.get(f"{base}state.json")))
+    frames = {
+        name: pl.read_parquet(io.BytesIO(store.get(f"{base}{name}.parquet"))) for name in FRAMES
+    }
+    return Panel(
+        **frames,
+        paces=state.paces,
+        quali_events=list(state.quali_events),
+        laps={(season, round_): laps for season, round_, laps in state.laps},
+        entries={(item.season, item.round): item for item in state.entries},
+        qualified={(season, round_): order for season, round_, order in state.qualified},
+    )
+
+
+def cached_panel(store: ObjectStore, save: bool = True, layer: Layer = Layer.BRONZE) -> Panel:
+    """The panel for the bronze as it stands, read back if somebody already built it. A
+    reader that cannot write (the race-sim lambda) passes save=False and builds on a miss."""
+    key = fingerprint(store, layer)
+    found = load_panel(store, key)
+    if found is not None:
+        return found
+    built = panel(store, layer)
+    if save:
+        save_panel(store, built, key)
+    return built
 
 
 def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:

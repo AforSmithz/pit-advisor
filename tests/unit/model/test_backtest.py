@@ -319,3 +319,44 @@ def test_a_pooled_forecast_still_hands_out_every_place_once(pane, store):
     assert pooled.pool == sharp
     assert pooled.outcome.finish == raw.outcome.finish
     assert max(pooled.outcome.win) > max(raw.outcome.win)
+
+
+def test_a_cached_panel_reads_back_as_the_panel_that_was_saved(pane, store):
+    backtest.save_panel(store, pane, "k")
+    loaded = backtest.load_panel(store, "k")
+    assert loaded is not None
+    for name in backtest.FRAMES:
+        assert getattr(loaded, name).equals(getattr(pane, name)), name
+    assert loaded.paces == pane.paces
+    assert loaded.entries == pane.entries
+    assert loaded.laps == pane.laps
+    assert loaded.qualified == pane.qualified
+
+
+def test_a_half_written_cache_is_not_a_cache(pane, store):
+    backtest.save_panel(store, pane, "k")
+    (store.root / backtest.PANEL_PREFIX / "k" / "state.json").unlink()
+    assert backtest.load_panel(store, "k") is None
+
+
+def test_new_bronze_changes_the_fingerprint(store, seeded):
+    seeded()
+    before = backtest.fingerprint(store)
+    assert backtest.fingerprint(store) == before
+    store.put("bronze/table=results/season=2099/round=01/part.parquet", b"x")
+    assert backtest.fingerprint(store) != before
+
+
+def test_the_first_reader_builds_and_saves_and_the_next_one_reads(store, seeded):
+    seeded()
+    key = backtest.fingerprint(store)
+    first = backtest.cached_panel(store)
+    assert store.exists(f"{backtest.PANEL_PREFIX}{key}/state.json")
+    second = backtest.cached_panel(store)
+    assert second.paces == first.paces
+
+
+def test_a_reader_that_cannot_write_leaves_no_cache_behind(store, seeded):
+    seeded()
+    backtest.cached_panel(store, save=False)
+    assert not list(store.list(backtest.PANEL_PREFIX))
