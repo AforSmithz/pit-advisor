@@ -628,7 +628,8 @@ class RaceSim:
         from pitadvisor.model import backtest
 
         if self._panel is None:
-            self._panel = backtest.panel(self.store)
+            # the pipeline writes the panel after every refresh, this role only reads it
+            self._panel = backtest.cached_panel(self.store, save=False)
         context = (
             assemble.next_event(self.store)
             if event in {"next", ""}

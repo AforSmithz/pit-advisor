@@ -818,7 +818,7 @@ def _render_metrics(metrics: feature_assemble.EventMetrics, explain: bool) -> No
 
 def _panel(store: ObjectStore) -> forecast_model.Panel:
     try:
-        return forecast_model.panel(store)
+        return forecast_model.cached_panel(store)
     except feature_assemble.NoEventError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
