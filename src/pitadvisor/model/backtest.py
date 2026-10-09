@@ -1,6 +1,7 @@
 # polars types every expression argument as IntoExpr, which pyright reads as partly unknown
 # pyright: reportUnknownMemberType=false
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from datetime import UTC, date, datetime
 
 import numpy as np
@@ -22,6 +23,7 @@ from pitadvisor.features.assemble import (
 from pitadvisor.features.clean_pace import Reason, Regime, SessionPace, classify, is_green
 from pitadvisor.ingest.raw_store import ObjectStore
 from pitadvisor.model import baselines
+from pitadvisor.model import pool as pooling
 from pitadvisor.model.metrics import Bin, Interval, brier, log_loss, race_bootstrap
 from pitadvisor.model.metrics import reliability as curve
 from pitadvisor.quality.checks import read_table
@@ -48,6 +50,20 @@ class NoForecastError(RuntimeError):
         super().__init__(detail)
 
 
+TYPES: dict[str, type[pl.DataType]] = {
+    "season": pl.Int64,
+    "round": pl.Int64,
+    "race_date": pl.Date,
+    "grid": pl.Int64,
+    "laps": pl.Int64,
+    "wear_millis": pl.Float64,
+}
+
+
+def _empty(columns: tuple[str, ...]) -> pl.DataFrame:
+    return pl.DataFrame(schema={name: TYPES.get(name, pl.Utf8) for name in columns})
+
+
 @dataclass(frozen=True)
 class Panel:
     """Everything the lake holds, read and fitted once. Nothing in here depends on a
@@ -72,6 +88,10 @@ class Panel:
     entries: dict[tuple[int, int], baselines.Entries]
     # qualifying's classified order per event, the grid before the race has a result to carry one
     qualified: dict[tuple[int, int], dict[str, int]]
+    strategies: pl.DataFrame = dataclass_field(
+        default_factory=lambda: _empty(tyres.STRATEGY_COLUMNS)
+    )
+    stints: pl.DataFrame = dataclass_field(default_factory=lambda: _empty(tyres.STINT_COLUMNS))
 
 
 def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:
@@ -90,6 +110,7 @@ def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:
     quali = quali_frame(qualifying, events)
     stacked = quali_events(quali, paces)
     dated = events.select("season", "round", "race_date", "circuit_id")
+    stint_rows = _stint_frame(racing, paces, dated)
     outcome = results.join(dated, on=["season", "round"]).with_columns(
         pl.col("points").cast(pl.Float64)
     )
@@ -116,6 +137,8 @@ def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:
         },
         entries=baselines.all_entries(outcome.select(baselines.COLUMNS)),
         qualified=_qualified(qualifying),
+        strategies=_strategy_frame(racing, dated, outcome),
+        stints=stint_rows,
     )
 
 
@@ -252,6 +275,88 @@ def _stop_frame(racing: pl.DataFrame, dated: pl.DataFrame, results: pl.DataFrame
     )
 
 
+def _stints(racing: pl.DataFrame) -> pl.DataFrame:
+    return (
+        racing.drop_nulls("stint")
+        .group_by("season", "round", "driver_code", "stint")
+        .agg(
+            pl.col("compound").drop_nulls().mode().first().alias("compound"),
+            pl.len().alias("laps"),
+        )
+        .sort("season", "round", "driver_code", "stint")
+    )
+
+
+def _strategy_frame(
+    racing: pl.DataFrame, dated: pl.DataFrame, results: pl.DataFrame
+) -> pl.DataFrame:
+    """What each car actually ran, as one letter a stint. A wet tyre anywhere spells a
+    sequence the dry fit throws away, which is the point."""
+    sequences = (
+        _stints(racing)
+        .group_by("season", "round", "driver_code", maintain_order=True)
+        .agg(pl.col("compound").fill_null("?").str.slice(0, 1).str.join("").alias("sequence"))
+    )
+    grid = results.select("season", "round", "driver_code", "grid").drop_nulls("driver_code")
+    return (
+        sequences.join(grid, on=["season", "round", "driver_code"], how="left")
+        .join(dated, on=["season", "round"])
+        .select(tyres.STRATEGY_COLUMNS)
+    )
+
+
+def _stint_frame(
+    racing: pl.DataFrame, paces: list[SessionPace], dated: pl.DataFrame
+) -> pl.DataFrame:
+    """How long each stint ran and how fast its clean laps fell away. Lap times have the
+    session's own fuel term taken out first, because a lap later in a stint is also a lap
+    lighter."""
+    fuel = {
+        (item.season, item.round): item.b_progress_millis
+        for item in paces
+        if item.regime is Regime.DRY and item.b_progress_millis is not None
+    }
+    found: list[pl.DataFrame] = []
+    for (season, round_), event in racing.group_by("season", "round"):
+        key = (int(str(season)), int(str(round_)))
+        if key not in fuel:
+            continue
+        kept = (
+            classify(event)
+            .filter(pl.col("exclusion").is_null())
+            .drop_nulls("stint")
+            .with_columns(
+                (pl.col("lap_time_millis") - fuel[key] * pl.col("laps_remaining")).alias("light")
+            )
+        )
+        if not kept.height:
+            continue
+        fitted = (
+            kept.group_by("driver_code", "stint")
+            .agg(
+                pl.cov("lap_in_stint", "light").alias("cov"),
+                pl.col("lap_in_stint").var().alias("var"),
+                pl.len().alias("clean"),
+                (pl.col("lap_in_stint").max() - pl.col("lap_in_stint").min()).alias("span"),
+            )
+            .filter((pl.col("clean") >= 5) & (pl.col("span") >= 5) & (pl.col("var") > 0))
+            .select("driver_code", "stint", (pl.col("cov") / pl.col("var")).alias("wear_millis"))
+        )
+        found.append(
+            _stints(event)
+            .join(fitted, on=["driver_code", "stint"], how="left")
+            .with_columns(pl.lit(key[0]).alias("season"), pl.lit(key[1]).alias("round"))
+        )
+    if not found:
+        return _empty(tyres.STINT_COLUMNS)
+    return (
+        pl.concat(found, how="diagonal_relaxed")
+        .with_columns(pl.col("season").cast(pl.Int64), pl.col("round").cast(pl.Int64))
+        .join(dated, on=["season", "round"])
+        .select(tyres.STINT_COLUMNS)
+    )
+
+
 def _degradation_frame(paces: list[SessionPace], dated: pl.DataFrame) -> pl.DataFrame:
     rows = [
         {"season": item.season, "round": item.round, "millis_per_lap": item.b_tyre_millis}
@@ -366,6 +471,7 @@ class Forecast(BaseModel, frozen=True):
     assumptions: list[Assumption]
     # true before qualifying, when every path sampled its own grid
     grid_sampled: bool = False
+    pool: pooling.Pool | None = None
 
 
 def seats_for(
@@ -489,12 +595,27 @@ def setup(
         reference_millis=reference,
         drivers=drivers,
         start=starts.fit(pane.starts, as_of),
-        tyre=tyres.fit(pane.stops, pane.degradation, context.circuit_id, as_of),
+        tyre=_tyre_model(pane, context.circuit_id, as_of, scenario),
         passing=overtake.fit(pane.passes, context.circuit_id, as_of, traffic=pane.traffic),
         safety_car=caution,
         retirement=dnf.build(hazard, seats, ids),
         grid_known=not unknown,
         quali_noise_millis=reference * anchor_sd / 100.0 if unknown else 0.0,
+    )
+
+
+def _tyre_model(pane: Panel, circuit_id: str, as_of: date, scenario: str) -> tyres.TyreModel:
+    """Compounds and strategy only where they were measured: a wet race is run on inters and
+    full wets, which no dry strategy says anything about."""
+    if scenario != "dry":
+        return tyres.fit(pane.stops, pane.degradation, circuit_id, as_of)
+    return tyres.fit(
+        pane.stops,
+        pane.degradation,
+        circuit_id,
+        as_of,
+        strategies=pane.strategies,
+        stints=pane.stints,
     )
 
 
@@ -680,6 +801,68 @@ def forecast(
     )
 
 
+def pooled(
+    pane: Panel,
+    predicted: Forecast,
+    context: EventContext,
+    with_grid: pooling.Pool,
+    without_grid: pooling.Pool,
+) -> Forecast:
+    """The backtest's pool applied to a live forecast. Before qualifying there is no grid for
+    the grid baseline to read, so the pool fitted without one is used instead."""
+    codes = predicted.outcome.driver_code
+    width = len(predicted.outcome.position[0])
+    grid: np.ndarray | None = None
+    chosen = without_grid
+    if not predicted.grid_sampled:
+        slots = grid_for(pane, context, codes)
+        fitted = baselines.fit(
+            pane.results.select(baselines.COLUMNS),
+            predicted.as_of,
+            known=pane.entries,
+            width=width,
+        )
+        grid = fitted.lookups["grid"].predict([slots[code] for code in codes], width)
+        chosen = with_grid
+
+    def apply(outcome: race.Outcome) -> race.Outcome:
+        mixed = pooling.combine(outcome.probabilities(), grid, len(outcome.driver_code), chosen)
+        rank = np.arange(1, mixed.shape[1] + 1, dtype=np.float64)
+        return outcome.model_copy(
+            update={
+                "position": [[float(value) for value in row] for row in mixed],
+                "win": [float(row[0]) for row in mixed],
+                "podium": [float(row[:3].sum()) for row in mixed],
+                "points": [float(row[:10].sum()) for row in mixed],
+                "expected_position": [float(np.dot(row, rank)) for row in mixed],
+            }
+        )
+
+    return predicted.model_copy(
+        update={
+            "outcome": apply(predicted.outcome),
+            "scenarios": {name: apply(outcome) for name, outcome in predicted.scenarios.items()},
+            "assumptions": [*predicted.assumptions, *_pool_assumptions(chosen)],
+            "pool": chosen,
+        }
+    )
+
+
+def _pool_assumptions(fitted: pooling.Pool) -> list[Assumption]:
+    return [
+        Assumption(
+            name="pool_sim_power",
+            value=fitted.sim_power,
+            detail=f"how far the simulation is sharpened, fitted on {fitted.races} past races",
+        ),
+        Assumption(
+            name="pool_grid_power",
+            value=fitted.grid_power,
+            detail="how much of the grid-position baseline is folded in, zero before qualifying",
+        ),
+    ]
+
+
 def _assumptions(built: race.RaceSetup, drift: float) -> list[Assumption]:
     return [
         Assumption(
@@ -726,10 +909,40 @@ def _assumptions(built: race.RaceSetup, drift: float) -> list[Assumption]:
             value=drift,
             detail="how far a driver's Sunday drifts from his own rating",
         ),
+        *_compound_assumptions(built.tyre),
     ]
 
 
+def _compound_assumptions(tyre: tyres.TyreModel) -> list[Assumption]:
+    if not tyre.strategies:
+        return []
+    common = max(tyre.strategies, key=lambda item: item.front)
+    out = [
+        Assumption(
+            name=f"{name.lower()}_wear_ratio",
+            value=tyre.wear_ratio[name],
+            detail=f"{name.lower()} wear against the all-compound average, stints of about "
+            f"{tyre.stint_weights.get(name, 0.0):.0f} laps",
+        )
+        for name in tyres.SLICKS
+        if name in tyre.wear_ratio
+    ]
+    out.append(
+        Assumption(
+            name="front_runner_strategy_share",
+            value=common.front,
+            detail=f"{common.sequence} is the most common plan from the top ten, "
+            f"one of {len(tyre.strategies)} the simulation draws from",
+        )
+    )
+    return out
+
+
 MODEL = "simulation"
+# the simulation before the pool. kept in the report so the pool's own effect is visible
+RAW = "raw_simulation"
+# races forecast before the holdout so the pool has history from the first scored race on
+WARMUP = 30
 EVENTS = ("win", "podium", "points")
 EVENT_CUTOFF = {"win": 1, "podium": 3, "points": 10}
 
@@ -779,6 +992,10 @@ class Report(BaseModel, frozen=True):
     # clears zero, which is the only list that says the holdout actually separated them
     separated_from: list[str]
     assumptions: list[Assumption]
+    warmup: int = 0
+    # fitted on every race in the run, which is what a forecast made after it may use
+    pool: pooling.Pool = pooling.IDENTITY
+    pool_without_grid: pooling.Pool = pooling.IDENTITY
 
 
 def _renormalised(grid: np.ndarray, starters: int, width: int = FIELD) -> np.ndarray:
@@ -803,9 +1020,12 @@ def run(
     paths: int = race.PATHS,
     seed: int = 0,
     generated_at: datetime | None = None,
+    warmup: int = WARMUP,
 ) -> Report:
     """Time forward, one race at a time. Every fit behind a prediction sees only what had
-    happened when it was made, which is why the panel is filtered by date and never shuffled."""
+    happened when it was made, which is why the panel is filtered by date and never shuffled.
+    The pool is refitted before every scored race on the races forecast before it, warmup
+    included, so it is as blind to the race it is scored on as the simulation is."""
     # the calendar runs to the end of the season, and a race that has not been run has nothing
     # to score. counting it would shrink the holdout every time the schedule landed early
     played = pane.results.select("season", "round").unique()
@@ -813,10 +1033,11 @@ def run(
         pane.events.filter(pl.col("season") >= from_season)
         .join(played, on=["season", "round"], how="semi")
         .sort("race_date")
-        .tail(holdout)
+        .tail(holdout + warmup)
     )
     if not calendar.height:
         raise NoForecastError(f"no races from {from_season} to hold out")
+    first_scored = max(calendar.height - holdout, 0)
     entries = pane.results.select(baselines.COLUMNS)
     width = max(
         (
@@ -827,11 +1048,13 @@ def run(
         default=FIELD,
     )
 
-    grids: dict[str, list[np.ndarray]] = {MODEL: [], **{name: [] for name in baselines.FEATURES}}
+    names = (MODEL, RAW, *baselines.FEATURES)
+    grids: dict[str, list[np.ndarray]] = {name: [] for name in names}
     truth: list[np.ndarray] = []
     labels: list[np.ndarray] = []
     per_race: list[RaceScore] = []
     assumptions: list[Assumption] = []
+    history: list[pooling.Scored] = []
 
     for index, row in enumerate(calendar.iter_rows(named=True)):
         context = EventContext(
@@ -852,26 +1075,35 @@ def run(
         codes = [code for code in predicted.outcome.driver_code if code in finished]
         if len(codes) < 2:
             continue
-        starters = len(predicted.outcome.driver_code)
-        seen = {code: slot for slot, code in enumerate(predicted.outcome.driver_code)}
-        keep = [seen[code] for code in codes]
-        grids[MODEL].append(_renormalised(predicted.outcome.probabilities()[keep], starters, width))
-
         field = pane.entries.get((context.season, context.round))
         if field is None:
-            grids[MODEL].pop()
             continue
-        fitted = baselines.fit(entries, context.race_date, known=pane.entries, width=field.width)
-        guessed = fitted.predict(field)
         order = {code: slot for slot, code in enumerate(field.driver_code)}
         rows = [order[code] for code in codes if code in order]
         if len(rows) != len(codes):
-            grids[MODEL].pop()
             continue
-        for name in baselines.FEATURES:
-            grids[name].append(_renormalised(guessed[name][rows], starters, width))
-
+        starters = len(predicted.outcome.driver_code)
+        seen = {code: slot for slot, code in enumerate(predicted.outcome.driver_code)}
+        keep = [seen[code] for code in codes]
+        sim = _renormalised(predicted.outcome.probabilities()[keep], starters, width)
+        fitted = baselines.fit(entries, context.race_date, known=pane.entries, width=field.width)
+        guessed = {
+            name: _renormalised(values[rows], starters, width)
+            for name, values in fitted.predict(field).items()
+        }
         actual = np.array([finished[code] for code in codes]) - 1
+        scored = pooling.Scored(sim=sim, grid=guessed["grid"], actual=actual, starters=starters)
+        if index < first_scored:
+            history.append(scored)
+            continue
+
+        pool = pooling.fit(history)
+        grids[MODEL].append(pooling.combine(sim, guessed["grid"], starters, pool))
+        grids[RAW].append(sim)
+        for name in baselines.FEATURES:
+            grids[name].append(guessed[name])
+        history.append(scored)
+
         truth.append(actual)
         labels.append(np.full(len(codes), index))
         per_race.append(
@@ -891,12 +1123,13 @@ def run(
         raise NoForecastError("no race in the holdout produced both a forecast and a result")
     outcome = np.concatenate(truth)
     race_of = np.concatenate(labels)
-    scored = [
-        _score(name, np.vstack(grids[name]), outcome, race_of, rng)
-        for name in (MODEL, *baselines.FEATURES)
-    ]
-    ours = next(item for item in scored if item.name == MODEL)
-    beats = all(ours.log_loss.value < item.log_loss.value for item in scored if item.name != MODEL)
+    scored_models = [_score(name, np.vstack(grids[name]), outcome, race_of, rng) for name in names]
+    ours = next(item for item in scored_models if item.name == MODEL)
+    beats = all(
+        ours.log_loss.value < item.log_loss.value
+        for item in scored_models
+        if item.name in baselines.FEATURES
+    )
     mine = np.vstack(grids[MODEL])
     paired = [
         _paired(name, mine, np.vstack(grids[name]), outcome, race_of, rng)
@@ -907,6 +1140,7 @@ def run(
         for item in paired
         if np.isfinite(item.log_loss_gain.low) and item.log_loss_gain.low > 0.0
     ]
+    final = pooling.fit(history)
     return Report(
         generated_at=generated_at or datetime.now(UTC),
         run_id=run_id,
@@ -915,12 +1149,15 @@ def run(
         paths=paths,
         field=width,
         seed=seed,
-        scored=scored,
+        scored=scored_models,
         paired=paired,
         per_race=per_race,
         beats_baselines=beats,
         separated_from=separated,
-        assumptions=assumptions,
+        assumptions=[*assumptions, *_pool_assumptions(final)],
+        warmup=warmup,
+        pool=final,
+        pool_without_grid=pooling.fit(history, with_grid=False),
     )
 
 

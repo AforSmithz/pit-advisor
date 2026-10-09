@@ -6,7 +6,7 @@ import polars as pl
 import pytest
 
 from pitadvisor.features.assemble import event_at, next_event
-from pitadvisor.model import backtest
+from pitadvisor.model import backtest, pool
 from pitadvisor.model.baselines import FEATURES
 
 SEED = 5
@@ -97,7 +97,7 @@ def test_a_walk_forward_scores_the_model_against_every_baseline(pane):
     report = backtest.run(
         pane, 2024, 4, np.random.default_rng(SEED), "test-run", paths=200, seed=SEED
     )
-    assert {item.name for item in report.scored} == {backtest.MODEL, *FEATURES}
+    assert {item.name for item in report.scored} == {backtest.MODEL, backtest.RAW, *FEATURES}
     assert {item.baseline for item in report.paired} == set(FEATURES)
     assert report.per_race
     for scored in report.scored:
@@ -291,3 +291,31 @@ def test_a_circuits_first_race_takes_its_distance_from_the_past_not_the_lake(pan
         pane, first, context.race_date
     )
     assert backtest._race_laps(padded, first, context.race_date) < 999
+
+
+def test_the_warmup_feeds_the_pool_but_is_never_scored(pane):
+    report = backtest.run(
+        pane, 2023, 2, np.random.default_rng(SEED), "test-run", paths=150, seed=SEED, warmup=3
+    )
+    assert len(report.per_race) <= 2
+    assert report.warmup == 3
+    assert report.pool.races >= len(report.per_race)
+    assert report.pool_without_grid.grid_power == 0.0
+    names = {item.name for item in report.assumptions}
+    assert {"pool_sim_power", "pool_grid_power"} <= names
+
+
+def test_a_pooled_forecast_still_hands_out_every_place_once(pane, store):
+    context = event_at(store, 2024, 2)
+    raw = backtest.forecast(
+        pane, context, context.race_date, np.random.default_rng(SEED), paths=200
+    )
+    sharp = pool.Pool(sim_power=1.5, grid_power=0.3, races=10)
+    flat = pool.Pool(sim_power=1.2, grid_power=0.0, races=10)
+    pooled = backtest.pooled(pane, raw, context, sharp, flat)
+    grid = np.asarray(pooled.outcome.position)
+    assert np.allclose(grid.sum(axis=1), 1.0)
+    assert sum(pooled.outcome.win) == pytest.approx(1.0, abs=1e-6)
+    assert pooled.pool == sharp
+    assert pooled.outcome.finish == raw.outcome.finish
+    assert max(pooled.outcome.win) > max(raw.outcome.win)

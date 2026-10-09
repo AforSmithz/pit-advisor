@@ -29,7 +29,7 @@ def test_a_synthetic_lake_walks_from_bronze_to_both_forecast_artifacts(store, se
     report = backtest.run(
         pane, 2024, 4, np.random.default_rng(SEED), "integration", paths=300, seed=SEED
     )
-    assert {item.name for item in report.scored} == {backtest.MODEL, *FEATURES}
+    assert {item.name for item in report.scored} == {backtest.MODEL, backtest.RAW, *FEATURES}
     assert all(item.log_loss.value > 0 for item in report.scored)
     assert all(item.log_loss.draws > 0 for item in report.scored)
 
@@ -90,6 +90,8 @@ def test_no_fit_behind_a_forecast_has_seen_the_race_it_predicts(store, seeded):
         laps={key: laps for key, laps in pane.laps.items() if built.held(*key) < context.race_date},
         entries=pane.entries,
         qualified=pane.qualified,
+        strategies=pane.strategies.filter(pl.col("race_date") < context.race_date),
+        stints=pane.stints.filter(pl.col("race_date") < context.race_date),
     )
     blind = backtest.forecast(
         truncated, context, context.race_date, np.random.default_rng(SEED), paths=400
