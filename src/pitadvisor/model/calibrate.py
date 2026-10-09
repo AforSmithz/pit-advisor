@@ -4,7 +4,7 @@
 from pathlib import Path
 from typing import Any
 
-from pitadvisor.model.backtest import EVENTS, MODEL, Report, Scored
+from pitadvisor.model.backtest import EVENTS, MODEL, RAW, Report, Scored
 
 # the dashboard's plate palette, so a reliability curve and a pace trace read as one product
 PLATE = "#0e0f11"
@@ -14,7 +14,7 @@ LUME = "#ece6d6"
 SPLIT = "#c8202a"
 WET = "#6f97a8"
 LUME_DIM = "#a49e90"
-SERIES = {MODEL: SPLIT, "grid": LUME, "standings": WET, "last_race": LUME_DIM}
+SERIES = {MODEL: SPLIT, RAW: STEEL, "grid": LUME, "standings": WET, "last_race": LUME_DIM}
 FIGURE = "reliability.png"
 SUMMARY = "summary.txt"
 REPORT = "backtest.json"
@@ -92,7 +92,7 @@ def _panel(panel: Any, report: Report, event: str) -> None:
 
 def _row(scored: Scored) -> str:
     return (
-        f"{scored.name:<11} "
+        f"{scored.name:<14} "
         f"log loss {scored.log_loss.value:6.4f} "
         f"[{scored.log_loss.low:6.4f}, {scored.log_loss.high:6.4f}]  "
         f"brier {scored.brier.value:6.4f} "
@@ -115,16 +115,9 @@ def summarise(report: Report) -> str:
     ]
     lines.extend(_row(scored) for scored in report.scored)
     lines.append("")
-    beaten = [
-        item.name
-        for item in report.scored
-        if item.name != MODEL and ours.log_loss.value < item.log_loss.value
-    ]
-    lost = [
-        item.name
-        for item in report.scored
-        if item.name != MODEL and ours.log_loss.value >= item.log_loss.value
-    ]
+    others = [item for item in report.scored if item.name not in (MODEL, RAW)]
+    beaten = [item.name for item in others if ours.log_loss.value < item.log_loss.value]
+    lost = [item.name for item in others if ours.log_loss.value >= item.log_loss.value]
     lines.append(
         f"the simulation beats {', '.join(beaten) if beaten else 'no baseline'} on log loss"
         + (f" and loses to {', '.join(lost)}" if lost else "")
@@ -144,6 +137,13 @@ def summarise(report: Report) -> str:
             f"brier {item.brier_gain.value:+7.4f} "
             f"[{item.brier_gain.low:+7.4f}, {item.brier_gain.high:+7.4f}]"
         )
+    lines.append("")
+    pool = report.pool
+    lines.append(
+        f"pooled as sim^{pool.sim_power:.2f} x grid^{pool.grid_power:.2f}, refitted before every "
+        f"scored race on the races before it, {report.warmup} of them warm-up only. "
+        f"before qualifying, sim^{report.pool_without_grid.sim_power:.2f}"
+    )
     lines.append("")
     lines.append("assumptions the simulation was run under")
     lines.extend(

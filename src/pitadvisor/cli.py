@@ -734,6 +734,12 @@ def _forecast(store: ObjectStore, event: str, paths: int, seed: int, results: Pa
     except forecast_model.NoForecastError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
+    source = results / calibrate.REPORT
+    if source.exists():
+        report = forecast_model.Report.model_validate_json(source.read_text())
+        predicted = forecast_model.pooled(
+            pane, predicted, context, report.pool, report.pool_without_grid
+        )
     seats, _ = forecast_model.seats_for(pane, context, context.race_date)
     return forecast_view(
         predicted,
