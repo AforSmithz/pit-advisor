@@ -83,7 +83,7 @@ answer every time, which is the gate doing its job rather than a gate worth lowe
 The forecast clears its own bar too, though by less than a chart would suggest. The holdout is
 the last sixty races run, from the 2024 Chinese Grand Prix to the sixteenth round of 2026, so
 sixteen of them are in 2026's twenty-two-car field. The simulation's multiclass log loss is
-2.589 [2.545, 2.635], against 2.608 for grid position alone, 2.726 for championship standings
+2.589 [2.544, 2.634], against 2.608 for grid position alone, 2.726 for championship standings
 and 2.825 for last race's result. Resampled at the race
 level, it is separated from standings and from last race, and it is not separated from the grid
 on log loss, only on Brier: sixty races cannot tell the simulation and the starting order apart.
