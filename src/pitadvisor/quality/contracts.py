@@ -122,6 +122,8 @@ class SessionLapRow(BronzeRow):
     pit_in: bool = False
     pit_out: bool = False
     position: int | None = Field(default=None, ge=1, le=30)
+    # the session clock when the car crossed the line, not a duration
+    session_time_millis: int | None = Field(default=None, gt=0)
 
 
 class IncidentRow(BronzeRow):

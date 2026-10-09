@@ -161,6 +161,7 @@ def to_records(
                 "pit_in": lap.get("PitInTime") is not None,
                 "pit_out": lap.get("PitOutTime") is not None,
                 "position": _int_or_none(lap.get("Position")),
+                "session_time_millis": lap.get("Time"),
             }
         )
     return records

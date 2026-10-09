@@ -275,3 +275,14 @@ def test_a_season_in_progress_stops_at_the_last_race_held():
         {"RoundNumber": 3, "EventFormat": "conventional", "EventDate": date(2025, 4, 6)},
     ]
     assert held_events(events, date(2025, 3, 30)) == {1: "conventional", 2: "sprint_qualifying"}
+
+
+def test_the_session_clock_lands_next_to_the_lap_time():
+    rows = records(lap(Time=timedelta(minutes=58, seconds=3.2)))
+    assert rows[0]["session_time_millis"] == 3_483_200
+
+
+def test_a_red_flag_lap_keeps_its_session_clock():
+    rows = records(lap(LapTime=None, Time=timedelta(hours=1)))
+    assert rows[0]["lap_time_millis"] is None
+    assert rows[0]["session_time_millis"] == 3_600_000
