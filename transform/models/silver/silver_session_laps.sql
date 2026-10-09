@@ -2,6 +2,7 @@
     materialized='incremental',
     unique_key='session_lap_id',
     incremental_strategy=merge_or_replace(),
+    on_schema_change='append_new_columns',
     partitioned_by=['season'],
     enabled=(var('session_laps') or target.type == 'athena'),
 ) }}
@@ -54,6 +55,7 @@ select
     pit_in,
     pit_out,
     position,
+    session_time_millis,
     -- fastf1 concatenates one digit per marshal sector, so a 4 anywhere means the lap saw a sc
     case when track_status like '%4%' then true else false end as saw_safety_car,
     case when track_status like '%6%' or track_status like '%7%' then true else false end
