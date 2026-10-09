@@ -155,7 +155,7 @@ def summarise(report: Report) -> str:
 def write(report: Report, output: Path) -> list[Path]:
     output.mkdir(parents=True, exist_ok=True)
     written = [output / REPORT, output / SUMMARY]
-    written[0].write_text(report.model_dump_json(indent=2))
+    written[0].write_text(report.model_dump_json(indent=2) + "\n")
     written[1].write_text(summarise(report))
     written.append(render(report, output))
     return written

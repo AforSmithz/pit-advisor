@@ -851,7 +851,7 @@ def backtest(
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
     output.mkdir(parents=True, exist_ok=True)
-    (output / calibrate.REPORT).write_text(report.model_dump_json(indent=2))
+    (output / calibrate.REPORT).write_text(report.model_dump_json(indent=2) + "\n")
     typer.echo(calibrate.summarise(report), nl=False)
     typer.echo(f"\nwrote {output / calibrate.REPORT}")
 
