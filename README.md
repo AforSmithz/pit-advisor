@@ -152,6 +152,12 @@ concept, so that a new floor counted for more than a flap trim. It scored +0.005
 +0.012] over the plain count, but worse on the weekends that had updates, and was taken out; its
 95 answers stay in the lake so it can be re-measured without asking again.
 
+Because each round of changes spends the races it was chosen on, the evidence that cannot be
+spent is the forecast as it was published before each race. Every forecast the pipeline emits
+before its session starts is also written once to `views/history/`, where nothing overwrites or
+expires it, and `pitadv score-published` grades the one standing at lights out against the
+result and the baselines. That record starts with Singapore 2026.
+
 ## Architecture
 
 ```
