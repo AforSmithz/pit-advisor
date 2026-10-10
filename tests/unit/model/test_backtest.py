@@ -707,11 +707,71 @@ def test_an_upgrade_counts_only_before_the_forecast_and_by_its_size(pane):
     assert backtest.upgrade_discounts(planted, date(2024, 7, 1), 1.0) == {}
 
 
+def test_jev_magnitude_replaces_the_count_only_when_asked(pane):
+    when = date(2024, 3, 1)
+    planted = planted_upgrades(
+        pane,
+        [
+            {
+                "season": 2024,
+                "round": 1,
+                "race_date": when,
+                "constructor_id": "alpha",
+                "count": 3,
+                "magnitude": 1.5,
+            },
+            {
+                "season": 2024,
+                "round": 1,
+                "race_date": when,
+                "constructor_id": "bravo",
+                "count": 2,
+                "magnitude": None,
+            },
+        ],
+    )
+    counted = backtest.upgrade_discounts(planted, date(2024, 5, 1), 0.5)
+    assert counted["alpha"] == (when, 0.5**3)
+    sized = backtest.upgrade_discounts(planted, date(2024, 5, 1), 0.5, magnitude=True)
+    assert sized["alpha"] == (when, 0.5**1.5)
+    # an event jev did not read in full falls back to the count
+    assert sized["bravo"] == (when, 0.25)
+
+
+def test_the_upgrade_frame_sums_jev_levels_and_leaves_a_partial_read_empty():
+    events = pl.DataFrame({"season": [2024], "round": [9], "race_date": [date(2024, 6, 30)]})
+    updates = pl.DataFrame(
+        {
+            "season": [2024] * 5,
+            "round": [9] * 5,
+            "document_name": ["doc"] * 5,
+            "constructor_id": ["alpha", "alpha", "alpha", "bravo", "bravo"],
+            "ordinal": [1, 2, 3, 1, 2],
+            "category": ["performance", "performance", "reliability", "performance", "performance"],
+        }
+    )
+    magnitudes = pl.DataFrame(
+        {
+            "season": [2024] * 3,
+            "round": [9] * 3,
+            "document_name": ["doc"] * 3,
+            "constructor_id": ["alpha", "alpha", "bravo"],
+            "ordinal": [1, 2, 1],
+            "magnitude": [0.5, 2.25, 3.0],
+        }
+    )
+    frame = backtest._upgrade_frame(updates, events, magnitudes).sort("constructor_id")
+    assert frame["count"].to_list() == [2, 2]
+    assert frame["magnitude"].to_list() == [2.75, None]
+    plain = backtest._upgrade_frame(updates, events)
+    assert plain["magnitude"].null_count() == plain.height
+
+
 def test_with_no_upgrades_the_discount_leaves_the_model_alone(pane):
     assert backtest.upgrade_discount(planted_upgrades(pane, []), date(2030, 1, 1)) == 1.0
 
 
-def test_the_upgrade_signal_stays_off_unless_asked(pane, store):
+def test_without_declared_updates_the_upgrade_signal_changes_nothing(pane, store):
     context = event_at(store, 2024, 4)
     shipped = backtest.setup(pane, context, context.race_date, "dry")
     again = backtest.setup(
@@ -761,7 +821,7 @@ def test_the_model_is_scored_against_the_market_on_the_races_it_priced(pane):
     assert backtest.market_scores(walk, pane, np.random.default_rng(SEED)) == []
 
 
-def test_sprint_qualifying_anchors_only_before_main_qualifying_and_only_when_asked(pane, store):
+def test_sprint_qualifying_anchors_only_before_main_qualifying(pane, store):
     context = event_at(store, 2024, 3)
     friday = backtest.before_qualifying(pane, context)
     seats, _ = backtest.seats_for(pane, context, context.race_date)
@@ -778,7 +838,8 @@ def test_sprint_qualifying_anchors_only_before_main_qualifying_and_only_when_ask
     )
     planted = dataclasses.replace(friday, sprint_quali=reading)
     on = backtest.Variant(sprint_quali_anchor=True)
-    plain = backtest.setup(planted, context, context.race_date, "dry")
+    off = backtest.Variant(sprint_quali_anchor=False)
+    plain = backtest.setup(planted, context, context.race_date, "dry", variant=off)
     anchored = backtest.setup(planted, context, context.race_date, "dry", variant=on)
     # a driver with only one qualifying-to-race sample has an unbounded delta error and is left
     # where he was, exactly as the main-qualifying anchor leaves him
@@ -786,7 +847,7 @@ def test_sprint_qualifying_anchors_only_before_main_qualifying_and_only_when_ask
     # after qualifying the grid is known and the sprint reading is not used
     saturday = dataclasses.replace(pane, sprint_quali=reading)
     after = backtest.setup(saturday, context, context.race_date, "dry", variant=on)
-    again = backtest.setup(saturday, context, context.race_date, "dry")
+    again = backtest.setup(saturday, context, context.race_date, "dry", variant=off)
     assert [d.pace_millis for d in after.drivers] == pytest.approx(
         [d.pace_millis for d in again.drivers], rel=1e-12
     )

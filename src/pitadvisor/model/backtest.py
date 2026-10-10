@@ -96,9 +96,11 @@ class Variant(BaseModel, frozen=True):
     # the sprint as one more pace event, dated the day it ran, so sunday's forecast sees it
     sprint_pace: bool = True
     # a team's older pace counts for less after it declares performance updates
-    upgrade_signal: bool = False
+    upgrade_signal: bool = True
+    # jev's reading of how big each declared update is, in place of counting them
+    upgrade_magnitude: bool = False
     # before main qualifying on a sprint weekend, sprint qualifying anchors race pace
-    sprint_quali_anchor: bool = False
+    sprint_quali_anchor: bool = True
 
 
 TYPES: dict[str, type[pl.DataType]] = {
@@ -179,8 +181,8 @@ class Panel:
         default_factory=lambda: pl.DataFrame(schema=starting.KNOCKOUT_SCHEMA)
     )
     # one-step-ahead team pace error per race and upgrade discount, filled as a walk needs it
-    upgrade_errors: dict[tuple[int, int], dict[float, float]] = dataclass_field(
-        default_factory=dict[tuple[int, int], dict[float, float]], repr=False
+    upgrade_errors: dict[tuple[int, int, bool], dict[float, float]] = dataclass_field(
+        default_factory=dict[tuple[int, int, bool], dict[float, float]], repr=False
     )
     # the same columns as pace, one row per driver per sprint, dated the sprint's day
     sprint_pace: pl.DataFrame = dataclass_field(
@@ -189,7 +191,7 @@ class Panel:
 
 
 # bump when Panel changes shape, so a cache written by older code is never read by newer code
-PANEL_VERSION = 15
+PANEL_VERSION = 16
 PANEL_TABLES = (
     "races",
     "results",
@@ -198,6 +200,7 @@ PANEL_TABLES = (
     "incident_sanctions",
     "incidents",
     "car_updates",
+    "car_update_magnitudes",
     "market_odds",
 )
 PANEL_PREFIX = f"{Layer.CACHE}/panel/"
@@ -351,7 +354,11 @@ def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:
             read_table(store, layer, "incidents"),
             results,
         ),
-        upgrades=_upgrade_frame(read_table(store, layer, "car_updates"), events),
+        upgrades=_upgrade_frame(
+            read_table(store, layer, "car_updates"),
+            events,
+            read_table(store, layer, "car_update_magnitudes"),
+        ),
         markets=_market_frame(read_table(store, layer, "market_odds")),
         sprint_quali=_knockout_frame(
             laps.filter(
@@ -522,21 +529,47 @@ def _market_frame(odds: pl.DataFrame | None) -> pl.DataFrame:
     ).unique(subset=["season", "round", "source", "market", "driver_code"], keep="last")
 
 
-def _upgrade_frame(updates: pl.DataFrame | None, events: pl.DataFrame) -> pl.DataFrame:
-    """Per team and event, how many updates the team said were for performance."""
+def _upgrade_frame(
+    updates: pl.DataFrame | None,
+    events: pl.DataFrame,
+    magnitudes: pl.DataFrame | None = None,
+) -> pl.DataFrame:
+    """Per team and event, how many updates the team said were for performance, and the sum
+    of jev's levels for them. The sum is left empty unless every one of them was read."""
     if updates is None or not updates.height:
         return _empty_upgrades()
-    counted = (
-        updates.filter(pl.col("ordinal") > 0)
-        .group_by("season", "round", "constructor_id")
-        .agg((pl.col("category") == "performance").sum().cast(pl.Int64).alias("count"))
-    )
-    declared = updates.select("season", "round", "constructor_id").unique()
-    return (
-        declared.join(counted, on=["season", "round", "constructor_id"], how="left")
-        .with_columns(
-            pl.col("count").fill_null(0), pl.lit(None, dtype=pl.Float64).alias("magnitude")
+    keys = ["season", "round", "constructor_id"]
+    performance = updates.filter((pl.col("ordinal") > 0) & (pl.col("category") == "performance"))
+    counted = performance.group_by(keys).agg(pl.len().cast(pl.Int64).alias("count"))
+    if magnitudes is not None and magnitudes.height:
+        read = (
+            performance.select(*keys, "document_name", "ordinal")
+            .join(
+                magnitudes.select(
+                    *keys,
+                    "document_name",
+                    pl.col("ordinal").cast(performance.schema["ordinal"]),
+                    "magnitude",
+                ).unique(subset=[*keys, "document_name", "ordinal"], keep="last"),
+                on=[*keys, "document_name", "ordinal"],
+                how="left",
+            )
+            .group_by(keys)
+            .agg(
+                pl.when(pl.col("magnitude").null_count() == 0)
+                .then(pl.col("magnitude").sum())
+                .otherwise(None)
+                .cast(pl.Float64)
+                .alias("magnitude")
+            )
         )
+        counted = counted.join(read, on=keys, how="left")
+    else:
+        counted = counted.with_columns(pl.lit(None, dtype=pl.Float64).alias("magnitude"))
+    declared = updates.select(keys).unique()
+    return (
+        declared.join(counted, on=keys, how="left")
+        .with_columns(pl.col("count").fill_null(0))
         .join(events.select("season", "round", "race_date"), on=["season", "round"])
         .select(UPGRADE_COLUMNS)
     )
@@ -864,7 +897,12 @@ def setup(
     dry = history.filter(~pl.col("is_wet"))
     shape = form.fit(dry.select(form.COLUMNS), as_of)
     discounts = (
-        upgrade_discounts(pane, as_of, upgrade_discount(pane, as_of))
+        upgrade_discounts(
+            pane,
+            as_of,
+            upgrade_discount(pane, as_of, chosen.upgrade_magnitude),
+            chosen.upgrade_magnitude,
+        )
         if chosen.upgrade_signal
         else None
     )
@@ -921,7 +959,9 @@ def setup(
     )
 
 
-def upgrade_discounts(pane: Panel, as_of: date, factor: float) -> dict[str, tuple[date, float]]:
+def upgrade_discounts(
+    pane: Panel, as_of: date, factor: float, magnitude: bool = False
+) -> dict[str, tuple[date, float]]:
     """Each team's latest declared performance upgrade before as_of, and how much its older
     rows count for: the factor once per update, capped."""
     if factor >= 1.0 or not pane.upgrades.height:
@@ -934,7 +974,8 @@ def upgrade_discounts(pane: Panel, as_of: date, factor: float) -> dict[str, tupl
     )
     found: dict[str, tuple[date, float]] = {}
     for row in latest.iter_rows(named=True):
-        size = row["magnitude"] if row["magnitude"] is not None else row["count"]
+        # an event jev did not read in full falls back to the count
+        size = row["magnitude"] if magnitude and row["magnitude"] is not None else row["count"]
         found[str(row["constructor_id"])] = (
             row["race_date"],
             factor ** min(float(size), float(UPGRADE_CAP)),
@@ -942,14 +983,15 @@ def upgrade_discounts(pane: Panel, as_of: date, factor: float) -> dict[str, tupl
     return found
 
 
-def upgrade_discount(pane: Panel, as_of: date) -> float:
+def upgrade_discount(pane: Panel, as_of: date, magnitude: bool = False) -> float:
     errors: dict[float, list[float]] = {factor: [] for factor in UPGRADE_DISCOUNTS}
     if not pane.upgrades.height:
         return 1.0
     first = pane.upgrades["race_date"].min()
     later = pane.events.filter((pl.col("race_date") < as_of) & (pl.col("race_date") > first))
     for row in later.iter_rows(named=True):
-        for factor, error in _upgrade_errors(pane, int(row["season"]), int(row["round"])).items():
+        found = _upgrade_errors(pane, int(row["season"]), int(row["round"]), magnitude)
+        for factor, error in found.items():
             errors[factor].append(error)
     scored = {factor: float(np.mean(values)) for factor, values in errors.items() if values}
     if not scored:
@@ -958,8 +1000,10 @@ def upgrade_discount(pane: Panel, as_of: date) -> float:
     return min(scored, key=lambda factor: (scored[factor], -factor))
 
 
-def _upgrade_errors(pane: Panel, season: int, round_: int) -> dict[float, float]:
-    key = (season, round_)
+def _upgrade_errors(
+    pane: Panel, season: int, round_: int, magnitude: bool = False
+) -> dict[float, float]:
+    key = (season, round_, magnitude)
     if key in pane.upgrade_errors:
         return pane.upgrade_errors[key]
     teams = team_frame(pane.pace)
@@ -970,11 +1014,14 @@ def _upgrade_errors(pane: Panel, season: int, round_: int) -> dict[float, float]
         circuit = str(here["circuit_id"][0])
         actual = dict(zip(here["constructor_id"].to_list(), here["value"].to_list(), strict=True))
         before = teams.filter(pl.col("race_date") < when)
-        if before.height and upgrade_discounts(pane, when, 0.5):
+        if before.height and upgrade_discounts(pane, when, 0.5, magnitude):
             for factor in UPGRADE_DISCOUNTS:
                 try:
                     fitted = track_fit.fit(
-                        before, circuit, when, discounts=upgrade_discounts(pane, when, factor)
+                        before,
+                        circuit,
+                        when,
+                        discounts=upgrade_discounts(pane, when, factor, magnitude),
                     )
                 except track_fit.UnknownCircuitError:
                     break
