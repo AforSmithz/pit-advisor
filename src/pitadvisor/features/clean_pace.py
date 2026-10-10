@@ -25,6 +25,10 @@ MIN_DRIVERS = 2
 # the single fastest estimate is an extreme order statistic: on a race with few clean laps it
 # came back 553 ms low, which is most of the field spread. the mean of the best three is not
 BENCHMARK_TRIM = 3
+# a sprint is one stint, read as a median, and a median of fewer laps than this is noise
+MIN_STINT_LAPS = 4
+# the efficiency of a median against a mean under normal errors
+MEDIAN_EFFICIENCY = 1.2533
 HUBER_TUNING = 1.345
 # rank is exact here, not a judgement call: a confounded design has a singular value at 1e-15
 RANK_TOLERANCE = 1e-8
@@ -365,4 +369,56 @@ def fit_session(
         exclusions=exclusion_counts(classified),
         exclusion_rate=exclusion_rate(classified),
         condition_number=float(np.linalg.cond(x)),
+    )
+
+
+def fit_single_stint(laps: pl.DataFrame, regime: Regime = Regime.DRY) -> SessionPace | None:
+    """A sprint, where every car runs one stint on the same fuel and the same range of tyre
+    age. The pooled fit cannot separate the two there, but the field shares them, so each
+    driver's median clean lap against the same benchmark is a fair reading."""
+    classified = classify(laps, regime=regime)
+    kept = clean(classified)
+    if not kept.height:
+        return None
+    rows: list[tuple[str, float, float, int, pl.DataFrame]] = []
+    for code, own in kept.group_by("driver_code"):
+        if own.height < MIN_STINT_LAPS:
+            continue
+        times = own["lap_time_millis"].to_numpy().astype(float)
+        error = MEDIAN_EFFICIENCY * float(np.std(times, ddof=1)) / np.sqrt(times.size)
+        rows.append((str(code[0]), float(np.median(times)), error, own.height, own))
+    if len(rows) < MIN_DRIVERS:
+        return None
+    benchmark = float(np.sort([pace for _, pace, _, _, _ in rows])[:BENCHMARK_TRIM].mean())
+    paced = [
+        DriverPace(
+            driver_code=code,
+            clean_pace_millis=pace,
+            standard_error_millis=error,
+            interval_low_millis=pace - 1.96 * error,
+            interval_high_millis=pace + 1.96 * error,
+            clean_laps=count,
+            mean_tyre_age=float(own["lap_in_stint"].to_numpy().astype(float).mean()),
+            mean_race_progress=float(own["laps_remaining"].to_numpy().astype(float).mean()),
+            percent_off_benchmark=100.0 * (pace - benchmark) / benchmark,
+        )
+        for code, pace, error, count, own in sorted(rows)
+    ]
+    first = kept.row(0, named=True)
+    return SessionPace(
+        season=int(first["season"]),
+        round=int(first["round"]),
+        session=SessionKind(first["session"]),
+        regime=regime,
+        drivers=paced,
+        b_tyre_millis=0.0,
+        b_progress_millis=None,
+        compound_offsets_millis={},
+        reference_compound=_reference_compound(kept),
+        benchmark_millis=benchmark,
+        clean_laps=kept.height,
+        total_laps=classified.height,
+        exclusions=exclusion_counts(classified),
+        exclusion_rate=exclusion_rate(classified),
+        condition_number=0.0,
     )

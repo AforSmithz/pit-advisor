@@ -92,8 +92,17 @@ def races(store: ObjectStore, layer: Layer = Layer.BRONZE) -> pl.DataFrame:
     frame = read_table(store, layer, "races")
     if frame is None:
         raise NoEventError("no races in bronze, ingest jolpica first")
+    # a schedule landed before sprints were recorded has no column, which is not a sprint
+    if "sprint_date" not in frame.columns:
+        frame = frame.with_columns(pl.lit(None, dtype=pl.Date).alias("sprint_date"))
     return frame.select(
-        "season", "round", "circuit_id", "race_name", "race_date", "start_utc"
+        "season",
+        "round",
+        "circuit_id",
+        "race_name",
+        "race_date",
+        "start_utc",
+        pl.col("sprint_date").cast(pl.Date),
     ).unique(subset=["season", "round"], keep="last")
 
 

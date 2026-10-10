@@ -3,10 +3,14 @@ import polars as pl
 import pytest
 
 from pitadvisor.features.clean_pace import (
+    BENCHMARK_TRIM,
+    MIN_STINT_LAPS,
     REFERENCE_LAPS_REMAINING,
     REFERENCE_TYRE_AGE,
+    Regime,
     UnidentifiableFitError,
     fit_session,
+    fit_single_stint,
 )
 
 B_TYRE = 80.0
@@ -252,3 +256,38 @@ def test_a_confound_the_progress_slope_cannot_explain_still_refuses():
     )
     with pytest.raises(UnidentifiableFitError):
         fit_session(frame)
+
+
+def sprint(noise_millis: float = 120.0, seed: int = 3) -> pl.DataFrame:
+    return one_stint(noise_millis, seed).with_columns(pl.lit("sprint").alias("session"))
+
+
+def test_a_single_stint_reads_each_drivers_gap_from_the_median_lap():
+    fitted = fit_single_stint(sprint())
+    assert fitted is not None
+    assert fitted.session == "sprint"
+    paces = {driver.driver_code: driver.clean_pace_millis for driver in fitted.drivers}
+    for code, effect in DRIVERS.items():
+        if code in paces and "AAA" in paces:
+            assert paces[code] - paces["AAA"] == pytest.approx(effect, abs=200.0)
+
+
+def test_a_single_stint_scores_against_the_quickest_three():
+    fitted = fit_single_stint(sprint())
+    assert fitted is not None
+    quickest = sorted(driver.clean_pace_millis for driver in fitted.drivers)[:BENCHMARK_TRIM]
+    assert fitted.benchmark_millis == pytest.approx(float(np.mean(quickest)))
+    assert min(driver.percent_off_benchmark for driver in fitted.drivers) < 0.0
+
+
+def test_a_driver_with_too_few_clean_sprint_laps_is_left_out():
+    laps = sprint().filter(
+        (pl.col("driver_code") != "FFF") | (pl.col("lap") <= 2 + MIN_STINT_LAPS - 1)
+    )
+    fitted = fit_single_stint(laps)
+    assert fitted is not None
+    assert "FFF" not in {driver.driver_code for driver in fitted.drivers}
+
+
+def test_a_wet_sprint_on_slicks_gives_no_wet_reading():
+    assert fit_single_stint(sprint(), regime=Regime.WET) is None
