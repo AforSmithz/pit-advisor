@@ -1,67 +1,71 @@
-pit advisor backtest, run 20261010T140937-65fab3, generated 2026-10-10 14:18
-60 races held out from 2021 onwards, 1231 driver-races, 4000 paths a race, seed 11
+pit advisor backtest, run 20261010T163051-65f143, generated 2026-10-10 16:36
+16 races held out from 2021 onwards, 352 driver-races, 4000 paths a race, seed 11
 
 multiclass over classified finishing position, intervals bootstrapped at the race
 level because drivers inside one race share a car, a strategy and a safety car
 
-simulation     log loss 2.5458 [2.4736, 2.6174]  brier 0.8919 [0.8813, 0.9028]  ece win 0.008  ece podium 0.012  ece points 0.029
-raw_simulation log loss 2.5854 [2.5406, 2.6335]  brier 0.8973 [0.8909, 0.9037]  ece win 0.011  ece podium 0.034  ece points 0.062
-grid           log loss 2.6078 [2.5581, 2.6588]  brier 0.9024 [0.8971, 0.9081]  ece win 0.025  ece podium 0.040  ece points 0.037
-standings      log loss 2.7264 [2.6844, 2.7669]  brier 0.9221 [0.9179, 0.9262]  ece win 0.010  ece podium 0.025  ece points 0.032
-last_race      log loss 2.8251 [2.7930, 2.8603]  brier 0.9313 [0.9280, 0.9345]  ece win 0.005  ece podium 0.025  ece points 0.031
+simulation     log loss 2.6251 [2.4743, 2.7800]  brier 0.8936 [0.8794, 0.9081]  ece win 0.022  ece podium 0.018  ece points 0.067
+raw_simulation log loss 2.6237 [2.5074, 2.7438]  brier 0.8971 [0.8858, 0.9087]  ece win 0.023  ece podium 0.046  ece points 0.054
+grid           log loss 2.6742 [2.5898, 2.7661]  brier 0.9065 [0.8977, 0.9157]  ece win 0.035  ece podium 0.037  ece points 0.061
+standings      log loss 2.7715 [2.7095, 2.8340]  brier 0.9244 [0.9173, 0.9305]  ece win 0.011  ece podium 0.045  ece points 0.027
+last_race      log loss 2.8916 [2.8421, 2.9446]  brier 0.9333 [0.9285, 0.9381]  ece win 0.010  ece podium 0.026  ece points 0.031
 
 the simulation beats grid, standings, last_race on log loss
-this holdout separates it from grid, standings, last_race, the rest are inside bootstrap noise
+this holdout separates it from standings, last_race, the rest are inside bootstrap noise
 
 how much better than each baseline, resampled over the same races. an
 interval that straddles zero means the two are not separated by this holdout
-  vs grid        log loss +0.0620 [+0.0181, +0.1055]  brier +0.0106 [+0.0043, +0.0172]
-  vs standings   log loss +0.1806 [+0.1166, +0.2453]  brier +0.0303 [+0.0202, +0.0403]
-  vs last_race   log loss +0.2794 [+0.2118, +0.3443]  brier +0.0394 [+0.0288, +0.0496]
+  vs grid        log loss +0.0491 [-0.0538, +0.1382]  brier +0.0128 [+0.0049, +0.0209]
+  vs standings   log loss +0.1464 [+0.0330, +0.2617]  brier +0.0307 [+0.0165, +0.0439]
+  vs last_race   log loss +0.2666 [+0.1245, +0.3994]  brier +0.0396 [+0.0255, +0.0541]
 
 as events: the place distribution summed to win, podium and points, scored with
 a binary log loss and brier. murphy splits the brier into rel - res + unc
-  simulation      win     log loss 0.0962 [0.0772, 0.1167]  brier 0.0290 [0.0226, 0.0354]  rel 0.0006 res 0.0175 unc 0.0464
-  simulation      podium  log loss 0.2037 [0.1759, 0.2364]  brier 0.0628 [0.0537, 0.0721]  rel 0.0008 res 0.0624 unc 0.1248
-  simulation      points  log loss 0.4611 [0.4167, 0.5058]  brier 0.1485 [0.1330, 0.1662]  rel 0.0012 res 0.1011 unc 0.2498
-  raw_simulation  win     log loss 0.0974 [0.0850, 0.1099]  brier 0.0290 [0.0248, 0.0335]  rel 0.0007 res 0.0174 unc 0.0464
-  raw_simulation  podium  log loss 0.2123 [0.1949, 0.2318]  brier 0.0650 [0.0585, 0.0722]  rel 0.0029 res 0.0620 unc 0.1248
-  raw_simulation  points  log loss 0.4771 [0.4463, 0.5085]  brier 0.1545 [0.1425, 0.1673]  rel 0.0049 res 0.0991 unc 0.2498
-  grid            win     log loss 0.1146 [0.1029, 0.1293]  brier 0.0331 [0.0309, 0.0353]  rel 0.0038 res 0.0172 unc 0.0464
-  grid            podium  log loss 0.2266 [0.2050, 0.2518]  brier 0.0673 [0.0612, 0.0739]  rel 0.0038 res 0.0619 unc 0.1248
-  grid            points  log loss 0.4861 [0.4554, 0.5185]  brier 0.1565 [0.1429, 0.1716]  rel 0.0020 res 0.0951 unc 0.2498
-  standings       win     log loss 0.1355 [0.1253, 0.1472]  brier 0.0394 [0.0370, 0.0417]  rel 0.0005 res 0.0068 unc 0.0464
-  standings       podium  log loss 0.2695 [0.2509, 0.2904]  brier 0.0849 [0.0799, 0.0901]  rel 0.0011 res 0.0416 unc 0.1248
-  standings       points  log loss 0.5318 [0.5019, 0.5617]  brier 0.1767 [0.1641, 0.1886]  rel 0.0022 res 0.0748 unc 0.2498
-  last_race       win     log loss 0.1462 [0.1347, 0.1591]  brier 0.0405 [0.0385, 0.0425]  rel 0.0001 res 0.0048 unc 0.0464
-  last_race       podium  log loss 0.3061 [0.2838, 0.3304]  brier 0.0934 [0.0871, 0.1002]  rel 0.0014 res 0.0331 unc 0.1248
-  last_race       points  log loss 0.5773 [0.5567, 0.5982]  brier 0.1957 [0.1863, 0.2052]  rel 0.0021 res 0.0554 unc 0.2498
+  simulation      win     log loss 0.0752 [0.0531, 0.1040]  brier 0.0211 [0.0141, 0.0285]  rel 0.0035 res 0.0259 unc 0.0434
+  simulation      podium  log loss 0.1904 [0.1555, 0.2288]  brier 0.0628 [0.0484, 0.0776]  rel 0.0018 res 0.0558 unc 0.1178
+  simulation      points  log loss 0.5011 [0.4040, 0.5978]  brier 0.1643 [0.1298, 0.2002]  rel 0.0076 res 0.0899 unc 0.2479
+  raw_simulation  win     log loss 0.0777 [0.0619, 0.0966]  brier 0.0224 [0.0169, 0.0289]  rel 0.0034 res 0.0243 unc 0.0434
+  raw_simulation  podium  log loss 0.1947 [0.1709, 0.2212]  brier 0.0628 [0.0522, 0.0737]  rel 0.0050 res 0.0595 unc 0.1178
+  raw_simulation  points  log loss 0.4828 [0.4098, 0.5578]  brier 0.1598 [0.1293, 0.1901]  rel 0.0047 res 0.0926 unc 0.2479
+  grid            win     log loss 0.1042 [0.0865, 0.1348]  brier 0.0292 [0.0263, 0.0328]  rel 0.0075 res 0.0223 unc 0.0434
+  grid            podium  log loss 0.2149 [0.1798, 0.2521]  brier 0.0663 [0.0555, 0.0784]  rel 0.0041 res 0.0559 unc 0.1178
+  grid            points  log loss 0.5104 [0.4435, 0.5785]  brier 0.1672 [0.1401, 0.1955]  rel 0.0051 res 0.0855 unc 0.2479
+  standings       win     log loss 0.1226 [0.1059, 0.1415]  brier 0.0356 [0.0317, 0.0396]  rel 0.0008 res 0.0072 unc 0.0434
+  standings       podium  log loss 0.2624 [0.2397, 0.2897]  brier 0.0841 [0.0777, 0.0902]  rel 0.0051 res 0.0407 unc 0.1178
+  standings       points  log loss 0.5384 [0.4857, 0.5972]  brier 0.1787 [0.1558, 0.2037]  rel 0.0014 res 0.0702 unc 0.2479
+  last_race       win     log loss 0.1396 [0.1138, 0.1720]  brier 0.0368 [0.0333, 0.0406]  rel 0.0008 res 0.0068 unc 0.0434
+  last_race       podium  log loss 0.3088 [0.2677, 0.3555]  brier 0.0915 [0.0815, 0.1014]  rel 0.0018 res 0.0282 unc 0.1178
+  last_race       points  log loss 0.5956 [0.5635, 0.6252]  brier 0.2040 [0.1895, 0.2178]  rel 0.0023 res 0.0436 unc 0.2479
 
 event gains over each baseline, same races
-  vs grid        win     log loss +0.0184 [+0.0056, +0.0298]  brier +0.0041 [-0.0002, +0.0084]
-  vs grid        podium  log loss +0.0229 [+0.0107, +0.0342]  brier +0.0045 [+0.0010, +0.0080]
-  vs grid        points  log loss +0.0250 [+0.0054, +0.0445]  brier +0.0080 [+0.0016, +0.0147]
-  vs standings   win     log loss +0.0394 [+0.0174, +0.0598]  brier +0.0105 [+0.0039, +0.0168]
-  vs standings   podium  log loss +0.0658 [+0.0409, +0.0906]  brier +0.0221 [+0.0141, +0.0301]
-  vs standings   points  log loss +0.0707 [+0.0380, +0.1002]  brier +0.0282 [+0.0165, +0.0398]
-  vs last_race   win     log loss +0.0501 [+0.0268, +0.0728]  brier +0.0115 [+0.0053, +0.0179]
-  vs last_race   podium  log loss +0.1024 [+0.0689, +0.1335]  brier +0.0306 [+0.0207, +0.0398]
-  vs last_race   points  log loss +0.1162 [+0.0807, +0.1499]  brier +0.0472 [+0.0347, +0.0588]
+  vs grid        win     log loss +0.0290 [+0.0194, +0.0388]  brier +0.0081 [+0.0039, +0.0120]
+  vs grid        podium  log loss +0.0245 [+0.0119, +0.0376]  brier +0.0035 [-0.0011, +0.0077]
+  vs grid        points  log loss +0.0093 [-0.0317, +0.0431]  brier +0.0029 [-0.0075, +0.0136]
+  vs standings   win     log loss +0.0474 [+0.0121, +0.0768]  brier +0.0146 [+0.0048, +0.0230]
+  vs standings   podium  log loss +0.0721 [+0.0316, +0.1134]  brier +0.0213 [+0.0064, +0.0355]
+  vs standings   points  log loss +0.0373 [-0.0185, +0.0886]  brier +0.0144 [-0.0046, +0.0323]
+  vs last_race   win     log loss +0.0644 [+0.0232, +0.1067]  brier +0.0157 [+0.0070, +0.0242]
+  vs last_race   podium  log loss +0.1184 [+0.0576, +0.1842]  brier +0.0288 [+0.0088, +0.0465]
+  vs last_race   points  log loss +0.0945 [+0.0188, +0.1582]  brier +0.0397 [+0.0164, +0.0618]
 
-pooled as sim^1.10 x grid^0.50, refitted before every scored race on the races before it, 30 of them warm-up only. before qualifying, sim^1.50
+against the prediction market, on the races it priced, an hour before the start
+  win     11 races  model 0.0640  market 0.0789  gain +0.0150 [-0.0027, +0.0324]  {'kalshi': 11}
+  podium  11 races  model 0.1912  market 0.1709  gain -0.0204 [-0.0661, +0.0111]  {'kalshi': 11}
+
+pooled as sim^0.90 x grid^0.50, refitted before every scored race on the races before it, 30 of them warm-up only. before qualifying, sim^1.30
 
 assumptions the simulation was run under
   laps                               58.000  race distance the simulation runs
-  reference_lap_millis            89379.387  dry benchmark the percentage ratings are scaled against
-  degradation_millis_per_lap         57.530  shrunk from 70 races, field 58
-  pit_loss_millis                 24126.000  in-lap plus out-lap against the driver's own green pace
-  safety_car_per_green_lap            0.013  field rate 0.0134, period 4.4 laps
-  pass_probability_at_parity          0.097  within 0 weighted attempts inside striking range, slope 0.97 per percent
-  dirty_air_millis                 1182.402  what a lap inside the following gap costs against the driver's own clean pace, field 1182
-  race_day_sd_percent                 0.622  how far a driver's Sunday drifts from his own rating
-  soft_wear_ratio                     1.305  soft wear against the all-compound average, stints of about 12 laps
-  medium_wear_ratio                   1.024  medium wear against the all-compound average, stints of about 17 laps
-  hard_wear_ratio                     0.923  hard wear against the all-compound average, stints of about 24 laps
-  front_runner_strategy_share         0.286  MH is the most common plan from the top ten, one of 42 the simulation draws from
-  pool_sim_power                      1.100  how far the simulation is sharpened, fitted on 90 past races
+  reference_lap_millis            79534.646  dry benchmark the percentage ratings are scaled against
+  degradation_millis_per_lap         50.769  shrunk from 114 races, field 52
+  pit_loss_millis                 36830.419  in-lap plus out-lap against the driver's own green pace
+  safety_car_per_green_lap            0.024  field rate 0.0119, period 5.0 laps
+  pass_probability_at_parity          0.077  within 259 weighted attempts inside striking range, slope 0.86 per percent
+  dirty_air_millis                 1048.815  what a lap inside the following gap costs against the driver's own clean pace, field 1129
+  race_day_sd_percent                 0.608  how far a driver's Sunday drifts from his own rating
+  soft_wear_ratio                     1.401  soft wear against the all-compound average, stints of about 5 laps
+  medium_wear_ratio                   1.043  medium wear against the all-compound average, stints of about 11 laps
+  hard_wear_ratio                     0.882  hard wear against the all-compound average, stints of about 24 laps
+  front_runner_strategy_share         0.366  MH is the most common plan from the top ten, one of 29 the simulation draws from
+  pool_sim_power                      0.900  how far the simulation is sharpened, fitted on 46 past races
   pool_grid_power                     0.500  how much of the grid-position baseline is folded in, zero before qualifying
