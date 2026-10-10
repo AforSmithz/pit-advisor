@@ -31,6 +31,32 @@ models:
       - name: constructor_id
         tests: [unique, not_null]
 
+  - name: silver_sprint_results
+    description: Sprint classification, one row per driver and sprint after amendments collapse.
+    columns:
+      - name: sprint_result_id
+        tests: [unique, not_null]
+      - name: event_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_events')
+                field: event_id
+      - name: driver_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('silver_drivers')
+                field: driver_key
+      - name: status_class
+        tests:
+          - accepted_values:
+              arguments:
+                values: [finished, retired, disqualified, did_not_start]
+      - name: points
+        tests: [not_null]
+
   - name: silver_results
     description: Race classification, one row per driver-event after amendments are collapsed.
     columns:

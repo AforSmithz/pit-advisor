@@ -12,6 +12,8 @@ sources:
         description: One row per event, with the circuit and the scheduled start.
       - name: results
         description: Race classification. Amended after penalties, so it arrives more than once.
+      - name: sprint
+        description: Sprint classification, only on the weekends that ran one.
       - name: qualifying
         description: Q1/Q2/Q3 times per driver.
       - name: laps
