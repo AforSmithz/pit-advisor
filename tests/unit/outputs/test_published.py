@@ -104,3 +104,14 @@ def test_a_forecast_whose_race_has_not_run_waits(seeded):
     unrun = dataclasses.replace(pane, results=pane.results.filter(pl.col("round") != 6))
     assert published.score(built.store, unrun, no_sprints()) == []
     assert published.summarise([]) == "nothing published has a result yet\n"
+
+
+def test_only_the_last_forecast_before_lights_out_is_scored_for_a_stage(seeded):
+    built = seeded()
+    pane, view, lights = issued(built, hours_before=30, run_id="run-early")
+    _, later, _ = issued(built, hours_before=2, run_id="run-late")
+    published.archive(built.store, view, "race", lights)
+    published.archive(built.store, later, "race", lights)
+    assert len(list(built.store.list(published.HISTORY))) == 2
+    (item,) = published.score(built.store, pane, no_sprints())
+    assert item.run_id == "run-late"

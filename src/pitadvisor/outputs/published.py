@@ -66,12 +66,17 @@ class PublishedScore(BaseModel, frozen=True):
 
 
 def _published(store: ObjectStore) -> list[tuple[Kind, ForecastView]]:
-    found: list[tuple[Kind, ForecastView]] = []
+    """The last forecast issued for each session and stage, the one standing at lights out.
+    Earlier reruns of the same stage stay in the history but are not scored again."""
+    latest: dict[tuple[int, int, Kind, str], ForecastView] = {}
     for item in store.list(HISTORY):
         name = item.key.rsplit("/", 1)[-1]
         kind: Kind = "sprint" if name.startswith("sprint-") else "race"
-        found.append((kind, ForecastView.model_validate_json(store.get(item.key))))
-    return found
+        view = ForecastView.model_validate_json(store.get(item.key))
+        slot = (view.event.season, view.event.round, kind, stage_of(view, kind))
+        if slot not in latest or view.generated_at > latest[slot].generated_at:
+            latest[slot] = view
+    return [(slot[2], view) for slot, view in latest.items()]
 
 
 def _field(
