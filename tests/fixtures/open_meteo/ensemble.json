@@ -1,0 +1,36 @@
+{
+  "latitude": 1.2914,
+  "longitude": 103.864,
+  "hourly": {
+    "time": [
+      "2024-05-05T12:00",
+      "2024-05-05T13:00",
+      "2024-05-05T14:00",
+      "2024-05-05T15:00"
+    ],
+    "precipitation_ecmwf_ifs025_ensemble": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "precipitation_member01_ecmwf_ifs025_ensemble": [
+      0.0,
+      0.8,
+      1.2,
+      0.9
+    ],
+    "precipitation_ncep_gefs025": [
+      0.0,
+      0.0,
+      null,
+      null
+    ],
+    "precipitation_member01_ncep_gefs025": [
+      0.0,
+      0.0,
+      0.6,
+      0.7
+    ]
+  }
+}

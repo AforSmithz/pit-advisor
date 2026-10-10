@@ -18,6 +18,10 @@ from pitadvisor.types import EventKey, IngestOutcome, Layer, Provenance, Source
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+ENSEMBLE_URL = "https://ensemble-api.open-meteo.com/v1/ensemble"
+# 82 members between them. the forecast endpoint's precipitation is one deterministic run
+# and its probability comes from a different ensemble, so neither says how likely real rain is
+ENSEMBLE_MODELS = ("ecmwf_ifs025", "gfs025")
 HOURLY = (
     "temperature_2m",
     "precipitation",
@@ -50,11 +54,40 @@ def endpoint(latitude: float, longitude: float, day: date, forecast: bool) -> st
     )
 
 
+def ensemble_endpoint(latitude: float, longitude: float, day: date) -> str:
+    return (
+        f"{ENSEMBLE_URL}?latitude={latitude:.4f}&longitude={longitude:.4f}"
+        f"&hourly=precipitation&models={','.join(ENSEMBLE_MODELS)}"
+        f"&start_date={day.isoformat()}&end_date={day.isoformat()}&timezone=UTC"
+    )
+
+
+def members(payload: dict[str, Any]) -> dict[str, list[float | None]]:
+    hourly = cast(dict[str, Any], payload.get("hourly") or {})
+    times = cast(list[str], hourly.get("time") or [])
+    # sorted so a member sits at the same index every hour, it is one run through the race
+    series = [
+        cast(list[float | None], values)
+        for name, values in sorted(hourly.items())
+        if name.startswith("precipitation")
+    ]
+    return {
+        stamped: [values[index] if index < len(values) else None for values in series]
+        for index, stamped in enumerate(times)
+    }
+
+
 def parse(
-    payload: dict[str, Any], circuit_id: str, forecast: bool, stamp: dict[str, Any], key: EventKey
+    payload: dict[str, Any],
+    circuit_id: str,
+    forecast: bool,
+    stamp: dict[str, Any],
+    key: EventKey,
+    ensemble: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     hourly = cast(dict[str, Any], payload.get("hourly") or {})
     times = cast(list[str], hourly.get("time") or [])
+    spread = members(ensemble) if ensemble is not None else {}
     rows: list[dict[str, Any]] = []
     for index, stamped in enumerate(times):
         rows.append(
@@ -70,6 +103,7 @@ def parse(
                 "precipitation_probability": _at(hourly, "precipitation_probability", index),
                 "wind_speed_kph": _at(hourly, "wind_speed_10m", index),
                 "relative_humidity": _at(hourly, "relative_humidity_2m", index),
+                "ensemble_precipitation_mm": spread.get(stamped),
             }
         )
     return rows
@@ -102,7 +136,14 @@ class WeatherClient:
     ) -> tuple[dict[str, Any], str | None, bool]:
         forecast = is_forecast(day, datetime.now(UTC).date())
         url = endpoint(latitude, longitude, day, forecast)
-        name = f"weather-{'forecast' if forecast else 'archive'}"
+        return self._land(key, f"weather-{'forecast' if forecast else 'archive'}", url)
+
+    def ensemble(
+        self, key: EventKey, latitude: float, longitude: float, day: date
+    ) -> tuple[dict[str, Any], str | None, bool]:
+        return self._land(key, "weather-ensemble", ensemble_endpoint(latitude, longitude, day))
+
+    def _land(self, key: EventKey, name: str, url: str) -> tuple[dict[str, Any], str | None, bool]:
         response = self.fetch(url, self.ledger, self.limiter)
         if response.not_modified:
             cached = self.raw.latest(Source.OPEN_METEO, key, name)
@@ -137,7 +178,13 @@ def ingest_event(
     stamp = {"run_id": client.run_id, "ingested_at": datetime.now(UTC)}
     payload, uri, cached = client.snapshot(key, circuit_id, latitude, longitude, day)
     forecast = is_forecast(day, datetime.now(UTC).date())
-    records = parse(payload, circuit_id, forecast, stamp, key)
+    ensemble: dict[str, Any] | None = None
+    uris = [uri] if uri else []
+    if forecast:
+        ensemble, spread_uri, spread_cached = client.ensemble(key, latitude, longitude, day)
+        uris += [spread_uri] if spread_uri else []
+        cached = cached and spread_cached
+    records = parse(payload, circuit_id, forecast, stamp, key, ensemble)
     kept, dropped = contracts.validate("weather", contracts.WeatherRow, records)
     write_quarantine(store, "weather", key, client.run_id, dropped)
     return IngestOutcome(
@@ -147,9 +194,9 @@ def ingest_event(
         round=key.round,
         rows=len(kept),
         quarantined=len(dropped),
-        raw_objects=[uri] if uri else [],
+        raw_objects=uris,
         bronze_objects=write_bronze_by_event(store, "weather", kept),
-        requests=1,
+        requests=2 if forecast else 1,
         not_modified=cached,
     )
 

@@ -49,6 +49,8 @@ class FakeFetch:
         for name, body in self.bodies.items():
             if name in url:
                 return body
+        if "ensemble-api" in url:
+            return fixture("open_meteo/ensemble.json")
         if "open-meteo" in url or "archive-api" in url:
             return fixture("open_meteo/forecast.json")
         for resource in ("results", "qualifying", "laps", "pitstops"):

@@ -99,6 +99,7 @@ class WeatherRow(BronzeRow):
     precipitation_probability: float | None = Field(default=None, ge=0, le=100)
     wind_speed_kph: float = Field(ge=0, le=200)
     relative_humidity: float | None = Field(default=None, ge=0, le=100)
+    ensemble_precipitation_mm: list[float | None] | None = None
 
 
 class SessionLapRow(BronzeRow):

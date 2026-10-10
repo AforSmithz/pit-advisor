@@ -131,6 +131,21 @@ def open_meteo() -> dict:
     }
 
 
+def open_meteo_ensemble() -> dict:
+    hours = [f"2024-05-05T{hour:02d}:00" for hour in range(12, 16)]
+    return {
+        "latitude": 1.2914,
+        "longitude": 103.864,
+        "hourly": {
+            "time": hours,
+            "precipitation_ecmwf_ifs025_ensemble": [0.0, 0.0, 0.0, 0.0],
+            "precipitation_member01_ecmwf_ifs025_ensemble": [0.0, 0.8, 1.2, 0.9],
+            "precipitation_ncep_gefs025": [0.0, 0.0, None, None],
+            "precipitation_member01_ncep_gefs025": [0.0, 0.0, 0.6, 0.7],
+        },
+    }
+
+
 BUILDERS = {
     "jolpica/races.json": races,
     "jolpica/results.json": results,
@@ -138,6 +153,7 @@ BUILDERS = {
     "jolpica/laps.json": laps,
     "jolpica/pitstops.json": pitstops,
     "open_meteo/forecast.json": open_meteo,
+    "open_meteo/ensemble.json": open_meteo_ensemble,
 }
 
 

@@ -4,10 +4,12 @@ from pitadvisor.ingest.raw_store import write_bronze
 from pitadvisor.ingest.weather import (
     WeatherClient,
     endpoint,
+    ensemble_endpoint,
     event_circuits,
     fetchable,
     ingest_event,
     is_forecast,
+    members,
     parse,
 )
 from pitadvisor.quality.contracts import RaceRow
@@ -53,6 +55,19 @@ def test_archive_endpoint_drops_the_probability():
     assert "precipitation_probability" not in url
 
 
+def test_ensemble_endpoint_asks_both_global_ensembles_for_the_race_day():
+    url = ensemble_endpoint(1.29, 103.86, RACE_DAY)
+    assert url.startswith("https://ensemble-api.open-meteo.com/v1/ensemble")
+    assert "models=ecmwf_ifs025,gfs025" in url
+    assert "start_date=2024-05-05&end_date=2024-05-05" in url
+
+
+def test_members_keep_one_run_at_the_same_index_every_hour(payload):
+    found = members(payload("open_meteo/ensemble.json"))
+    assert found["2024-05-05T13:00"] == [0.0, 0.8, 0.0, 0.0]
+    assert found["2024-05-05T15:00"] == [0.0, 0.9, 0.7, None]
+
+
 def test_parse_builds_one_row_per_hour(payload):
     rows = parse(payload("open_meteo/forecast.json"), "synthetica", True, STAMP, KEY)
     assert len(rows) == 4
@@ -65,6 +80,24 @@ def test_parse_survives_a_missing_series(payload):
     body = payload("open_meteo/forecast.json")
     del body["hourly"]["relative_humidity_2m"]
     assert parse(body, "synthetica", True, STAMP, KEY)[0]["relative_humidity"] is None
+
+
+def test_parse_carries_the_ensemble_on_each_hour(payload):
+    rows = parse(
+        payload("open_meteo/forecast.json"),
+        "synthetica",
+        True,
+        STAMP,
+        KEY,
+        payload("open_meteo/ensemble.json"),
+    )
+    assert rows[1]["ensemble_precipitation_mm"] == [0.0, 0.8, 0.0, 0.0]
+    assert (
+        parse(payload("open_meteo/forecast.json"), "synthetica", False, STAMP, KEY)[1][
+            "ensemble_precipitation_mm"
+        ]
+        is None
+    )
 
 
 def test_ingest_writes_bronze_and_raw(store, raw, ledger, fetch):
@@ -122,3 +155,24 @@ def test_event_circuits_reads_the_bronze_schedule(store):
 
 def test_event_circuits_is_empty_without_bronze(store):
     assert event_circuits(store, 2024) == []
+
+
+def test_a_forecast_also_lands_the_ensemble(store, raw, ledger, fetch, monkeypatch):
+    import pitadvisor.ingest.weather as weather
+
+    monkeypatch.setattr(weather, "is_forecast", lambda day, today: True)
+    outcome = ingest_event(
+        client(raw, ledger, fetch), store, KEY, "synthetica", 1.29, 103.86, RACE_DAY
+    )
+    assert outcome.requests == 2
+    assert "weather-forecast" in outcome.raw_objects[0]
+    assert "weather-ensemble" in outcome.raw_objects[1]
+    assert any("ensemble-api" in url for url in fetch.calls)
+
+
+def test_an_archive_read_does_not_ask_for_an_ensemble(store, raw, ledger, fetch):
+    outcome = ingest_event(
+        client(raw, ledger, fetch), store, KEY, "synthetica", 1.29, 103.86, RACE_DAY
+    )
+    assert outcome.requests == 1
+    assert not any("ensemble-api" in url for url in fetch.calls)
