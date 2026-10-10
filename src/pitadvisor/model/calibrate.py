@@ -163,6 +163,18 @@ def summarise(report: Report) -> str:
                 f"{gain.brier_gain.value:+7.4f} "
                 f"[{gain.brier_gain.low:+7.4f}, {gain.brier_gain.high:+7.4f}]"
             )
+    if report.market:
+        lines.append("")
+        lines.append(
+            "against the prediction market, on the races it priced, an hour before the start"
+        )
+        for item in report.market:
+            gain = item.log_loss_gain
+            lines.append(
+                f"  {item.event:<7} {item.races} races  model {item.model_log_loss:.4f}  "
+                f"market {item.market_log_loss:.4f}  gain {gain.value:+7.4f} "
+                f"[{gain.low:+7.4f}, {gain.high:+7.4f}]  {item.sources}"
+            )
     lines.append("")
     pool = report.pool
     lines.append(

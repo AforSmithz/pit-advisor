@@ -158,16 +158,26 @@ def _decay(events_ago: np.ndarray, half_life: float) -> np.ndarray:
     return np.power(0.5, events_ago / half_life)
 
 
-def _aged(frame: pl.DataFrame, as_of: date, half_life: float) -> pl.DataFrame:
+def _aged(
+    frame: pl.DataFrame,
+    as_of: date,
+    half_life: float,
+    discounts: dict[str, tuple[date, float]] | None = None,
+) -> pl.DataFrame:
     history = frame.filter(pl.col("race_date") < as_of)
     events = history.select("race_date").unique().sort("race_date")
     ranked = events.with_columns(
         (pl.len() - pl.col("race_date").rank("dense").cast(pl.Int64)).alias("events_ago")
     )
     joined = history.join(ranked, on="race_date")
-    return joined.with_columns(
-        pl.Series("weight", _decay(joined["events_ago"].to_numpy().astype(float), half_life))
-    )
+    weight = _decay(joined["events_ago"].to_numpy().astype(float), half_life)
+    # a team that declared an upgrade is judged less on the car it replaced
+    for team, (since, factor) in (discounts or {}).items():
+        older = (joined["constructor_id"] == team).to_numpy() & (
+            joined["race_date"] < since
+        ).to_numpy()
+        weight = np.where(older, weight * factor, weight)
+    return joined.with_columns(pl.Series("weight", weight))
 
 
 def _comparable(
@@ -292,11 +302,12 @@ def fit(
     half_life: float = HALF_LIFE_EVENTS,
     ridge: float = RIDGE,
     k: int = NEIGHBOURS,
+    discounts: dict[str, tuple[date, float]] | None = None,
 ) -> TrackFit:
     known = profiles or load()
     if circuit_id not in known:
         raise UnknownCircuitError(circuit_id)
-    aged = _aged(frame, as_of, half_life)
+    aged = _aged(frame, as_of, half_life, discounts)
     comparable, reprofiled = _comparable(aged, known)
     close = nearest(circuit_id, known, k)
 

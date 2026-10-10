@@ -229,3 +229,30 @@ def test_the_two_circuits_new_to_2026_are_in_the_taxonomy():
     taxonomy = track_fit.load()
     assert {"madring", "sepang"} <= set(taxonomy)
     assert taxonomy["madring"].demand.abrasion < taxonomy["sepang"].demand.abrasion
+
+
+def test_an_upgrade_discount_leans_one_team_on_its_newer_races():
+    rows = []
+    for index in range(10):
+        held = date(2024, 3, 1) + timedelta(days=14 * index)
+        for team, value in (("alpha", 1.0 if index < 6 else -1.0), ("bravo", 0.0)):
+            rows.append(
+                {
+                    "season": 2024,
+                    "round": index + 1,
+                    "race_date": held,
+                    "circuit_id": "monza",
+                    "constructor_id": team,
+                    "value": value,
+                }
+            )
+    frame = pl.DataFrame(rows)
+    upgraded = date(2024, 3, 1) + timedelta(days=14 * 6)
+
+    def level(fitted, team):
+        return next(item.estimate for item in fitted.similarity if item.constructor_id == team)
+
+    plain = track_fit.fit(frame, "monza", date(2025, 1, 1))
+    leaning = track_fit.fit(frame, "monza", date(2025, 1, 1), discounts={"alpha": (upgraded, 0.1)})
+    assert level(leaning, "alpha") < level(plain, "alpha")
+    assert level(leaning, "bravo") == pytest.approx(level(plain, "bravo"))

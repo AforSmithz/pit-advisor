@@ -532,6 +532,76 @@ def _backfill_sessions(
         )
 
 
+@app.command(name="markets", help="Prediction-market prices for past races, raw then bronze.")
+def markets_command(
+    fetch: Annotated[
+        bool, typer.Option("--fetch/--no-fetch", help="Read the APIs, or only replay raw.")
+    ] = True,
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+) -> None:
+    from pitadvisor.ingest import markets
+    from pitadvisor.quality.checks import read_table
+
+    settings = get_settings()
+    store, ledger, bucket_for = _runtime(local, settings)
+    schedule = read_table(store, Layer.BRONZE, "races")
+    results = read_table(store, Layer.BRONZE, "results")
+    if schedule is None or results is None:
+        typer.echo("races and results must be in bronze first", err=True)
+        raise typer.Exit(1)
+    if fetch:
+        client = markets.Client(
+            RawStore(store),
+            ledger,
+            {
+                Source.KALSHI: RateLimiter(bucket_for("kalshi")),
+                Source.POLYMARKET: RateLimiter(bucket_for("polymarket")),
+            },
+            _run_id(),
+        )
+        landed = [*markets.kalshi(client, schedule), *markets.polymarket(client, schedule)]
+        typer.echo(f"{len(landed)} price histories landed")
+    objects = [
+        (item.key, EventKey(season=item.season, round=item.round), item.name, store.get(item.key))
+        for source in (Source.KALSHI, Source.POLYMARKET)
+        for item in latest_objects(store, f"{Layer.RAW}/source={source}/")
+    ]
+    kept, dropped = markets.materialize(
+        store, objects, schedule, results, {"run_id": _run_id(), "ingested_at": datetime.now(UTC)}
+    )
+    typer.echo(f"{kept} prices in bronze, {dropped} quarantined")
+
+
+@app.command(name="car-updates", help="Parse landed car presentation submissions into bronze.")
+def car_updates(
+    season: Annotated[int | None, typer.Option(help="One season only.")] = None,
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+) -> None:
+    from pitadvisor.ingest import car_updates as declared
+
+    settings = get_settings()
+    store = LocalObjectStore(LOCAL_ROOT) if local else object_store(settings)
+    stamp = {"run_id": _run_id(), "ingested_at": datetime.now(UTC)}
+    found = [
+        item
+        for item in latest_objects(store, f"{Layer.RAW}/source={Source.FIA_DOCS}/")
+        if declared.KIND in item.name and (season is None or item.season == season)
+    ]
+    rows = quarantined = 0
+    for item in found:
+        kept, dropped = declared.materialize(
+            store,
+            EventKey(season=item.season, round=item.round),
+            item.key,
+            item.name,
+            doc_corpus.pdf_text(store.get(item.key)),
+            stamp,
+        )
+        rows += kept
+        quarantined += dropped
+    typer.echo(f"{len(found)} documents, {rows} rows, {quarantined} quarantined")
+
+
 @app.command(
     name="incidents-extract",
     help="Read the stewards' documents that have no field block. Costs Bedrock tokens.",

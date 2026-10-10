@@ -67,6 +67,13 @@ WET_SAFETY_CAR = 2.2
 DEFAULT_RACE_DAY_SD = 0.35
 DEFAULT_QUALI_ANCHOR_SD = 0.5
 PRIOR_REGIME_RACES = 6.0
+UPGRADE_DISCOUNTS = (1.0, 0.7, 0.5, 0.3)
+UPGRADE_CAP = 4
+UPGRADE_COLUMNS = ("season", "round", "race_date", "constructor_id", "count", "magnitude")
+MARKET_COLUMNS = ("season", "round", "source", "market", "driver_code", "price")
+MARKET_TARGET = {"win": 1.0, "podium": 3.0}
+# what a driver the market did not list is given, so a winner nobody priced is not infinite
+MARKET_FLOOR = 0.002
 # what a forecast is allowed to see: everything up to the start of the race, or only what was
 # known before main qualifying, when neither the grid nor this weekend's quali exists yet
 STAGES = ("race", "pre_quali")
@@ -88,6 +95,8 @@ class Variant(BaseModel, frozen=True):
 
     # the sprint as one more pace event, dated the day it ran, so sunday's forecast sees it
     sprint_pace: bool = True
+    # a team's older pace counts for less after it declares performance updates
+    upgrade_signal: bool = False
 
 
 TYPES: dict[str, type[pl.DataType]] = {
@@ -98,6 +107,32 @@ TYPES: dict[str, type[pl.DataType]] = {
     "laps": pl.Int64,
     "wear_millis": pl.Float64,
 }
+
+
+def _empty_markets() -> pl.DataFrame:
+    return pl.DataFrame(
+        schema={
+            "season": pl.Int64,
+            "round": pl.Int64,
+            "source": pl.String,
+            "market": pl.String,
+            "driver_code": pl.String,
+            "price": pl.Float64,
+        }
+    )
+
+
+def _empty_upgrades() -> pl.DataFrame:
+    return pl.DataFrame(
+        schema={
+            "season": pl.Int64,
+            "round": pl.Int64,
+            "race_date": pl.Date,
+            "constructor_id": pl.String,
+            "count": pl.Int64,
+            "magnitude": pl.Float64,
+        }
+    )
 
 
 def _empty(columns: tuple[str, ...]) -> pl.DataFrame:
@@ -134,6 +169,13 @@ class Panel:
     stints: pl.DataFrame = dataclass_field(default_factory=lambda: _empty(tyres.STINT_COLUMNS))
     # grid sanctions resolved to the race they are served at, for a grid nobody has started from
     penalties: pl.DataFrame = dataclass_field(default_factory=starting.empty)
+    upgrades: pl.DataFrame = dataclass_field(default_factory=lambda: _empty_upgrades())
+    # prediction-market prices an hour before each race, a baseline and never an input
+    markets: pl.DataFrame = dataclass_field(default_factory=lambda: _empty_markets())
+    # one-step-ahead team pace error per race and upgrade discount, filled as a walk needs it
+    upgrade_errors: dict[tuple[int, int], dict[float, float]] = dataclass_field(
+        default_factory=dict[tuple[int, int], dict[float, float]], repr=False
+    )
     # the same columns as pace, one row per driver per sprint, dated the sprint's day
     sprint_pace: pl.DataFrame = dataclass_field(
         default_factory=lambda: pl.DataFrame(schema=PACE_SCHEMA)
@@ -141,7 +183,7 @@ class Panel:
 
 
 # bump when Panel changes shape, so a cache written by older code is never read by newer code
-PANEL_VERSION = 12
+PANEL_VERSION = 14
 PANEL_TABLES = (
     "races",
     "results",
@@ -149,6 +191,8 @@ PANEL_TABLES = (
     "qualifying",
     "incident_sanctions",
     "incidents",
+    "car_updates",
+    "market_odds",
 )
 PANEL_PREFIX = f"{Layer.CACHE}/panel/"
 FRAMES = (
@@ -168,6 +212,8 @@ FRAMES = (
     "stints",
     "penalties",
     "sprint_pace",
+    "upgrades",
+    "markets",
 )
 
 
@@ -231,6 +277,7 @@ def load_panel(store: ObjectStore, key: str) -> Panel | None:
         laps={(season, round_): laps for season, round_, laps in state.laps},
         entries={(item.season, item.round): item for item in state.entries},
         qualified={(season, round_): order for season, round_, order in state.qualified},
+        upgrade_errors={},
     )
 
 
@@ -297,6 +344,8 @@ def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:
             read_table(store, layer, "incidents"),
             results,
         ),
+        upgrades=_upgrade_frame(read_table(store, layer, "car_updates"), events),
+        markets=_market_frame(read_table(store, layer, "market_odds")),
         sprint_pace=_sprint_pace_frame(
             laps.filter(pl.col("session") == str(SessionKind.SPRINT)),
             results,
@@ -435,6 +484,39 @@ def _stop_frame(racing: pl.DataFrame, dated: pl.DataFrame, results: pl.DataFrame
             ),
         )
         .select(tyres.COLUMNS)
+    )
+
+
+def _market_frame(odds: pl.DataFrame | None) -> pl.DataFrame:
+    if odds is None or not odds.height:
+        return _empty_markets()
+    return odds.select(
+        pl.col("season").cast(pl.Int64),
+        pl.col("round").cast(pl.Int64),
+        "source",
+        "market",
+        "driver_code",
+        pl.col("price").cast(pl.Float64),
+    ).unique(subset=["season", "round", "source", "market", "driver_code"], keep="last")
+
+
+def _upgrade_frame(updates: pl.DataFrame | None, events: pl.DataFrame) -> pl.DataFrame:
+    """Per team and event, how many updates the team said were for performance."""
+    if updates is None or not updates.height:
+        return _empty_upgrades()
+    counted = (
+        updates.filter(pl.col("ordinal") > 0)
+        .group_by("season", "round", "constructor_id")
+        .agg((pl.col("category") == "performance").sum().cast(pl.Int64).alias("count"))
+    )
+    declared = updates.select("season", "round", "constructor_id").unique()
+    return (
+        declared.join(counted, on=["season", "round", "constructor_id"], how="left")
+        .with_columns(
+            pl.col("count").fill_null(0), pl.lit(None, dtype=pl.Float64).alias("magnitude")
+        )
+        .join(events.select("season", "round", "race_date"), on=["season", "round"])
+        .select(UPGRADE_COLUMNS)
     )
 
 
@@ -759,7 +841,12 @@ def setup(
 
     dry = history.filter(~pl.col("is_wet"))
     shape = form.fit(dry.select(form.COLUMNS), as_of)
-    track = track_fit.fit(team_frame(history), context.circuit_id, as_of)
+    discounts = (
+        upgrade_discounts(pane, as_of, upgrade_discount(pane, as_of))
+        if chosen.upgrade_signal
+        else None
+    )
+    track = track_fit.fit(team_frame(history), context.circuit_id, as_of, discounts=discounts)
     rain = wet_weather.wet_form(history.select(wet_weather.COLUMNS), as_of)
     hazard = reliability.fit(
         pane.results.filter(pl.col("race_date") < as_of).select(reliability.COLUMNS), as_of
@@ -808,6 +895,74 @@ def setup(
         grid_known=not unknown,
         quali_noise_millis=reference * anchor_sd / 100.0 if unknown else 0.0,
     )
+
+
+def upgrade_discounts(pane: Panel, as_of: date, factor: float) -> dict[str, tuple[date, float]]:
+    """Each team's latest declared performance upgrade before as_of, and how much its older
+    rows count for: the factor once per update, capped."""
+    if factor >= 1.0 or not pane.upgrades.height:
+        return {}
+    declared = pane.upgrades.filter((pl.col("race_date") < as_of) & (pl.col("count") > 0))
+    latest = (
+        declared.sort("race_date")
+        .group_by("constructor_id")
+        .agg(pl.col("race_date").last(), pl.col("count").last(), pl.col("magnitude").last())
+    )
+    found: dict[str, tuple[date, float]] = {}
+    for row in latest.iter_rows(named=True):
+        size = row["magnitude"] if row["magnitude"] is not None else row["count"]
+        found[str(row["constructor_id"])] = (
+            row["race_date"],
+            factor ** min(float(size), float(UPGRADE_CAP)),
+        )
+    return found
+
+
+def upgrade_discount(pane: Panel, as_of: date) -> float:
+    errors: dict[float, list[float]] = {factor: [] for factor in UPGRADE_DISCOUNTS}
+    if not pane.upgrades.height:
+        return 1.0
+    first = pane.upgrades["race_date"].min()
+    later = pane.events.filter((pl.col("race_date") < as_of) & (pl.col("race_date") > first))
+    for row in later.iter_rows(named=True):
+        for factor, error in _upgrade_errors(pane, int(row["season"]), int(row["round"])).items():
+            errors[factor].append(error)
+    scored = {factor: float(np.mean(values)) for factor, values in errors.items() if values}
+    if not scored:
+        return 1.0
+    # a tie goes to the larger value, the model as it was
+    return min(scored, key=lambda factor: (scored[factor], -factor))
+
+
+def _upgrade_errors(pane: Panel, season: int, round_: int) -> dict[float, float]:
+    key = (season, round_)
+    if key in pane.upgrade_errors:
+        return pane.upgrade_errors[key]
+    teams = team_frame(pane.pace)
+    here = teams.filter((pl.col("season") == season) & (pl.col("round") == round_))
+    found: dict[float, float] = {}
+    if here.height:
+        when = here["race_date"][0]
+        circuit = str(here["circuit_id"][0])
+        actual = dict(zip(here["constructor_id"].to_list(), here["value"].to_list(), strict=True))
+        before = teams.filter(pl.col("race_date") < when)
+        if before.height and upgrade_discounts(pane, when, 0.5):
+            for factor in UPGRADE_DISCOUNTS:
+                try:
+                    fitted = track_fit.fit(
+                        before, circuit, when, discounts=upgrade_discounts(pane, when, factor)
+                    )
+                except track_fit.UnknownCircuitError:
+                    break
+                guess = {item.constructor_id: item.estimate for item in fitted.similarity}
+                guess.update({item.constructor_id: item.estimate for item in fitted.regression})
+                shared = [team for team in actual if team in guess]
+                if shared:
+                    found[factor] = float(
+                        np.mean([(guess[team] - float(actual[team])) ** 2 for team in shared])
+                    )
+    pane.upgrade_errors[key] = found
+    return found
 
 
 def _tyre_model(pane: Panel, circuit_id: str, as_of: date, scenario: str) -> tyres.TyreModel:
@@ -1207,6 +1362,20 @@ class RaceScore(BaseModel, frozen=True):
     log_loss: dict[str, float]
 
 
+class MarketScore(BaseModel, frozen=True):
+    """The model against the prediction market on the races the market priced, one event."""
+
+    event: str
+    races: int
+    rows: int
+    sources: dict[str, int]
+    model_log_loss: float
+    market_log_loss: float
+    # the market's loss minus the model's, so positive means the model is better
+    log_loss_gain: Interval
+    brier_gain: Interval
+
+
 class Report(BaseModel, frozen=True):
     generated_at: datetime
     run_id: str
@@ -1226,6 +1395,7 @@ class Report(BaseModel, frozen=True):
     warmup: int = 0
     until: date | None = None
     stage: str = "race"
+    market: list["MarketScore"] = []
     # fitted on every race in the run, which is what a forecast made after it may use
     pool: pooling.Pool = pooling.IDENTITY
     pool_without_grid: pooling.Pool = pooling.IDENTITY
@@ -1258,6 +1428,8 @@ class Walk:
     assumptions: list[Assumption]
     history: list[pooling.Scored]
     width: int
+    # the driver behind each scored row, race by race, for anything scored beside the model
+    codes: list[list[str]] = dataclass_field(default_factory=list[list[str]])
 
     def stacked(self, name: str) -> np.ndarray:
         return np.vstack(self.grids[name])
@@ -1415,6 +1587,7 @@ def _walk(
 
         walk.truth.append(actual)
         walk.labels.append(np.full(len(codes), index))
+        walk.codes.append(list(codes))
         walk.per_race.append(
             RaceScore(
                 season=context.season,
@@ -1475,6 +1648,7 @@ def run(
         if np.isfinite(item.log_loss_gain.low) and item.log_loss_gain.low > 0.0
     ]
     final = pooling.fit(walk.history)
+    market = market_scores(walk, pane, rng)
     return Report(
         generated_at=generated_at or datetime.now(UTC),
         run_id=run_id,
@@ -1492,6 +1666,7 @@ def run(
         warmup=warmup,
         until=until,
         stage=stage,
+        market=market,
         pool=final,
         pool_without_grid=pooling.fit(walk.history, with_grid=False),
     )
@@ -1533,7 +1708,13 @@ class Comparison(BaseModel, frozen=True):
 SUBSETS: dict[str, Callable[[RaceScore, Panel], bool]] = {
     "post_reset_2022": lambda item, _: item.season == 2022 and 9 <= item.round <= 16,
     "sprint_weekends": lambda item, pane: (item.season, item.round) in sprint_weekends(pane),
+    "upgrade_weekends": lambda item, pane: (item.season, item.round) in upgrade_weekends(pane),
 }
+
+
+def upgrade_weekends(pane: Panel) -> set[tuple[int, int]]:
+    declared = pane.upgrades.filter(pl.col("count") > 0).select("season", "round").unique()
+    return {(int(season), int(round_)) for season, round_ in declared.iter_rows()}
 
 
 def sprint_weekends(pane: Panel) -> set[tuple[int, int]]:
@@ -1541,6 +1722,102 @@ def sprint_weekends(pane: Panel) -> set[tuple[int, int]]:
         return set()
     found = pane.events.drop_nulls("sprint_date").select("season", "round")
     return {(int(season), int(round_)) for season, round_ in found.iter_rows()}
+
+
+def market_probabilities(prices: dict[str, float], codes: list[str], event: str) -> np.ndarray:
+    """A venue's prices for one race made into probabilities that add up to the event's total:
+    one winner, three on the podium. Drivers it did not list share what is left."""
+    target = MARKET_TARGET[event]
+    listed = [code for code in codes if code in prices]
+    missing = [code for code in codes if code not in prices]
+    total = float(sum(prices.values()))
+    if total <= 0.0:
+        return np.full(len(codes), target / max(len(codes), 1))
+    out: dict[str, float] = {}
+    if total >= target or not missing:
+        room = target - MARKET_FLOOR * len(missing)
+        for code in listed:
+            out[code] = prices[code] * room / total
+        for code in missing:
+            out[code] = MARKET_FLOOR
+    else:
+        for code in listed:
+            out[code] = prices[code]
+        for code in missing:
+            out[code] = (target - total) / len(missing)
+    return np.clip(np.array([out[code] for code in codes]), MARKET_FLOOR, 1.0 - MARKET_FLOOR)
+
+
+def market_scores(walk: Walk, pane: Panel, rng: np.random.Generator) -> list[MarketScore]:
+    if not pane.markets.height or not walk.per_race:
+        return []
+    mine = walk.stacked(MODEL)
+    outcome = walk.outcome
+    race_of = walk.race_of
+    found: list[MarketScore] = []
+    for event in MARKET_TARGET:
+        cut = EVENT_CUTOFF[event]
+        rows: list[np.ndarray] = []
+        theirs: list[np.ndarray] = []
+        sources: dict[str, int] = {}
+        start = 0
+        for item, codes in zip(walk.per_race, walk.codes, strict=True):
+            size = len(codes)
+            here = pane.markets.filter(
+                (pl.col("season") == item.season)
+                & (pl.col("round") == item.round)
+                & (pl.col("market") == event)
+            )
+            chosen = next(
+                (
+                    source
+                    for source in ("kalshi", "polymarket")
+                    if here.filter(pl.col("source") == source).height
+                ),
+                None,
+            )
+            if chosen is not None:
+                picked = here.filter(pl.col("source") == chosen)
+                prices = dict(
+                    zip(picked["driver_code"].to_list(), picked["price"].to_list(), strict=True)
+                )
+                rows.append(np.arange(start, start + size))
+                theirs.append(market_probabilities(prices, codes, event))
+                sources[chosen] = sources.get(chosen, 0) + 1
+            start += size
+        if not rows:
+            continue
+        index = np.concatenate(rows)
+        market = np.concatenate(theirs)
+        ours = mine[index, :cut].sum(axis=1)
+        happened = (outcome[index] < cut).astype(float)
+        races = race_of[index]
+        found.append(
+            MarketScore(
+                event=event,
+                races=int(np.unique(races).shape[0]),
+                rows=int(index.shape[0]),
+                sources=sources,
+                model_log_loss=binary_log_loss(ours, happened),
+                market_log_loss=binary_log_loss(market, happened),
+                log_loss_gain=race_bootstrap(
+                    races,
+                    lambda chosen, m=market, o=ours, y=happened: (
+                        binary_log_loss(m[chosen], y[chosen])
+                        - binary_log_loss(o[chosen], y[chosen])
+                    ),
+                    rng,
+                ),
+                brier_gain=race_bootstrap(
+                    races,
+                    lambda chosen, m=market, o=ours, y=happened: (
+                        binary_brier(m[chosen], y[chosen]) - binary_brier(o[chosen], y[chosen])
+                    ),
+                    rng,
+                ),
+            )
+        )
+    return found
 
 
 def compare(

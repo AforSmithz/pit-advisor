@@ -657,3 +657,105 @@ def test_a_pre_qualifying_walk_drops_the_grid_baseline_and_the_grid_pool(pane):
 def test_an_unknown_stage_is_refused(pane):
     with pytest.raises(ValueError, match="stage"):
         backtest.run(pane, 2024, 3, np.random.default_rng(SEED), "x", paths=50, stage="friday")
+
+
+def planted_upgrades(pane, rows):
+    return dataclasses.replace(
+        pane,
+        upgrades=pl.DataFrame(
+            rows,
+            schema={
+                "season": pl.Int64,
+                "round": pl.Int64,
+                "race_date": pl.Date,
+                "constructor_id": pl.String,
+                "count": pl.Int64,
+                "magnitude": pl.Float64,
+            },
+        ),
+        upgrade_errors={},
+    )
+
+
+def test_an_upgrade_counts_only_before_the_forecast_and_by_its_size(pane):
+    early, late = date(2024, 3, 1), date(2024, 6, 1)
+    planted = planted_upgrades(
+        pane,
+        [
+            {
+                "season": 2024,
+                "round": 1,
+                "race_date": early,
+                "constructor_id": "alpha",
+                "count": 2,
+                "magnitude": None,
+            },
+            {
+                "season": 2024,
+                "round": 6,
+                "race_date": late,
+                "constructor_id": "bravo",
+                "count": 9,
+                "magnitude": None,
+            },
+        ],
+    )
+    found = backtest.upgrade_discounts(planted, date(2024, 5, 1), 0.5)
+    assert found == {"alpha": (early, 0.25)}
+    capped = backtest.upgrade_discounts(planted, date(2024, 7, 1), 0.5)
+    assert capped["bravo"] == (late, 0.5**backtest.UPGRADE_CAP)
+    assert backtest.upgrade_discounts(planted, date(2024, 7, 1), 1.0) == {}
+
+
+def test_with_no_upgrades_the_discount_leaves_the_model_alone(pane):
+    assert backtest.upgrade_discount(planted_upgrades(pane, []), date(2030, 1, 1)) == 1.0
+
+
+def test_the_upgrade_signal_stays_off_unless_asked(pane, store):
+    context = event_at(store, 2024, 4)
+    shipped = backtest.setup(pane, context, context.race_date, "dry")
+    again = backtest.setup(
+        pane, context, context.race_date, "dry", variant=backtest.Variant(upgrade_signal=False)
+    )
+    assert [d.pace_millis for d in shipped.drivers] == [d.pace_millis for d in again.drivers]
+
+
+def test_market_prices_become_probabilities_that_add_up_to_the_event():
+    codes = ["AAA", "BBB", "CCC", "DDD"]
+    over = backtest.market_probabilities({"AAA": 0.6, "BBB": 0.5}, codes, "win")
+    assert over.sum() == pytest.approx(1.0)
+    assert over[2] == over[3] == backtest.MARKET_FLOOR
+    under = backtest.market_probabilities({"AAA": 0.5, "BBB": 0.3}, codes, "win")
+    assert under.sum() == pytest.approx(1.0)
+    assert under[2] == pytest.approx(0.1)
+    podium = backtest.market_probabilities(
+        {"AAA": 0.85, "BBB": 0.8, "CCC": 0.7, "DDD": 0.35}, codes, "podium"
+    )
+    assert podium.sum() == pytest.approx(3.0, abs=1e-6)
+    # a probability never reaches certainty, however the prices scale
+    capped = backtest.market_probabilities({"AAA": 0.95, "BBB": 0.05}, ["AAA", "BBB"], "podium")
+    assert capped.max() == 1.0 - backtest.MARKET_FLOOR
+
+
+def test_the_model_is_scored_against_the_market_on_the_races_it_priced(pane):
+    walk = backtest._walk(pane, 2024, 3, SEED, 150, 2, None, backtest.Variant())
+    item = walk.per_race[0]
+    codes = walk.codes[0]
+    priced = dataclasses.replace(
+        pane,
+        markets=pl.DataFrame(
+            {
+                "season": [item.season] * len(codes),
+                "round": [item.round] * len(codes),
+                "source": ["kalshi"] * len(codes),
+                "market": ["win"] * len(codes),
+                "driver_code": codes,
+                "price": [1.0 / len(codes)] * len(codes),
+            }
+        ),
+    )
+    found = backtest.market_scores(walk, priced, np.random.default_rng(SEED))
+    assert [score.event for score in found] == ["win"]
+    assert found[0].races == 1
+    assert found[0].sources == {"kalshi": 1}
+    assert backtest.market_scores(walk, pane, np.random.default_rng(SEED)) == []
