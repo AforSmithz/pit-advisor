@@ -130,6 +130,20 @@ def test_a_forecast_stays_a_forecast_however_late_it_is_replayed(store, ledger, 
     assert frame["circuit_id"].unique().to_list() == ["synthetica"]
 
 
+def test_a_forecast_is_replayed_with_the_ensemble_next_to_it(store, ledger, fetch, payload):
+    ingested(store, ledger, fetch, resources=("races",))
+    land(RawStore(store), KEY, "weather-forecast", payload("open_meteo/forecast.json"))
+    land(RawStore(store), KEY, "weather-ensemble", payload("open_meteo/ensemble.json"))
+
+    outcomes = rebuild_bronze(store, "replay-1")
+
+    frame = bronze_frames(store)["bronze/table=weather/season=2024/round=05/weather.parquet"]
+    assert frame["ensemble_precipitation_mm"].to_list()[2] == [0.0, 1.2, 0.6, None]
+    weather = [outcome for outcome in outcomes if outcome.table == "weather"]
+    assert len(weather) == 1
+    assert len(weather[0].raw_objects) == 2
+
+
 def test_an_archive_read_stays_an_archive_read(store, ledger, fetch, payload):
     ingested(store, ledger, fetch, resources=("races",))
     land(RawStore(store), KEY, "weather-archive", payload("open_meteo/forecast.json"))

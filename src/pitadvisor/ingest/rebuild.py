@@ -150,6 +150,9 @@ def rebuild_weather(
     store: ObjectStore, run_id: str, objects: list[RawObject], stamp: dict[str, Any]
 ) -> list[IngestOutcome]:
     wanted = [found for found in objects if WEATHER_NAME.match(found.name)]
+    spreads = {
+        (found.season, found.round): found for found in objects if found.name == "weather-ensemble"
+    }
     circuits: dict[tuple[int, int], str] = {}
     for season in sorted({found.season for found in wanted}):
         for circuit in event_circuits(store, season):
@@ -172,7 +175,9 @@ def rebuild_weather(
         # today's date would relabel every past snapshot as an archive read
         forecast = found.name == "weather-forecast"
         key = found.event
-        records = parse_weather(_payload(store, found), circuit_id, forecast, stamp, key)
+        spread = spreads.get((key.season, key.round)) if forecast else None
+        ensemble = _payload(store, spread) if spread is not None else None
+        records = parse_weather(_payload(store, found), circuit_id, forecast, stamp, key, ensemble)
         kept, dropped = contracts.validate("weather", contracts.WeatherRow, records)
         write_quarantine(store, "weather", key, run_id, dropped)
         outcomes.append(
@@ -183,7 +188,7 @@ def rebuild_weather(
                 round=key.round,
                 rows=len(kept),
                 quarantined=len(dropped),
-                raw_objects=[found.key],
+                raw_objects=[found.key, *([spread.key] if spread is not None else [])],
                 bronze_objects=[write_bronze(store, "weather", key, kept)] if kept else [],
             )
         )
