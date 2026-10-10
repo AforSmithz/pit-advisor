@@ -63,6 +63,9 @@ class RaceSetup(BaseModel, frozen=True):
     retirement: RetirementModel
     # false before qualifying: each path then runs its own qualifying off the pace it drew
     grid_known: bool = True
+    # queue the field behind a safety car in the order this lap left it, stops included. off is
+    # the order the lap started in, which let a car pit under the safety car for nothing
+    bunch_after_stops: bool = False
     quali_noise_millis: float = 0.0
 
 
@@ -163,7 +166,12 @@ def simulate(
         # fresher rubber is what makes an undercut work, so the attack reads the tyres too
         elapsed = _resolve(setup, elapsed, pace + tyre, order, out, rows, draw["pass"])
         if under.any():
-            elapsed = _bunch(elapsed, order, out, under.ravel())
+            queue = (
+                np.argsort(elapsed + out * OUT_OF_RACE_MILLIS, axis=1, kind="stable")
+                if setup.bunch_after_stops
+                else order
+            )
+            elapsed = _bunch(elapsed, queue, out, under.ravel())
         order = np.argsort(elapsed + out * OUT_OF_RACE_MILLIS, axis=1, kind="stable")
 
     completed = np.minimum(retire - 1, laps)

@@ -839,6 +839,9 @@ def backtest(
         datetime | None,
         typer.Option(formats=["%Y-%m-%d"], help="Only races before this date, for the dev window."),
     ] = None,
+    stage: Annotated[
+        str, typer.Option(help="'race', or 'pre_quali' to forecast before qualifying.")
+    ] = "race",
 ) -> None:
     store, _, _ = _runtime(local, get_settings())
     pane = _panel(store)
@@ -852,8 +855,9 @@ def backtest(
             paths=paths,
             seed=seed,
             until=until.date() if until else None,
+            stage=stage,
         )
-    except forecast_model.NoForecastError as exc:
+    except (forecast_model.NoForecastError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
     output.mkdir(parents=True, exist_ok=True)
@@ -897,6 +901,9 @@ def compare(
     seed: Annotated[int, typer.Option(help="Seed, so the comparison reproduces.")] = 11,
     output: Annotated[Path, typer.Option(help="Where the report lands.")] = DEV_RESULTS,
     local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+    stage: Annotated[
+        str, typer.Option(help="'race', or 'pre_quali' to compare before qualifying.")
+    ] = "race",
 ) -> None:
     store, _, _ = _runtime(local, get_settings())
     pane = _panel(store)
@@ -913,12 +920,15 @@ def compare(
             paths=paths,
             seed=seed,
             until=until.date() if until else None,
+            stage=stage,
         )
-    except forecast_model.NoForecastError as exc:
+    except (forecast_model.NoForecastError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
     output.mkdir(parents=True, exist_ok=True)
-    target = output / f"compare-{label}.json"
+    target = output / (
+        f"compare-{label}.json" if stage == "race" else f"compare-{label}-{stage}.json"
+    )
     target.write_text(result.model_dump_json(indent=2) + "\n")
     typer.echo(calibrate.describe(result), nl=False)
     typer.echo(f"\nwrote {target}")

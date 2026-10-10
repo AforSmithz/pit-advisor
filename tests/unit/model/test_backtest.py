@@ -441,7 +441,9 @@ def test_the_named_subsets_are_fixed_by_race_not_by_result():
             log_loss={},
         )
 
-    keep = backtest.SUBSETS["post_reset_2022"]
+    def keep(item):
+        return backtest.SUBSETS["post_reset_2022"](item, None)
+
     assert [keep(scored(2022, round_)) for round_ in (8, 9, 16, 17)] == [
         False,
         True,
@@ -524,3 +526,148 @@ def test_on_saturday_night_the_stewards_drops_are_applied_to_the_qualifying_orde
 
 def test_the_panel_carries_the_grid_sanctions_frame(pane):
     assert set(pane.penalties.columns) == set(grid.COLUMNS)
+
+
+def test_a_sprint_reading_is_dated_the_day_the_sprint_ran():
+    laps = pl.DataFrame(
+        [
+            {
+                "season": 2024,
+                "round": 3,
+                "session": "sprint",
+                "driver_code": code,
+                "lap": lap,
+                "lap_time_millis": 90_000 + 300 * index + 10 * lap,
+                "stint": 1,
+                "lap_in_stint": lap,
+                "compound": "MEDIUM",
+                "is_deleted": False,
+                "is_accurate": True,
+                "track_status": "1",
+                "pit_in": False,
+                "pit_out": False,
+                "position": index + 1,
+            }
+            for index, code in enumerate(["AAA", "BBB", "CCC"])
+            for lap in range(1, 20)
+        ]
+    )
+    results = pl.DataFrame(
+        {
+            "season": [2024] * 3,
+            "round": [3] * 3,
+            "driver_code": ["AAA", "BBB", "CCC"],
+            "constructor_id": ["alpha", "alpha", "bravo"],
+        }
+    )
+    schedule = pl.DataFrame(
+        {
+            "season": [2024],
+            "round": [3],
+            "circuit_id": ["monza"],
+            "sprint_date": [date(2024, 4, 6)],
+            "race_date": [date(2024, 4, 7)],
+        }
+    )
+    frame = backtest._sprint_pace_frame(laps, results, schedule)
+    assert frame.height == 3
+    assert set(frame["race_date"].to_list()) == {date(2024, 4, 6)}
+    # sunday's forecast is made as of the race date, so the sprint the day before is in it
+    assert frame.filter(pl.col("race_date") < date(2024, 4, 7)).height == 3
+
+
+def test_the_sprint_reaches_the_pace_as_it_ships_and_only_then(pane, store):
+    context = event_at(store, 2024, 4)
+    planted = dataclasses.replace(
+        pane,
+        sprint_pace=pane.pace.filter(pl.col("race_date") < context.race_date)
+        .tail(4)
+        .with_columns(pl.col("value") + 50.0),
+    )
+    off = backtest.Variant(sprint_pace=False)
+    without = backtest.setup(planted, context, context.race_date, "dry", variant=off)
+    plain = backtest.setup(pane, context, context.race_date, "dry", variant=off)
+    assert [d.pace_millis for d in without.drivers] == [d.pace_millis for d in plain.drivers]
+    shipped = backtest.setup(planted, context, context.race_date, "dry")
+    assert [d.pace_millis for d in shipped.drivers] != [d.pace_millis for d in plain.drivers]
+
+
+def test_the_sprint_subset_is_every_weekend_the_schedule_dated_a_sprint(pane):
+    events = pane.events.sort("race_date")
+    first = events.row(0, named=True)
+    marked = dataclasses.replace(
+        pane,
+        events=events.with_columns(
+            pl.when((pl.col("season") == first["season"]) & (pl.col("round") == first["round"]))
+            .then(pl.col("race_date") - pl.duration(days=1))
+            .otherwise(None)
+            .alias("sprint_date")
+        ),
+    )
+    assert backtest.sprint_weekends(marked) == {(int(first["season"]), int(first["round"]))}
+
+
+def test_the_measured_safety_car_discount_only_when_asked(pane, store):
+    context = event_at(store, 2024, 4)
+    shipped = backtest.setup(pane, context, context.race_date, "dry")
+    measured = backtest.setup(
+        pane,
+        context,
+        context.race_date,
+        "dry",
+        variant=backtest.Variant(measured_safety_car_discount=True),
+    )
+    assert shipped.tyre.safety_car_discount == backtest.tyres.SAFETY_CAR_DISCOUNT
+    assert measured.tyre.safety_car_discount == backtest.MEASURED_SAFETY_CAR_DISCOUNT
+
+
+def test_before_qualifying_the_weekend_leaves_no_trace(pane, store):
+    context = event_at(store, 2024, 3)
+    friday = backtest.before_qualifying(pane, context)
+    held = (pl.col("season") == 2024) & (pl.col("round") == 3)
+    assert friday.results.filter(held).height == 0
+    assert friday.quali.filter(held).height == 0
+    assert (2024, 3) not in friday.qualified
+    built = backtest.setup(friday, context, context.race_date, "dry")
+    assert not built.grid_known
+
+
+def test_a_pre_2024_sprint_ran_after_qualifying_and_is_hidden_from_it(pane, store):
+    early = event_at(store, 2023, 3)
+    late = event_at(store, 2024, 3)
+
+    def planted(context):
+        row = pane.pace.filter(pl.col("race_date") < context.race_date).tail(1)
+        return dataclasses.replace(
+            pane,
+            sprint_pace=row.with_columns(
+                pl.lit(context.season).alias("season"),
+                pl.lit(context.round).alias("round"),
+            ),
+        )
+
+    assert backtest.before_qualifying(planted(early), early).sprint_pace.height == 0
+    assert backtest.before_qualifying(planted(late), late).sprint_pace.height == 1
+
+
+def test_a_pre_qualifying_walk_drops_the_grid_baseline_and_the_grid_pool(pane):
+    report = backtest.run(
+        pane,
+        2024,
+        3,
+        np.random.default_rng(SEED),
+        "test-run",
+        paths=150,
+        seed=SEED,
+        warmup=2,
+        stage="pre_quali",
+    )
+    assert report.stage == "pre_quali"
+    assert "grid" not in {item.name for item in report.scored}
+    assert "grid" not in {item.baseline for item in report.paired}
+    assert report.per_race
+
+
+def test_an_unknown_stage_is_refused(pane):
+    with pytest.raises(ValueError, match="stage"):
+        backtest.run(pane, 2024, 3, np.random.default_rng(SEED), "x", paths=50, stage="friday")

@@ -1,5 +1,6 @@
 # polars types every expression argument as IntoExpr, which pyright reads as partly unknown
 # pyright: reportUnknownMemberType=false
+import dataclasses
 import hashlib
 import io
 import json
@@ -16,6 +17,7 @@ from pitadvisor.features import form, quali_race, reliability, track_fit
 from pitadvisor.features import grid as starting
 from pitadvisor.features import weather as wet_weather
 from pitadvisor.features.assemble import (
+    PACE_SCHEMA,
     EventContext,
     NoEventError,
     pace_frame,
@@ -25,7 +27,14 @@ from pitadvisor.features.assemble import (
     session_paces,
     team_frame,
 )
-from pitadvisor.features.clean_pace import Reason, Regime, SessionPace, classify, is_green
+from pitadvisor.features.clean_pace import (
+    Reason,
+    Regime,
+    SessionPace,
+    classify,
+    fit_single_stint,
+    is_green,
+)
 from pitadvisor.ingest.raw_store import ObjectStore
 from pitadvisor.model import baselines
 from pitadvisor.model import pool as pooling
@@ -58,6 +67,15 @@ WET_SAFETY_CAR = 2.2
 DEFAULT_RACE_DAY_SD = 0.35
 DEFAULT_QUALI_ANCHOR_SD = 0.5
 PRIOR_REGIME_RACES = 6.0
+# measured on 2021-2023 race laps: a stop under the safety car against the cars that stayed out
+# on the same two laps, as a share of a green stop, over 139 stops
+MEASURED_SAFETY_CAR_DISCOUNT = 0.759
+# what a forecast is allowed to see: everything up to the start of the race, or only what was
+# known before main qualifying, when neither the grid nor this weekend's quali exists yet
+STAGES = ("race", "pre_quali")
+# from 2024 the sprint runs on saturday morning, before main qualifying. earlier formats ran
+# qualifying on friday and the sprint after it
+SPRINT_BEFORE_QUALI_FROM = 2024
 
 
 class NoForecastError(RuntimeError):
@@ -70,6 +88,13 @@ class Variant(BaseModel, frozen=True):
     variant is the reference every comparison is paired against."""
 
     model_config = ConfigDict(extra="forbid")
+
+    # the sprint as one more pace event, dated the day it ran, so sunday's forecast sees it
+    sprint_pace: bool = True
+    # a stop under a safety car at the measured share of a green stop instead of the assumed one
+    measured_safety_car_discount: bool = False
+    # a stop under the safety car costs places: the queue forms after the stop, not before it
+    bunch_after_stops: bool = False
 
 
 TYPES: dict[str, type[pl.DataType]] = {
@@ -116,10 +141,14 @@ class Panel:
     stints: pl.DataFrame = dataclass_field(default_factory=lambda: _empty(tyres.STINT_COLUMNS))
     # grid sanctions resolved to the race they are served at, for a grid nobody has started from
     penalties: pl.DataFrame = dataclass_field(default_factory=starting.empty)
+    # the same columns as pace, one row per driver per sprint, dated the sprint's day
+    sprint_pace: pl.DataFrame = dataclass_field(
+        default_factory=lambda: pl.DataFrame(schema=PACE_SCHEMA)
+    )
 
 
 # bump when Panel changes shape, so a cache written by older code is never read by newer code
-PANEL_VERSION = 2
+PANEL_VERSION = 8
 PANEL_TABLES = (
     "races",
     "results",
@@ -145,6 +174,7 @@ FRAMES = (
     "strategies",
     "stints",
     "penalties",
+    "sprint_pace",
 )
 
 
@@ -273,6 +303,11 @@ def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:
             read_table(store, layer, "incident_sanctions"),
             read_table(store, layer, "incidents"),
             results,
+        ),
+        sprint_pace=_sprint_pace_frame(
+            laps.filter(pl.col("session") == str(SessionKind.SPRINT)),
+            results,
+            read_table(store, layer, "races"),
         ),
     )
 
@@ -408,6 +443,31 @@ def _stop_frame(racing: pl.DataFrame, dated: pl.DataFrame, results: pl.DataFrame
         )
         .select(tyres.COLUMNS)
     )
+
+
+def _sprint_pace_frame(
+    sprints: pl.DataFrame, results: pl.DataFrame, schedule: pl.DataFrame | None
+) -> pl.DataFrame:
+    if not sprints.height or schedule is None or "sprint_date" not in schedule.columns:
+        return pl.DataFrame(schema=PACE_SCHEMA)
+    paces = [
+        fitted
+        for _, rows in sprints.group_by("season", "round")
+        if (fitted := fit_single_stint(rows)) is not None
+    ]
+    if not paces:
+        return pl.DataFrame(schema=PACE_SCHEMA)
+    dated = (
+        schedule.drop_nulls("sprint_date")
+        .select(
+            "season",
+            "round",
+            pl.col("sprint_date").cast(pl.Date).alias("race_date"),
+            "circuit_id",
+        )
+        .unique(subset=["season", "round"], keep="last")
+    )
+    return pace_frame(paces, results, dated)
 
 
 def _stints(racing: pl.DataFrame) -> pl.DataFrame:
@@ -695,7 +755,9 @@ def setup(
     grid: dict[str, int] | None = None,
     variant: Variant | None = None,
 ) -> race.RaceSetup:
-    history = pane.pace.filter(pl.col("race_date") < as_of)
+    chosen = variant or Variant()
+    pace = pl.concat([pane.pace, pane.sprint_pace]) if chosen.sprint_pace else pane.pace
+    history = pace.filter(pl.col("race_date") < as_of)
     if not history.height:
         raise NoForecastError(f"no pace history before {as_of}")
     seats, ids = seats_for(pane, context, as_of)
@@ -746,13 +808,23 @@ def setup(
         reference_millis=reference,
         drivers=drivers,
         start=starts.fit(pane.starts, as_of),
-        tyre=_tyre_model(pane, context.circuit_id, as_of, scenario),
+        tyre=_discounted(
+            _tyre_model(pane, context.circuit_id, as_of, scenario),
+            chosen.measured_safety_car_discount,
+        ),
         passing=overtake.fit(pane.passes, context.circuit_id, as_of, traffic=pane.traffic),
         safety_car=caution,
         retirement=dnf.build(hazard, seats, ids),
         grid_known=not unknown,
+        bunch_after_stops=chosen.bunch_after_stops,
         quali_noise_millis=reference * anchor_sd / 100.0 if unknown else 0.0,
     )
+
+
+def _discounted(model: tyres.TyreModel, measured: bool) -> tyres.TyreModel:
+    if not measured:
+        return model
+    return model.model_copy(update={"safety_car_discount": MEASURED_SAFETY_CAR_DISCOUNT})
 
 
 def _tyre_model(pane: Panel, circuit_id: str, as_of: date, scenario: str) -> tyres.TyreModel:
@@ -1170,6 +1242,7 @@ class Report(BaseModel, frozen=True):
     assumptions: list[Assumption]
     warmup: int = 0
     until: date | None = None
+    stage: str = "race"
     # fitted on every race in the run, which is what a forecast made after it may use
     pool: pooling.Pool = pooling.IDENTITY
     pool_without_grid: pooling.Pool = pooling.IDENTITY
@@ -1194,6 +1267,7 @@ class Walk:
     calendar line up race for race, which is what a paired comparison needs."""
 
     names: tuple[str, ...]
+    features: tuple[str, ...]
     grids: dict[str, list[np.ndarray]]
     truth: list[np.ndarray]
     labels: list[np.ndarray]
@@ -1236,6 +1310,26 @@ def calendar_for(
     )
 
 
+def before_qualifying(pane: Panel, context: EventContext) -> Panel:
+    """The panel as it stood on the Friday: no result and no grid for this race, none of its
+    qualifying, and its sprint only if the sprint already ran before qualifying."""
+    held = (pl.col("season") == context.season) & (pl.col("round") == context.round)
+    sprint = pane.sprint_pace
+    if context.season < SPRINT_BEFORE_QUALI_FROM:
+        sprint = sprint.filter(~held)
+    return dataclasses.replace(
+        pane,
+        results=pane.results.filter(~held),
+        quali=pane.quali.filter(~held),
+        qualified={
+            key: order
+            for key, order in pane.qualified.items()
+            if key != (context.season, context.round)
+        },
+        sprint_pace=sprint,
+    )
+
+
 def _walk(
     pane: Panel,
     from_season: int,
@@ -1245,7 +1339,11 @@ def _walk(
     warmup: int,
     until: date | None,
     variant: Variant,
+    stage: str = "race",
 ) -> Walk:
+    if stage not in STAGES:
+        raise ValueError(f"stage {stage!r} is not one of {STAGES}")
+    early = stage == "pre_quali"
     calendar = calendar_for(pane, from_season, holdout, warmup, until)
     if not calendar.height:
         raise NoForecastError(f"no races from {from_season} to hold out")
@@ -1260,9 +1358,12 @@ def _walk(
         default=FIELD,
     )
 
-    names = (MODEL, RAW, *baselines.FEATURES)
+    # before qualifying the grid baseline would be reading the grid it cannot know yet
+    features = tuple(name for name in baselines.FEATURES if not (early and name == "grid"))
+    names = (MODEL, RAW, *features)
     walk = Walk(
         names=names,
+        features=features,
         grids={name: [] for name in names},
         truth=[],
         labels=[],
@@ -1286,7 +1387,7 @@ def _walk(
             continue
         try:
             predicted = forecast(
-                pane,
+                before_qualifying(pane, context) if early else pane,
                 context,
                 context.race_date,
                 race_rng(seed, context.season, context.round),
@@ -1320,10 +1421,12 @@ def _walk(
             walk.history.append(scored)
             continue
 
-        pool = pooling.fit(walk.history)
-        walk.grids[MODEL].append(pooling.combine(sim, guessed["grid"], starters, pool))
+        pool = pooling.fit(walk.history, with_grid=not early)
+        walk.grids[MODEL].append(
+            pooling.combine(sim, None if early else guessed["grid"], starters, pool)
+        )
         walk.grids[RAW].append(sim)
-        for name in baselines.FEATURES:
+        for name in features:
             walk.grids[name].append(guessed[name])
         walk.history.append(scored)
 
@@ -1359,12 +1462,15 @@ def run(
     warmup: int = WARMUP,
     until: date | None = None,
     variant: Variant | None = None,
+    stage: str = "race",
 ) -> Report:
     """Time forward, one race at a time. Every fit behind a prediction sees only what had
     happened when it was made, which is why the panel is filtered by date and never shuffled.
     The pool is refitted before every scored race on the races forecast before it, warmup
     included, so it is as blind to the race it is scored on as the simulation is."""
-    walk = _walk(pane, from_season, holdout, seed, paths, warmup, until, variant or Variant())
+    walk = _walk(
+        pane, from_season, holdout, seed, paths, warmup, until, variant or Variant(), stage
+    )
     outcome = walk.outcome
     race_of = walk.race_of
     scored_models = [_score(name, walk.stacked(name), outcome, race_of, rng) for name in walk.names]
@@ -1372,12 +1478,11 @@ def run(
     beats = all(
         ours.log_loss.value < item.log_loss.value
         for item in scored_models
-        if item.name in baselines.FEATURES
+        if item.name in walk.features
     )
     mine = walk.stacked(MODEL)
     paired = [
-        _paired(name, mine, walk.stacked(name), outcome, race_of, rng)
-        for name in baselines.FEATURES
+        _paired(name, mine, walk.stacked(name), outcome, race_of, rng) for name in walk.features
     ]
     separated = [
         item.baseline
@@ -1401,6 +1506,7 @@ def run(
         assumptions=[*walk.assumptions, *_pool_assumptions(final)],
         warmup=warmup,
         until=until,
+        stage=stage,
         pool=final,
         pool_without_grid=pooling.fit(walk.history, with_grid=False),
     )
@@ -1425,6 +1531,7 @@ class Comparison(BaseModel, frozen=True):
     warmup: int
     paths: int
     seed: int
+    stage: str = "race"
     base: Variant
     candidate: Variant
     races: int
@@ -1438,9 +1545,17 @@ class Comparison(BaseModel, frozen=True):
 
 # named in docs/improvements.md before anything was measured, so a subset cannot be picked to
 # flatter a result after the fact
-SUBSETS: dict[str, Callable[[RaceScore], bool]] = {
-    "post_reset_2022": lambda item: item.season == 2022 and 9 <= item.round <= 16,
+SUBSETS: dict[str, Callable[[RaceScore, Panel], bool]] = {
+    "post_reset_2022": lambda item, _: item.season == 2022 and 9 <= item.round <= 16,
+    "sprint_weekends": lambda item, pane: (item.season, item.round) in sprint_weekends(pane),
 }
+
+
+def sprint_weekends(pane: Panel) -> set[tuple[int, int]]:
+    if "sprint_date" not in pane.events.columns:
+        return set()
+    found = pane.events.drop_nulls("sprint_date").select("season", "round")
+    return {(int(season), int(round_)) for season, round_ in found.iter_rows()}
 
 
 def compare(
@@ -1457,9 +1572,10 @@ def compare(
     warmup: int = WARMUP,
     until: date | None = None,
     generated_at: datetime | None = None,
+    stage: str = "race",
 ) -> Comparison:
-    first = _walk(pane, from_season, holdout, seed, paths, warmup, until, base)
-    second = _walk(pane, from_season, holdout, seed, paths, warmup, until, candidate)
+    first = _walk(pane, from_season, holdout, seed, paths, warmup, until, base, stage)
+    second = _walk(pane, from_season, holdout, seed, paths, warmup, until, candidate, stage)
     if [(item.season, item.round) for item in first.per_race] != [
         (item.season, item.round) for item in second.per_race
     ]:
@@ -1475,7 +1591,7 @@ def compare(
         chosen = [
             label
             for label, item in zip(np.unique(race_of), first.per_race, strict=True)
-            if keep(item)
+            if keep(item, pane)
         ]
         if not chosen:
             continue
@@ -1500,6 +1616,7 @@ def compare(
         warmup=warmup,
         paths=paths,
         seed=seed,
+        stage=stage,
         base=base,
         candidate=candidate,
         races=int(np.unique(race_of).shape[0]),

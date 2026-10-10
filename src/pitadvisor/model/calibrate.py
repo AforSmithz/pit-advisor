@@ -193,7 +193,8 @@ def describe(comparison: Comparison) -> str:
     lines = [
         f"{comparison.label or 'candidate'} against the model as it ships, run {comparison.run_id}",
         f"{comparison.races} races {window}, {comparison.warmup} warm-up, "
-        f"{comparison.paths} paths, seed {comparison.seed}, same draws for both",
+        f"{comparison.paths} paths, seed {comparison.seed}, same draws for both, "
+        f"forecast at {comparison.stage}",
         f"candidate {comparison.candidate.model_dump_json()}",
         "",
         "gain is the base's loss minus the candidate's, positive means the candidate is better",
