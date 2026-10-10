@@ -45,6 +45,9 @@ class RaceRow(BronzeRow):
     longitude: float = Field(ge=-180, le=180)
     race_date: date
     start_utc: datetime | None = None
+    # only on a sprint weekend, which is what says a sprint classification exists to fetch
+    sprint_utc: datetime | None = None
+    sprint_date: date | None = None
 
 
 class ResultRow(BronzeRow):
@@ -62,6 +65,10 @@ class ResultRow(BronzeRow):
     time_millis: int | None = Field(default=None, ge=0)
     fastest_lap_rank: int | None = Field(default=None, ge=1, le=30)
     fastest_lap_millis: int | None = Field(default=None, ge=0)
+
+
+class SprintRow(ResultRow):
+    points: float = Field(ge=0, le=8)
 
 
 class QualifyingRow(BronzeRow):
@@ -181,6 +188,7 @@ class IncidentArticleRow(BronzeRow):
 TABLES: dict[str, type[BronzeRow]] = {
     "races": RaceRow,
     "results": ResultRow,
+    "sprint": SprintRow,
     "qualifying": QualifyingRow,
     "laps": LapRow,
     "pitstops": PitStopRow,

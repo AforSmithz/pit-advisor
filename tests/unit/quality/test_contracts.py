@@ -46,6 +46,7 @@ def test_every_table_has_a_contract():
     assert set(TABLES) == {
         "races",
         "results",
+        "sprint",
         "qualifying",
         "laps",
         "pitstops",
@@ -170,3 +171,26 @@ def test_a_zero_duration_is_still_rejected():
         [base(driver_id="tsunoda", stop=1, lap=27, time_of_day="15:45:52", duration_millis=0)],
     )
     assert dropped
+
+
+def test_a_sprint_row_is_a_result_row_with_sprint_points():
+    from pitadvisor.quality.contracts import ResultRow, SprintRow
+
+    assert issubclass(SprintRow, ResultRow)
+    assert SprintRow.model_fields["points"].metadata
+    with pytest.raises(ValueError, match="less than or equal to 8"):
+        SprintRow.model_validate(
+            {
+                "run_id": "r",
+                "ingested_at": "2024-05-04T16:00:00Z",
+                "season": 2024,
+                "round": 5,
+                "driver_id": "x",
+                "constructor_id": "y",
+                "grid": 1,
+                "position_text": "1",
+                "points": 25,
+                "laps_completed": 19,
+                "status": "Finished",
+            }
+        )

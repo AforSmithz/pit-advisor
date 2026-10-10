@@ -22,6 +22,7 @@ MAX_AGE = timedelta(days=7)
 NATURAL_KEYS: dict[str, tuple[str, ...]] = {
     "races": ("season", "round"),
     "results": ("season", "round", "driver_id"),
+    "sprint": ("season", "round", "driver_id"),
     "qualifying": ("season", "round", "driver_id"),
     "laps": ("season", "round", "driver_id", "lap"),
     "pitstops": ("season", "round", "driver_id", "stop"),
@@ -36,6 +37,7 @@ NATURAL_KEYS: dict[str, tuple[str, ...]] = {
 NULL_WATCH: dict[str, tuple[str, ...]] = {
     "pitstops": ("duration_millis",),
     "results": ("position",),
+    "sprint": ("position",),
     "session_laps": ("lap_time_millis",),
 }
 NULL_WARN_RATE = 0.05
@@ -46,6 +48,8 @@ REFERENCES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("laps", "results", ("season", "round")),
     ("pitstops", "results", ("season", "round")),
     ("qualifying", "results", ("season",)),
+    # a sprint starter who then misses sunday is still on the season's entry list
+    ("sprint", "results", ("season",)),
 )
 
 
