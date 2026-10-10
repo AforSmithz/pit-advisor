@@ -359,8 +359,8 @@ def _race_rounds(store: ObjectStore) -> dict[int, dict[str, int]]:
 def _resources(with_laps: bool) -> tuple[str, ...]:
     """Laps are four times the requests of everything else, so they are opt in."""
     if with_laps:
-        return jolpica.RESOURCES
-    return tuple(name for name in jolpica.RESOURCES if name != "laps")
+        return (*jolpica.RESOURCES, jolpica.SPRINT)
+    return (*(name for name in jolpica.RESOURCES if name != "laps"), jolpica.SPRINT)
 
 
 def _known_rounds(local: bool, settings: Settings, season: int) -> list[Circuit]:

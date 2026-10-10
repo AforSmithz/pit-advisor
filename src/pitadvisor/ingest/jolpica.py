@@ -3,6 +3,8 @@ from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import polars as pl
+
 from pitadvisor.ingest import http
 from pitadvisor.ingest.ratelimit import Ledger, RateLimiter
 from pitadvisor.ingest.raw_store import (
@@ -12,13 +14,16 @@ from pitadvisor.ingest.raw_store import (
     write_quarantine,
 )
 from pitadvisor.quality import contracts
+from pitadvisor.quality.checks import read_table
 from pitadvisor.quality.contracts import parse_duration_millis
-from pitadvisor.types import EventKey, IngestOutcome, Provenance, Source, bronze_key
+from pitadvisor.types import EventKey, IngestOutcome, Layer, Provenance, Source, bronze_key
 
 BASE_URL = "https://api.jolpi.ca/ergast/f1"
 PAGE_LIMIT = 100
 MAX_PAGES = 40
 RESOURCES = ("races", "results", "qualifying", "laps", "pitstops")
+# asked for only where the schedule says a sprint was run, never on a conventional weekend
+SPRINT = "sprint"
 
 
 class RawMissingError(RuntimeError):
@@ -61,9 +66,16 @@ def _total(payload: dict[str, Any]) -> int:
 
 def _start_utc(race: dict[str, Any]) -> datetime | None:
     stamp = race.get("time")
-    if not stamp:
+    if not stamp or not race.get("date"):
         return None
     return datetime.fromisoformat(f"{race['date']}T{stamp.replace('Z', '+00:00')}")
+
+
+def _sprint_utc(race: dict[str, Any]) -> datetime | None:
+    session: Any = race.get("Sprint")
+    if not isinstance(session, dict):
+        return None
+    return _start_utc(cast(dict[str, Any], session))
 
 
 def parse_races(payloads: list[dict[str, Any]], stamp: dict[str, Any]) -> list[dict[str, Any]]:
@@ -86,16 +98,28 @@ def parse_races(payloads: list[dict[str, Any]], stamp: dict[str, Any]) -> list[d
                     "longitude": location.get("long"),
                     "race_date": race.get("date"),
                     "start_utc": _start_utc(race),
+                    "sprint_utc": _sprint_utc(race),
+                    "sprint_date": _nested(race, "Sprint").get("date"),
                 }
             )
     return rows
 
 
 def parse_results(payloads: list[dict[str, Any]], stamp: dict[str, Any]) -> list[dict[str, Any]]:
+    return _classification(payloads, stamp, "Results")
+
+
+def parse_sprint(payloads: list[dict[str, Any]], stamp: dict[str, Any]) -> list[dict[str, Any]]:
+    return _classification(payloads, stamp, "SprintResults")
+
+
+def _classification(
+    payloads: list[dict[str, Any]], stamp: dict[str, Any], field: str
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for payload in payloads:
         for race in races_of(payload):
-            for result in race.get("Results", []):
+            for result in race.get(field, []):
                 fastest = _nested(result, "FastestLap")
                 rows.append(
                     {
@@ -190,6 +214,7 @@ PARSERS: dict[str, Callable[[list[dict[str, Any]], dict[str, Any]], list[dict[st
     "qualifying": parse_qualifying,
     "laps": parse_laps,
     "pitstops": parse_pitstops,
+    SPRINT: parse_sprint,
 }
 
 
@@ -294,6 +319,8 @@ def ingest_event(
     outcomes: list[IngestOutcome] = []
     stamp = {"run_id": client.run_id, "ingested_at": datetime.now(UTC)}
     for resource in resources:
+        if resource == SPRINT and not has_sprint(store, key):
+            continue
         if skip_present and store.exists(bronze_key(resource, key)):
             outcomes.append(
                 IngestOutcome(
@@ -312,8 +339,30 @@ def ingest_event(
     return outcomes
 
 
+def has_sprint(store: ObjectStore, key: EventKey) -> bool:
+    schedule = read_table(store, Layer.BRONZE, "races")
+    # 2021's schedule dates the sprint but gives it no start time, so the date is what counts
+    if schedule is None or "sprint_date" not in schedule.columns:
+        return False
+    found = schedule.filter(
+        (pl.col("season") == key.season) & (pl.col("round") == key.round)
+    ).drop_nulls("sprint_date")
+    return found.height > 0
+
+
 def rounds_in(payloads: list[dict[str, Any]]) -> list[int]:
     return sorted({int(race["round"]) for payload in payloads for race in races_of(payload)})
+
+
+def sprint_rounds(payloads: list[dict[str, Any]]) -> list[int]:
+    return sorted(
+        {
+            int(race["round"])
+            for payload in payloads
+            for race in races_of(payload)
+            if isinstance(race.get("Sprint"), dict)
+        }
+    )
 
 
 def backfill(
@@ -333,7 +382,9 @@ def backfill(
             client.run_id, store, schedule_key, "races", payloads, landed, cached_only, stamp
         )
     ]
+    sprinted = set(sprint_rounds(payloads))
     for round_ in rounds_in(payloads):
         key = EventKey(season=season, round=round_)
-        outcomes.extend(ingest_event(client, store, key, wanted, skip_present))
+        here = [resource for resource in wanted if resource != SPRINT or round_ in sprinted]
+        outcomes.extend(ingest_event(client, store, key, here, skip_present))
     return outcomes

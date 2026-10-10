@@ -53,7 +53,7 @@ class FakeFetch:
             return fixture("open_meteo/ensemble.json")
         if "open-meteo" in url or "archive-api" in url:
             return fixture("open_meteo/forecast.json")
-        for resource in ("results", "qualifying", "laps", "pitstops"):
+        for resource in ("results", "sprint", "qualifying", "laps", "pitstops"):
             if f"/{resource}.json" in url:
                 return fixture(f"jolpica/{resource}.json")
         return fixture("jolpica/races.json")

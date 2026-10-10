@@ -1,5 +1,6 @@
+import io
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import polars as pl
 import pytest
@@ -15,7 +16,9 @@ from pitadvisor.ingest.jolpica import (
     parse_qualifying,
     parse_races,
     parse_results,
+    parse_sprint,
     plan,
+    sprint_rounds,
 )
 from pitadvisor.ingest.raw_store import RawStore
 from pitadvisor.types import EventKey, Source
@@ -178,3 +181,83 @@ def test_ingest_uses_a_fresh_raw_store_object_per_fetch(store, ledger, fetch, fe
     ingest_event(client(raw, ledger, fetch), store, KEY, ["results"])
     ingest_event(client(raw, ledger, fetch_factory()), store, KEY, ["results"])
     assert len(raw.versions(Source.JOLPICA, KEY, "results-offset0000")) == 2
+
+
+def schedule(*rounds: tuple[int, bool]) -> dict:
+    races = []
+    for round_, sprint in rounds:
+        race = {
+            "season": "2024",
+            "round": str(round_),
+            "raceName": f"Round {round_}",
+            "Circuit": {
+                "circuitId": "bahrain",
+                "circuitName": "Bahrain",
+                "Location": {"lat": "26.0", "long": "50.5"},
+            },
+            "date": "2024-05-05",
+            "time": "20:00:00Z",
+        }
+        if sprint:
+            race["Sprint"] = {"date": "2024-05-04", "time": "16:00:00Z"}
+        races.append(race)
+    return {"MRData": {"total": str(len(races)), "RaceTable": {"Races": races}}}
+
+
+def test_the_schedule_says_which_rounds_ran_a_sprint():
+    assert sprint_rounds([schedule((1, False), (5, True), (6, False), (11, True))]) == [5, 11]
+
+
+def test_a_sprint_weekend_carries_its_sprint_start():
+    rows = parse_races([schedule((5, True), (6, False))], STAMP)
+    assert rows[0]["sprint_utc"] == datetime(2024, 5, 4, 16, tzinfo=UTC)
+    assert rows[0]["sprint_date"] == "2024-05-04"
+    assert rows[1]["sprint_utc"] is None
+    assert rows[1]["sprint_date"] is None
+
+
+def test_a_2021_sprint_with_no_start_time_still_counts_as_a_sprint():
+    payload = schedule((10, True))
+    payload["MRData"]["RaceTable"]["Races"][0]["Sprint"] = {"date": "2021-07-17"}
+    rows = parse_races([payload], STAMP)
+    assert rows[0]["sprint_utc"] is None
+    assert rows[0]["sprint_date"] == "2021-07-17"
+    assert sprint_rounds([payload]) == [10]
+
+
+def test_parse_sprint_reads_the_sprint_classification(payload):
+    rows = parse_sprint([payload("jolpica/sprint.json")], STAMP)
+    assert rows
+    assert all(row["season"] == "2024" for row in rows)
+    assert all(float(row["points"]) <= 8 for row in rows)
+    # a race classification is not a sprint one
+    assert parse_sprint([payload("jolpica/results.json")], STAMP) == []
+
+
+def test_a_sprint_lands_in_its_own_bronze_table(store, raw, ledger, fetch):
+    buffer = io.BytesIO()
+    pl.DataFrame([{"season": 2024, "round": 5, "sprint_date": date(2024, 5, 4)}]).write_parquet(
+        buffer
+    )
+    store.put("bronze/table=races/season=2024/round=05/races.parquet", buffer.getvalue())
+    outcomes = ingest_event(client(raw, ledger, fetch), store, KEY, ["sprint"])
+    assert outcomes[0].table == "sprint"
+    assert outcomes[0].rows > 0
+    assert any("sprint.json" in url for url in fetch.calls)
+
+
+def test_a_conventional_weekend_is_never_asked_for_a_sprint(store, raw, ledger, fetch):
+    outcomes = ingest_event(client(raw, ledger, fetch), store, KEY, ["sprint"])
+    assert outcomes == []
+    assert not any("sprint.json" in url for url in fetch.calls)
+
+
+def test_backfill_asks_for_a_sprint_only_where_the_schedule_has_one(
+    store, raw, ledger, fetch_factory
+):
+    fetch = fetch_factory()
+    fetch.bodies["2024.json"] = schedule((4, False), (5, True))
+    backfill(client(raw, ledger, fetch), store, 2024, ["races", "results", "sprint"])
+    asked = [url for url in fetch.calls if "sprint.json" in url]
+    assert len(asked) == 1
+    assert "/2024/5/sprint.json" in asked[0]
