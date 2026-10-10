@@ -69,6 +69,7 @@ DEFAULT_QUALI_ANCHOR_SD = 0.5
 PRIOR_REGIME_RACES = 6.0
 UPGRADE_DISCOUNTS = (1.0, 0.7, 0.5, 0.3)
 UPGRADE_CAP = 4
+JEV_RELEASED = date(2026, 9, 1)
 UPGRADE_COLUMNS = ("season", "round", "race_date", "constructor_id", "count", "magnitude")
 MARKET_COLUMNS = ("season", "round", "source", "market", "driver_code", "price")
 MARKET_TARGET = {"win": 1.0, "podium": 3.0}
@@ -1817,6 +1818,8 @@ SUBSETS: dict[str, Callable[[RaceScore, Panel], bool]] = {
     "post_reset_2022": lambda item, _: item.season == 2022 and 9 <= item.round <= 16,
     "sprint_weekends": lambda item, pane: (item.season, item.round) in sprint_weekends(pane),
     "upgrade_weekends": lambda item, pane: (item.season, item.round) in upgrade_weekends(pane),
+    # races jev's weights cannot have seen, the only ones that can promote U3 past provisional
+    "after_jev_release": lambda item, _: item.race_date >= JEV_RELEASED,
 }
 
 

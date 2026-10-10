@@ -450,6 +450,10 @@ def test_the_named_subsets_are_fixed_by_race_not_by_result():
         True,
         False,
     ]
+    late = backtest.SUBSETS["after_jev_release"]
+    early = scored(2026, 15).model_copy(update={"race_date": date(2026, 8, 30)})
+    after = scored(2026, 16).model_copy(update={"race_date": date(2026, 9, 6)})
+    assert [late(early, None), late(after, None)] == [False, True]
     assert not keep(scored(2023, 10))
 
 
