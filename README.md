@@ -22,7 +22,9 @@ response written to `raw/` verbatim with its request metadata, a parse into type
 contract per table, and Parquet in `bronze/` partitioned by season and round. Rows that fail their
 contract land in `quarantine/` with the reason attached instead of failing the load. The FIA's
 stewards' decisions are crawled the same way and parsed into incidents, sanctions and the
-regulation articles they cite.
+regulation articles they cite, and each team's car presentation submission into the updates it
+declared for the weekend. Prediction-market prices from Kalshi and Polymarket land the same way,
+used only as a baseline to score against.
 
 Above bronze, a dbt project builds conformed silver tables with surrogate keys and
 amendment-aware deduplication, and gold marts on top of them. The same models run on duckdb
@@ -41,8 +43,10 @@ marts and a regulations and race-report corpus, with citations.
 
 The lake covers 2021 to the current race of 2026. Every Thursday a state machine checks the
 calendar, and in a race week it refreshes the weather, the sessions, the marts and every view,
-including a short weekend brief at the top of the weekend page. On Saturday night it runs again,
-and once qualifying is in it refreshes the forecast on the qualifying order.
+including a short weekend brief at the top of the weekend page. On a sprint weekend it runs
+again early on Saturday, once sprint qualifying is in, and publishes a sprint forecast. On
+Saturday night it runs a last time, and once qualifying is in it refreshes the race forecast on
+the qualifying order.
 
 ## The honesty constraint
 
@@ -80,12 +84,21 @@ failed on a single case each, always the same shape: the model subtracts one too
 another and states the difference, which is a figure no tool returned. The check withholds that
 answer every time, which is the gate doing its job rather than a gate worth lowering.
 
-The forecast clears its own bar too. The holdout is the last sixty races run, from the 2024
-Chinese Grand Prix to the sixteenth round of 2026, so sixteen of them are in 2026's
-twenty-two-car field. The published forecast's multiclass log loss is 2.546 [2.474, 2.617],
-against 2.608 for grid position alone, 2.726 for championship standings and 2.825 for last
-race's result. Resampled at the race level, the gain over the grid is +0.062 [+0.018, +0.106],
-so it is separated from all three baselines. The same forecast is also scored the way the
+The forecast clears its own bar, though more narrowly on the newest races. The first holdout was
+the last sixty races run, from the 2024 Chinese Grand Prix to the sixteenth round of 2026. There
+the published forecast's multiclass log loss was 2.546 [2.474, 2.617], against 2.608 for grid
+position alone, 2.726 for championship standings and 2.825 for last race's result, and the gain
+over the grid, resampled at the race level, was +0.062 [+0.018, +0.106]. A second round of
+changes was then chosen on 2024 and 2025 (below), which spends those races, so the clean check
+is the sixteen races of 2026, on which nothing was ever chosen, scored once at the end. On
+those the forecast scores 2.625 [2.474, 2.780] against 2.674 for the grid, 2.772 for standings
+and 2.892 for last race's result. It is separated from standings and last race, and its gain
+over the grid, +0.049 [-0.054, +0.138], is the same size as before but too wide on sixteen races
+to call; on the Brier score the gain over the grid is separated, +0.013 [+0.005, +0.021].
+Kalshi priced eleven of those races an hour before the start. On who wins, the forecast's
+binary log loss was 0.064 against the market's 0.079, a gain of +0.015 [-0.003, +0.032]; on
+the podium the market was better, 0.171 against 0.191. Two markets, eleven races: a draw, not a
+result. The same forecast is also scored the way the
 published F1 work scores it, as three events summed out of the place distribution: a win, a
 podium and a points finish, each with a binary log loss, a Brier score and the Brier's split into
 reliability, resolution and uncertainty.
@@ -117,20 +130,32 @@ measured matters more than any one of them. Changes are chosen on a separate dev
 the 36 races from mid-2022 to the end of 2023, and the sixty-race holdout above was scored once,
 after every decision had been made, so it never picked anything. Each candidate is run against
 the model as it ships on the same races with the same random draws, so the paired difference is
-the change and not the luck. Of eleven candidates, one was kept: reading the sprint as a
-same-weekend pace observation, which helped on the development window (+0.008 [+0.000, +0.017],
-+0.026 on sprint weekends) and is inside noise on the holdout (+0.000 [-0.006, +0.006], +0.007
-[-0.005, +0.019] on its seventeen sprint weekends). A shorter memory for team pace, a discount on
+the change and not the luck. Of eleven candidates in the first round, one was kept: reading the sprint as a same-weekend pace
+observation, which helped on the development window (+0.008 [+0.000, +0.017], +0.026 on sprint
+weekends), was inside noise on the first holdout, and helps on 2026's five sprint weekends
+(+0.043 [+0.006, +0.096]). A shorter memory for team pace, a discount on
 results from before a rule change, a virtual safety car regime, slow pit stops, a debutant
 penalty, tyre age in the pass model and Friday long runs all made the forecast worse or no
 better, and were taken back out. One of them is a real bug left standing on purpose: under a
 safety car the simulation queues the field before the stops, so a stop costs nothing, and
 correcting that made the forecast slightly worse, not better.
 
+A second round needed data that only exists from 2024, so it was chosen on the 48 races of 2024
+and 2025 and checked on 2026. Two changes were kept. When a team declares performance updates in
+its car presentation submission, its older pace counts for a little less, by a factor refitted
+before every race (+0.003 on the development window, +0.005 on 2026, both inside noise). And
+before main qualifying on a sprint weekend, sprint qualifying anchors race pace the way
+qualifying does on Saturday night (+0.019 and +0.021 for the forecast made before qualifying,
++0.075 and +0.066 on sprint weekends alone, the intervals again straddling zero). A third
+candidate asked TypeSafe's Jev model to grade each declared update from a refinement to a new
+concept, so that a new floor counted for more than a flap trim. It scored +0.005 [-0.002,
++0.012] over the plain count, but worse on the weekends that had updates, and was taken out; its
+95 answers stay in the lake so it can be re-measured without asking again.
+
 ## Architecture
 
 ```
-EventBridge rules (Thursday 06:00 UTC, Saturday 23:30 UTC)
+EventBridge rules (Thursday 06:00 UTC, Saturday 00:30 and 23:30 UTC)
   |
   +-- Step Functions  weekend-pipeline        one Fargate task definition, one image
         |
@@ -138,12 +163,14 @@ EventBridge rules (Thursday 06:00 UTC, Saturday 23:30 UTC)
         +-- read plan            S3 integration, no Lambda
         +-- race week?           no: stop here, one small task spent
         +-- ingest open-meteo    forecast for the coming race
-        +-- ingest fastf1        race sessions not yet in the lake, S3-backed cache
+        +-- stewards             crawl the season's FIA documents, rebuild grid drops
+        +-- car updates          parse the declared car updates
+        +-- ingest fastf1        race, sprint and sprint qualifying sessions, S3-backed cache
         +-- quality gate         contracts, freshness, keys, references
         +-- catalog sync         glue bronze tables from the contracts
         +-- dbt build            silver and gold, Iceberg MERGE
         +-- lineage check        every gold model traced back to raw
-        +-- emit views           weekend, driver, track, forecast, brief, pipeline
+        +-- emit views           weekend, driver, track, forecast, sprint, brief, pipeline
 
 S3 (one bucket, prefix separated)
   raw/  bronze/  silver/  gold/  views/  quarantine/  docs/  cache/
@@ -202,7 +229,14 @@ and is not republished; no timing data is committed to this repository.
 Weather comes from [Open-Meteo](https://open-meteo.com/), free and keyless, using circuit
 coordinates from Jolpica, snapshotted at fetch time so a past prediction can be replayed against
 what was actually known then. The regulations corpus is FIA published documents, versioned by
-season and cited by title and date wherever the agent quotes them.
+season and cited by title and date wherever the agent quotes them; the same crawl collects the
+stewards' decisions and the car presentation submissions.
+
+Prediction-market prices come from the public APIs of [Kalshi](https://kalshi.com/) and
+[Polymarket](https://polymarket.com/): for each race, the last traded or mid price at least an
+hour before the start, for the winner and, on Kalshi, the podium. They are a baseline the
+forecast is scored against and never an input to it. Polymarket's archive returns empty price
+histories for 2026, so 2026 is scored against Kalshi alone.
 
 Nothing paywalled, nothing behind anti-bot protection, and no undocumented internal endpoints
 are used. One file of reference data, `data/reference/circuits.yml`, is hand maintained, because
@@ -421,11 +455,18 @@ pace on the session itself. The qualifying order is not quite the grid, so the S
 applies the stewards' grid drops and back-of-grid starts from the decisions in the lake, in the
 order the stewards build a grid. Rebuilt that way, 86% of grid slots in 2021-2025 match the grid
 the race actually started from, against 74% for the plain qualifying order; the rest are mostly
-penalties the document crawl does not capture and pit-lane starts decided on Sunday. The crawl
-is not yet scheduled, so for 2026 the Saturday grid is still the qualifying order. The run is timed for the latest qualifying session on the
+penalties the document crawl does not capture and pit-lane starts decided on Sunday. The run is timed for the latest qualifying session on the
 calendar to have reached Jolpica and the earliest Sunday start to be hours away; if qualifying
 has not landed, it does nothing and the Thursday forecast stands. The published backtest is
 unaffected: it scores races on the grid they actually had.
+
+The sprint forecast has the same gap one session earlier. Jolpica publishes no sprint
+qualifying classification, so the sprint grid is read from the timing laps as a knockout: the
+session is split into its three segments at the two longest gaps in the session clock, and
+drivers are ranked by how far they got, then by their best lap in that segment. That matches
+79% of the sprint grid slots of 2023-2026 exactly, against 68% for a plain best-lap order. Sprint
+grid drops and pit-lane starts are not applied. Over the 25 sprints the sprint backtest scores,
+the sprint forecast is separated from the grid, +0.136 [+0.059, +0.208].
 
 The circuit taxonomy is hand-maintained, and a circuit missing from it gets no track fit and no
 forecast. Madrid and Sepang joined in 2026. Their geometry and most of their demand bands come
