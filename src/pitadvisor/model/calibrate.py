@@ -4,7 +4,7 @@
 from pathlib import Path
 from typing import Any
 
-from pitadvisor.model.backtest import EVENTS, MODEL, RAW, Report, Scored
+from pitadvisor.model.backtest import EVENTS, MODEL, RAW, Comparison, Report, Scored
 
 # the dashboard's plate palette, so a reliability curve and a pace trace read as one product
 PLATE = "#0e0f11"
@@ -138,6 +138,32 @@ def summarise(report: Report) -> str:
             f"[{item.brier_gain.low:+7.4f}, {item.brier_gain.high:+7.4f}]"
         )
     lines.append("")
+    lines.append("as events: the place distribution summed to win, podium and points, scored with")
+    lines.append("a binary log loss and brier. murphy splits the brier into rel - res + unc")
+    for scored in report.scored:
+        for event in EVENTS:
+            item = scored.events.get(event)
+            if item is None:
+                continue
+            split = item.murphy
+            lines.append(
+                f"  {scored.name:<15} {event:<7} log loss {item.log_loss.value:.4f} "
+                f"[{item.log_loss.low:.4f}, {item.log_loss.high:.4f}]  brier "
+                f"{item.brier.value:.4f} [{item.brier.low:.4f}, {item.brier.high:.4f}]  "
+                f"rel {split.reliability:.4f} res {split.resolution:.4f} "
+                f"unc {split.uncertainty:.4f}"
+            )
+    lines.append("")
+    lines.append("event gains over each baseline, same races")
+    for item in report.paired:
+        for event, gain in item.events.items():
+            lines.append(
+                f"  vs {item.baseline:<11} {event:<7} log loss {gain.log_loss_gain.value:+7.4f} "
+                f"[{gain.log_loss_gain.low:+7.4f}, {gain.log_loss_gain.high:+7.4f}]  brier "
+                f"{gain.brier_gain.value:+7.4f} "
+                f"[{gain.brier_gain.low:+7.4f}, {gain.brier_gain.high:+7.4f}]"
+            )
+    lines.append("")
     pool = report.pool
     lines.append(
         f"pooled as sim^{pool.sim_power:.2f} x grid^{pool.grid_power:.2f}, refitted before every "
@@ -159,3 +185,35 @@ def write(report: Report, output: Path) -> list[Path]:
     written[1].write_text(summarise(report))
     written.append(render(report, output))
     return written
+
+
+def describe(comparison: Comparison) -> str:
+    gain = comparison.log_loss_gain
+    window = f"before {comparison.until}" if comparison.until else "to the latest race"
+    lines = [
+        f"{comparison.label or 'candidate'} against the model as it ships, run {comparison.run_id}",
+        f"{comparison.races} races {window}, {comparison.warmup} warm-up, "
+        f"{comparison.paths} paths, seed {comparison.seed}, same draws for both",
+        f"candidate {comparison.candidate.model_dump_json()}",
+        "",
+        "gain is the base's loss minus the candidate's, positive means the candidate is better",
+        f"  log loss {gain.value:+7.4f} [{gain.low:+7.4f}, {gain.high:+7.4f}]",
+        f"  brier    {comparison.brier_gain.value:+7.4f} "
+        f"[{comparison.brier_gain.low:+7.4f}, {comparison.brier_gain.high:+7.4f}]",
+        f"  before the pool, log loss {comparison.raw_log_loss_gain.value:+7.4f} "
+        f"[{comparison.raw_log_loss_gain.low:+7.4f}, {comparison.raw_log_loss_gain.high:+7.4f}]",
+    ]
+    for event, gain in comparison.events.items():
+        lines.append(
+            f"  {event:<7}  log loss {gain.log_loss_gain.value:+7.4f} "
+            f"[{gain.log_loss_gain.low:+7.4f}, {gain.log_loss_gain.high:+7.4f}]  brier "
+            f"{gain.brier_gain.value:+7.4f} "
+            f"[{gain.brier_gain.low:+7.4f}, {gain.brier_gain.high:+7.4f}]"
+        )
+    for subset in comparison.subsets:
+        item = subset.log_loss_gain
+        lines.append(
+            f"  {subset.name} ({subset.races} races) log loss {item.value:+7.4f} "
+            f"[{item.low:+7.4f}, {item.high:+7.4f}]"
+        )
+    return "\n".join(lines) + "\n"

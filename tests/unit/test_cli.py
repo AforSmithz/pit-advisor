@@ -917,3 +917,63 @@ def test_emit_views_knows_the_brief(lake):
     # nothing emitted yet, so the brief says what it is missing rather than crashing
     assert result.exit_code == 1
     assert "emit weekend_view, forecast_view, track_view before the brief" in plain(result.stderr)
+
+
+def test_backtest_until_scores_only_the_dev_window(lake, seed_lake, tmp_path):
+    seeded_local(lake, seed_lake)
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "backtest",
+            "--from",
+            "2023",
+            "--holdout",
+            "2",
+            "--paths",
+            "150",
+            "--until",
+            "2024-01-01",
+            "--output",
+            str(tmp_path / "dev"),
+            "--local",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    written = json.loads((tmp_path / "dev" / "backtest.json").read_text())
+    assert written["until"] == "2024-01-01"
+    assert all(item["season"] == 2023 for item in written["per_race"])
+
+
+def test_compare_pairs_a_candidate_and_writes_the_report(lake, seed_lake, tmp_path):
+    seeded_local(lake, seed_lake)
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "compare",
+            "--label",
+            "itself",
+            "--from",
+            "2023",
+            "--holdout",
+            "2",
+            "--paths",
+            "150",
+            "--output",
+            str(tmp_path / "dev"),
+            "--local",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    written = json.loads((tmp_path / "dev" / "compare-itself.json").read_text())
+    assert written["log_loss_gain"]["value"] == 0.0
+    assert "positive means the candidate is better" in result.stdout
+
+
+def test_compare_refuses_a_knob_the_model_does_not_have(lake, seed_lake, tmp_path):
+    seeded_local(lake, seed_lake)
+    result = CliRunner().invoke(
+        cli.app,
+        ["compare", "--label", "x", "--set", "no_such_knob=1", "--local"],
+    )
+    assert result.exit_code != 0
+    assert "no_such_knob" in plain(result.stderr)

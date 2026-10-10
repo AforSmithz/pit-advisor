@@ -5,6 +5,7 @@ import numpy as np
 import polars as pl
 import pytest
 
+from pitadvisor.features import grid
 from pitadvisor.features.assemble import event_at, next_event
 from pitadvisor.model import backtest, pool
 from pitadvisor.model.baselines import FEATURES
@@ -360,3 +361,166 @@ def test_a_reader_that_cannot_write_leaves_no_cache_behind(store, seeded):
     seeded()
     backtest.cached_panel(store, save=False)
     assert not list(store.list(backtest.PANEL_PREFIX))
+
+
+def test_until_cuts_the_calendar_before_the_warmup_and_holdout_are_taken(pane):
+    calendar = backtest.calendar_for(pane, 2023, 3, 2, until=date(2024, 1, 1))
+    assert calendar.height == 5
+    assert calendar["race_date"].max() < date(2024, 1, 1)
+    assert set(calendar["season"].to_list()) == {2023}
+
+
+def test_a_dev_window_never_scores_a_race_on_or_after_until(pane):
+    report = backtest.run(
+        pane,
+        2023,
+        3,
+        np.random.default_rng(SEED),
+        "test-run",
+        paths=150,
+        seed=SEED,
+        warmup=2,
+        until=date(2024, 1, 1),
+    )
+    assert report.until == date(2024, 1, 1)
+    assert report.per_race
+    assert all(item.race_date < date(2024, 1, 1) for item in report.per_race)
+
+
+def test_a_variant_paired_with_itself_gains_exactly_nothing(pane):
+    """Same races, same draws: whatever the noise, it cancels, so the paired gain of the model
+    against itself is zero and not merely small. Anything else means the draws drifted."""
+    result = backtest.compare(
+        pane,
+        2024,
+        3,
+        np.random.default_rng(SEED),
+        "test-run",
+        base=backtest.Variant(),
+        candidate=backtest.Variant(),
+        label="itself",
+        paths=150,
+        seed=SEED,
+        warmup=2,
+    )
+    assert result.races == len(result.per_race)
+    for interval in (result.log_loss_gain, result.brier_gain, result.raw_log_loss_gain):
+        assert interval.value == 0.0
+        assert interval.low == 0.0
+        assert interval.high == 0.0
+    assert all(item.log_loss["base"] == item.log_loss["candidate"] for item in result.per_race)
+
+
+def test_a_race_draws_the_same_luck_whatever_was_simulated_before_it(pane):
+    longer = backtest.run(
+        pane, 2024, 3, np.random.default_rng(SEED), "a", paths=150, seed=SEED, warmup=2
+    )
+    shorter = backtest.run(
+        pane, 2024, 2, np.random.default_rng(SEED), "b", paths=150, seed=SEED, warmup=1
+    )
+    both = {(item.season, item.round): item for item in longer.per_race}
+    shared = [item for item in shorter.per_race if (item.season, item.round) in both]
+    assert shared
+    for item in shared:
+        assert item.log_loss[backtest.RAW] == both[(item.season, item.round)].log_loss[backtest.RAW]
+
+
+def test_a_variant_rejects_a_knob_it_does_not_have():
+    with pytest.raises(ValueError, match="extra"):
+        backtest.Variant.model_validate({"no_such_knob": 1})
+
+
+def test_the_named_subsets_are_fixed_by_race_not_by_result():
+    def scored(season, round_):
+        return backtest.RaceScore(
+            season=season,
+            round=round_,
+            circuit_id="x",
+            race_date=date(season, 6, 1),
+            starters=20,
+            log_loss={},
+        )
+
+    keep = backtest.SUBSETS["post_reset_2022"]
+    assert [keep(scored(2022, round_)) for round_ in (8, 9, 16, 17)] == [
+        False,
+        True,
+        True,
+        False,
+    ]
+    assert not keep(scored(2023, 10))
+
+
+def test_every_model_is_scored_on_win_podium_and_points_as_events(pane):
+    report = backtest.run(
+        pane, 2024, 3, np.random.default_rng(SEED), "test-run", paths=150, seed=SEED
+    )
+    for scored in report.scored:
+        assert set(scored.events) == set(backtest.EVENTS)
+        for event in backtest.EVENTS:
+            split = scored.events[event]
+            assert split.log_loss.value >= 0.0
+            assert 0.0 <= split.brier.value <= 1.0
+            assert split.murphy.brier == pytest.approx(split.brier.value)
+    for paired in report.paired:
+        assert set(paired.events) == set(backtest.EVENTS)
+
+
+def test_the_event_odds_are_the_place_distribution_summed():
+    grid = np.array([[0.5, 0.3, 0.1, 0.1], [0.1, 0.2, 0.3, 0.4]])
+    probability, happened = backtest._event(grid, np.array([0, 3]), "podium")
+    assert probability.tolist() == pytest.approx([0.9, 0.6])
+    assert happened.tolist() == [1.0, 0.0]
+
+
+def test_a_candidate_against_itself_gains_nothing_on_any_event(pane):
+    result = backtest.compare(
+        pane,
+        2024,
+        2,
+        np.random.default_rng(SEED),
+        "test-run",
+        base=backtest.Variant(),
+        candidate=backtest.Variant(),
+        paths=150,
+        seed=SEED,
+        warmup=2,
+    )
+    assert set(result.events) == set(backtest.EVENTS)
+    for gain in result.events.values():
+        assert gain.log_loss_gain.value == 0.0
+        assert gain.brier_gain.value == 0.0
+
+
+def test_on_saturday_night_the_stewards_drops_are_applied_to_the_qualifying_order(pane, store):
+    context = event_at(store, 2024, 3)
+    saturday = after_qualifying(pane, context)
+    order = pane.qualified[(2024, 3)]
+    first = min(order, key=order.get)
+    penalised = dataclasses.replace(
+        saturday,
+        penalties=pl.DataFrame(
+            [
+                {
+                    "season": 2024,
+                    "round": 3,
+                    "driver_code": first,
+                    "kind": "back_of_grid",
+                    "positions": None,
+                    "issued": None,
+                    "session": "Practice 3",
+                    "next_event": False,
+                    "sprint_only": False,
+                }
+            ],
+            schema=grid.SCHEMA,
+        ),
+    )
+    codes = sorted(order)
+    slots = backtest.grid_for(penalised, context, codes)
+    assert slots[first] == len(codes)
+    assert sorted(slots.values()) == list(range(1, len(codes) + 1))
+
+
+def test_the_panel_carries_the_grid_sanctions_frame(pane):
+    assert set(pane.penalties.columns) == set(grid.COLUMNS)

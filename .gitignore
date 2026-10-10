@@ -51,3 +51,6 @@ transform/target/
 transform/logs/
 transform/dbt_packages/
 logs/
+
+# dev-window comparisons are working numbers, only the holdout report ships
+results/backtest/dev/

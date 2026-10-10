@@ -10,7 +10,7 @@ import numpy as np
 import typer
 from boto3.session import Session
 from botocore.exceptions import BotoCoreError, ClientError
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from pitadvisor.agent import evals as agent_evals
 from pitadvisor.agent import kb as agent_kb
@@ -636,6 +636,7 @@ def quality_report(
 EVENT_VIEWS = {"weekend": weekend_view, "driver": driver_view, "track": track_view}
 SIM_VIEWS = ("forecast", "calibration")
 RESULTS = Path("results/backtest")
+DEV_RESULTS = RESULTS / "dev"
 
 
 def _assembled(store: ObjectStore, event: str) -> feature_assemble.Assembled:
@@ -834,6 +835,10 @@ def backtest(
     seed: Annotated[int, typer.Option(help="Seed, so the report reproduces.")] = 11,
     output: Annotated[Path, typer.Option(help="Where the artifacts land.")] = RESULTS,
     local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+    until: Annotated[
+        datetime | None,
+        typer.Option(formats=["%Y-%m-%d"], help="Only races before this date, for the dev window."),
+    ] = None,
 ) -> None:
     store, _, _ = _runtime(local, get_settings())
     pane = _panel(store)
@@ -846,6 +851,7 @@ def backtest(
             _run_id(),
             paths=paths,
             seed=seed,
+            until=until.date() if until else None,
         )
     except forecast_model.NoForecastError as exc:
         typer.echo(str(exc), err=True)
@@ -854,6 +860,68 @@ def backtest(
     (output / calibrate.REPORT).write_text(report.model_dump_json(indent=2) + "\n")
     typer.echo(calibrate.summarise(report), nl=False)
     typer.echo(f"\nwrote {output / calibrate.REPORT}")
+
+
+def _variant(pairs: list[str]) -> forecast_model.Variant:
+    values: dict[str, object] = {}
+    for pair in pairs:
+        key, sep, raw = pair.partition("=")
+        if not sep:
+            raise typer.BadParameter(f"{pair!r} is not key=value")
+        try:
+            values[key.strip()] = json.loads(raw)
+        except json.JSONDecodeError:
+            values[key.strip()] = raw
+    try:
+        return forecast_model.Variant.model_validate(values)
+    except ValidationError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@app.command(help="Pair a candidate variant against the model as it ships, on the same draws.")
+def compare(
+    label: Annotated[str, typer.Option(help="Names the report, compare-<label>.json.")],
+    candidate: Annotated[
+        list[str] | None, typer.Option("--set", help="key=value on the candidate, repeatable.")
+    ] = None,
+    base: Annotated[
+        list[str] | None, typer.Option("--base", help="key=value on the base, repeatable.")
+    ] = None,
+    from_season: Annotated[int, typer.Option("--from", help="Earliest season.")] = 2021,
+    holdout: Annotated[int, typer.Option(help="How many races to score.")] = 36,
+    until: Annotated[
+        datetime | None,
+        typer.Option(formats=["%Y-%m-%d"], help="Only races before this date."),
+    ] = datetime(2024, 1, 1),
+    paths: Annotated[int, typer.Option(help="Simulated races per event.")] = 4000,
+    seed: Annotated[int, typer.Option(help="Seed, so the comparison reproduces.")] = 11,
+    output: Annotated[Path, typer.Option(help="Where the report lands.")] = DEV_RESULTS,
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+) -> None:
+    store, _, _ = _runtime(local, get_settings())
+    pane = _panel(store)
+    try:
+        result = forecast_model.compare(
+            pane,
+            from_season,
+            holdout,
+            np.random.default_rng(seed),
+            _run_id(),
+            base=_variant(base or []),
+            candidate=_variant(candidate or []),
+            label=label,
+            paths=paths,
+            seed=seed,
+            until=until.date() if until else None,
+        )
+    except forecast_model.NoForecastError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    output.mkdir(parents=True, exist_ok=True)
+    target = output / f"compare-{label}.json"
+    target.write_text(result.model_dump_json(indent=2) + "\n")
+    typer.echo(calibrate.describe(result), nl=False)
+    typer.echo(f"\nwrote {target}")
 
 
 @app.command(name="calibration-report", help="Reliability curves and the summary, from a backtest.")

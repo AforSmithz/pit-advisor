@@ -3,15 +3,17 @@
 import hashlib
 import io
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from datetime import UTC, date, datetime
 
 import numpy as np
 import polars as pl
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from pitadvisor.features import form, quali_race, reliability, track_fit
+from pitadvisor.features import grid as starting
 from pitadvisor.features import weather as wet_weather
 from pitadvisor.features.assemble import (
     EventContext,
@@ -27,7 +29,17 @@ from pitadvisor.features.clean_pace import Reason, Regime, SessionPace, classify
 from pitadvisor.ingest.raw_store import ObjectStore
 from pitadvisor.model import baselines
 from pitadvisor.model import pool as pooling
-from pitadvisor.model.metrics import Bin, Interval, brier, log_loss, race_bootstrap
+from pitadvisor.model.metrics import (
+    Bin,
+    Interval,
+    Murphy,
+    binary_brier,
+    binary_log_loss,
+    brier,
+    log_loss,
+    murphy,
+    race_bootstrap,
+)
 from pitadvisor.model.metrics import reliability as curve
 from pitadvisor.quality.checks import read_table
 from pitadvisor.sim import dnf, overtake, race, safety_car, starts, tyres
@@ -51,6 +63,13 @@ PRIOR_REGIME_RACES = 6.0
 class NoForecastError(RuntimeError):
     def __init__(self, detail: str) -> None:
         super().__init__(detail)
+
+
+class Variant(BaseModel, frozen=True):
+    """The knobs a candidate change turns. The defaults are the model as it ships, so an empty
+    variant is the reference every comparison is paired against."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 TYPES: dict[str, type[pl.DataType]] = {
@@ -95,11 +114,20 @@ class Panel:
         default_factory=lambda: _empty(tyres.STRATEGY_COLUMNS)
     )
     stints: pl.DataFrame = dataclass_field(default_factory=lambda: _empty(tyres.STINT_COLUMNS))
+    # grid sanctions resolved to the race they are served at, for a grid nobody has started from
+    penalties: pl.DataFrame = dataclass_field(default_factory=starting.empty)
 
 
 # bump when Panel changes shape, so a cache written by older code is never read by newer code
-PANEL_VERSION = 1
-PANEL_TABLES = ("races", "results", "session_laps", "qualifying")
+PANEL_VERSION = 2
+PANEL_TABLES = (
+    "races",
+    "results",
+    "session_laps",
+    "qualifying",
+    "incident_sanctions",
+    "incidents",
+)
 PANEL_PREFIX = f"{Layer.CACHE}/panel/"
 FRAMES = (
     "events",
@@ -116,6 +144,7 @@ FRAMES = (
     "regimes",
     "strategies",
     "stints",
+    "penalties",
 )
 
 
@@ -240,6 +269,11 @@ def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:
         qualified=_qualified(qualifying),
         strategies=_strategy_frame(racing, dated, outcome),
         stints=stint_rows,
+        penalties=starting.penalties(
+            read_table(store, layer, "incident_sanctions"),
+            read_table(store, layer, "incidents"),
+            results,
+        ),
     )
 
 
@@ -594,6 +628,21 @@ def seats_for(
     return seats, ids
 
 
+def penalised_grid(pane: Panel, context: EventContext, codes: list[str]) -> dict[str, int]:
+    qualified = pane.qualified.get((context.season, context.round), {})
+    if not qualified:
+        return {}
+    calendar = [
+        (int(row[0]), int(row[1]))
+        for row in pane.events.sort("race_date").select("season", "round").iter_rows()
+    ]
+    entered = {key: set(entry.driver_code) for key, entry in pane.entries.items()}
+    served = starting.due(
+        pane.penalties, calendar, entered, (context.season, context.round), set(codes)
+    )
+    return starting.starting_grid(qualified, served)
+
+
 def grid_for(pane: Panel, context: EventContext, codes: list[str]) -> dict[str, int]:
     entered = pane.results.filter(
         (pl.col("season") == context.season) & (pl.col("round") == context.round)
@@ -604,9 +653,9 @@ def grid_for(pane: Panel, context: EventContext, codes: list[str]) -> dict[str, 
         for row in entered.iter_rows(named=True)
     }
     if not known:
-        # saturday night: no result yet, but qualifying has set the order. grid penalties are
-        # not known until the start, so this is the qualifying order and not the grid
-        known = dict(pane.qualified.get((context.season, context.round), {}))
+        # saturday night: no result yet, but qualifying has set the order and the stewards have
+        # handed down the grid drops. a pit-lane start is decided on sunday and stays unknown
+        known = penalised_grid(pane, context, codes)
     # a car with no grid slot starts from the back, which is where a pit lane start begins
     return {code: known.get(code, back) for code in codes}
 
@@ -644,6 +693,7 @@ def setup(
     as_of: date,
     scenario: str,
     grid: dict[str, int] | None = None,
+    variant: Variant | None = None,
 ) -> race.RaceSetup:
     history = pane.pace.filter(pl.col("race_date") < as_of)
     if not history.height:
@@ -872,15 +922,21 @@ def forecast(
     weights: dict[str, float] | None = None,
     weights_are_forecast: bool = False,
     grid: dict[str, int] | None = None,
+    variant: Variant | None = None,
 ) -> Forecast:
     mix = weights or scenario_weights(pane, context.circuit_id, as_of)
     outcomes: dict[str, race.Outcome] = {}
     built: dict[str, race.RaceSetup] = {}
+    # a key for every scenario whether it runs or not, so a weight dropping to zero does not
+    # hand the next scenario a different set of draws
+    keys = dict(zip(SCENARIOS, rng.integers(0, 2**63, size=len(SCENARIOS)), strict=True))
     for name in SCENARIOS:
         if mix.get(name, 0.0) <= 0.0:
             continue
-        built[name] = setup(pane, context, as_of, name, grid)
-        outcomes[name] = race.simulate(built[name], rng, paths, name)
+        built[name] = setup(pane, context, as_of, name, grid, variant)
+        outcomes[name] = race.simulate(
+            built[name], np.random.default_rng(int(keys[name])), paths, name
+        )
     if not outcomes:
         raise NoForecastError("every scenario carries zero weight")
     blended = race.blend(outcomes, mix, "blended")
@@ -1048,6 +1104,23 @@ EVENTS = ("win", "podium", "points")
 EVENT_CUTOFF = {"win": 1, "podium": 3, "points": 10}
 
 
+class EventScore(BaseModel, frozen=True):
+    log_loss: Interval
+    brier: Interval
+    murphy: Murphy
+
+
+class EventGain(BaseModel, frozen=True):
+    log_loss_gain: Interval
+    brier_gain: Interval
+
+
+def _event(grid: np.ndarray, outcome: np.ndarray, event: str) -> tuple[np.ndarray, np.ndarray]:
+    """The event odds are the place distribution summed, the same forecast and not a new one."""
+    cut = EVENT_CUTOFF[event]
+    return grid[:, :cut].sum(axis=1), (outcome < cut).astype(float)
+
+
 class Scored(BaseModel, frozen=True):
     name: str
     rows: int
@@ -1056,6 +1129,7 @@ class Scored(BaseModel, frozen=True):
     brier: Interval
     calibration: dict[str, float]
     curves: dict[str, list[Bin]]
+    events: dict[str, EventScore] = {}
 
 
 class Paired(BaseModel, frozen=True):
@@ -1066,6 +1140,7 @@ class Paired(BaseModel, frozen=True):
     baseline: str
     log_loss_gain: Interval
     brier_gain: Interval
+    events: dict[str, EventGain] = {}
 
 
 class RaceScore(BaseModel, frozen=True):
@@ -1094,6 +1169,7 @@ class Report(BaseModel, frozen=True):
     separated_from: list[str]
     assumptions: list[Assumption]
     warmup: int = 0
+    until: date | None = None
     # fitted on every race in the run, which is what a forecast made after it may use
     pool: pooling.Pool = pooling.IDENTITY
     pool_without_grid: pooling.Pool = pooling.IDENTITY
@@ -1112,30 +1188,65 @@ def _renormalised(grid: np.ndarray, starters: int, width: int = FIELD) -> np.nda
     return padded
 
 
-def run(
-    pane: Panel,
-    from_season: int,
-    holdout: int,
-    rng: np.random.Generator,
-    run_id: str,
-    paths: int = race.PATHS,
-    seed: int = 0,
-    generated_at: datetime | None = None,
-    warmup: int = WARMUP,
-) -> Report:
-    """Time forward, one race at a time. Every fit behind a prediction sees only what had
-    happened when it was made, which is why the panel is filtered by date and never shuffled.
-    The pool is refitted before every scored race on the races forecast before it, warmup
-    included, so it is as blind to the race it is scored on as the simulation is."""
+@dataclass
+class Walk:
+    """Everything a walk forward produced, before it is summarised. Two walks over the same
+    calendar line up race for race, which is what a paired comparison needs."""
+
+    names: tuple[str, ...]
+    grids: dict[str, list[np.ndarray]]
+    truth: list[np.ndarray]
+    labels: list[np.ndarray]
+    per_race: list[RaceScore]
+    assumptions: list[Assumption]
+    history: list[pooling.Scored]
+    width: int
+
+    def stacked(self, name: str) -> np.ndarray:
+        return np.vstack(self.grids[name])
+
+    @property
+    def outcome(self) -> np.ndarray:
+        return np.concatenate(self.truth)
+
+    @property
+    def race_of(self) -> np.ndarray:
+        return np.concatenate(self.labels)
+
+
+def race_rng(seed: int, season: int, round_: int) -> np.random.Generator:
+    """A race's draws depend on the race and the seed, not on what was simulated before it,
+    so a variant that changes one race leaves every other race's luck alone."""
+    return np.random.default_rng([seed, season, round_])
+
+
+def calendar_for(
+    pane: Panel, from_season: int, holdout: int, warmup: int, until: date | None = None
+) -> pl.DataFrame:
     # the calendar runs to the end of the season, and a race that has not been run has nothing
     # to score. counting it would shrink the holdout every time the schedule landed early
     played = pane.results.select("season", "round").unique()
-    calendar = (
-        pane.events.filter(pl.col("season") >= from_season)
-        .join(played, on=["season", "round"], how="semi")
+    events = pane.events.filter(pl.col("season") >= from_season)
+    if until is not None:
+        events = events.filter(pl.col("race_date") < until)
+    return (
+        events.join(played, on=["season", "round"], how="semi")
         .sort("race_date")
         .tail(holdout + warmup)
     )
+
+
+def _walk(
+    pane: Panel,
+    from_season: int,
+    holdout: int,
+    seed: int,
+    paths: int,
+    warmup: int,
+    until: date | None,
+    variant: Variant,
+) -> Walk:
+    calendar = calendar_for(pane, from_season, holdout, warmup, until)
     if not calendar.height:
         raise NoForecastError(f"no races from {from_season} to hold out")
     first_scored = max(calendar.height - holdout, 0)
@@ -1150,12 +1261,16 @@ def run(
     )
 
     names = (MODEL, RAW, *baselines.FEATURES)
-    grids: dict[str, list[np.ndarray]] = {name: [] for name in names}
-    truth: list[np.ndarray] = []
-    labels: list[np.ndarray] = []
-    per_race: list[RaceScore] = []
-    assumptions: list[Assumption] = []
-    history: list[pooling.Scored] = []
+    walk = Walk(
+        names=names,
+        grids={name: [] for name in names},
+        truth=[],
+        labels=[],
+        per_race=[],
+        assumptions=[],
+        history=[],
+        width=width,
+    )
 
     for index, row in enumerate(calendar.iter_rows(named=True)):
         context = EventContext(
@@ -1170,7 +1285,14 @@ def run(
         if not finished:
             continue
         try:
-            predicted = forecast(pane, context, context.race_date, rng, paths)
+            predicted = forecast(
+                pane,
+                context,
+                context.race_date,
+                race_rng(seed, context.season, context.round),
+                paths,
+                variant=variant,
+            )
         except (NoForecastError, track_fit.UnknownCircuitError, form.NoPairingsError):
             continue
         codes = [code for code in predicted.outcome.driver_code if code in finished]
@@ -1195,45 +1317,66 @@ def run(
         actual = np.array([finished[code] for code in codes]) - 1
         scored = pooling.Scored(sim=sim, grid=guessed["grid"], actual=actual, starters=starters)
         if index < first_scored:
-            history.append(scored)
+            walk.history.append(scored)
             continue
 
-        pool = pooling.fit(history)
-        grids[MODEL].append(pooling.combine(sim, guessed["grid"], starters, pool))
-        grids[RAW].append(sim)
+        pool = pooling.fit(walk.history)
+        walk.grids[MODEL].append(pooling.combine(sim, guessed["grid"], starters, pool))
+        walk.grids[RAW].append(sim)
         for name in baselines.FEATURES:
-            grids[name].append(guessed[name])
-        history.append(scored)
+            walk.grids[name].append(guessed[name])
+        walk.history.append(scored)
 
-        truth.append(actual)
-        labels.append(np.full(len(codes), index))
-        per_race.append(
+        walk.truth.append(actual)
+        walk.labels.append(np.full(len(codes), index))
+        walk.per_race.append(
             RaceScore(
                 season=context.season,
                 round=context.round,
                 circuit_id=context.circuit_id,
                 race_date=context.race_date,
                 starters=starters,
-                log_loss={name: log_loss(grids[name][-1], actual) for name in grids},
+                log_loss={name: log_loss(walk.grids[name][-1], actual) for name in names},
             )
         )
-        if not assumptions:
-            assumptions = predicted.assumptions
+        if not walk.assumptions:
+            walk.assumptions = predicted.assumptions
 
-    if not truth:
+    if not walk.truth:
         raise NoForecastError("no race in the holdout produced both a forecast and a result")
-    outcome = np.concatenate(truth)
-    race_of = np.concatenate(labels)
-    scored_models = [_score(name, np.vstack(grids[name]), outcome, race_of, rng) for name in names]
+    return walk
+
+
+def run(
+    pane: Panel,
+    from_season: int,
+    holdout: int,
+    rng: np.random.Generator,
+    run_id: str,
+    paths: int = race.PATHS,
+    seed: int = 0,
+    generated_at: datetime | None = None,
+    warmup: int = WARMUP,
+    until: date | None = None,
+    variant: Variant | None = None,
+) -> Report:
+    """Time forward, one race at a time. Every fit behind a prediction sees only what had
+    happened when it was made, which is why the panel is filtered by date and never shuffled.
+    The pool is refitted before every scored race on the races forecast before it, warmup
+    included, so it is as blind to the race it is scored on as the simulation is."""
+    walk = _walk(pane, from_season, holdout, seed, paths, warmup, until, variant or Variant())
+    outcome = walk.outcome
+    race_of = walk.race_of
+    scored_models = [_score(name, walk.stacked(name), outcome, race_of, rng) for name in walk.names]
     ours = next(item for item in scored_models if item.name == MODEL)
     beats = all(
         ours.log_loss.value < item.log_loss.value
         for item in scored_models
         if item.name in baselines.FEATURES
     )
-    mine = np.vstack(grids[MODEL])
+    mine = walk.stacked(MODEL)
     paired = [
-        _paired(name, mine, np.vstack(grids[name]), outcome, race_of, rng)
+        _paired(name, mine, walk.stacked(name), outcome, race_of, rng)
         for name in baselines.FEATURES
     ]
     separated = [
@@ -1241,24 +1384,141 @@ def run(
         for item in paired
         if np.isfinite(item.log_loss_gain.low) and item.log_loss_gain.low > 0.0
     ]
-    final = pooling.fit(history)
+    final = pooling.fit(walk.history)
     return Report(
         generated_at=generated_at or datetime.now(UTC),
         run_id=run_id,
         from_season=from_season,
         holdout=holdout,
         paths=paths,
-        field=width,
+        field=walk.width,
         seed=seed,
         scored=scored_models,
         paired=paired,
-        per_race=per_race,
+        per_race=walk.per_race,
         beats_baselines=beats,
         separated_from=separated,
-        assumptions=[*assumptions, *_pool_assumptions(final)],
+        assumptions=[*walk.assumptions, *_pool_assumptions(final)],
         warmup=warmup,
+        until=until,
         pool=final,
-        pool_without_grid=pooling.fit(history, with_grid=False),
+        pool_without_grid=pooling.fit(walk.history, with_grid=False),
+    )
+
+
+class Subset(BaseModel, frozen=True):
+    name: str
+    races: int
+    log_loss_gain: Interval
+
+
+class Comparison(BaseModel, frozen=True):
+    """A candidate against the model it would replace, on the same races and the same draws.
+    A gain is the base's loss minus the candidate's, so positive means the candidate is better."""
+
+    generated_at: datetime
+    run_id: str
+    label: str
+    from_season: int
+    until: date | None
+    holdout: int
+    warmup: int
+    paths: int
+    seed: int
+    base: Variant
+    candidate: Variant
+    races: int
+    log_loss_gain: Interval
+    brier_gain: Interval
+    raw_log_loss_gain: Interval
+    events: dict[str, EventGain]
+    subsets: list[Subset]
+    per_race: list[RaceScore]
+
+
+# named in docs/improvements.md before anything was measured, so a subset cannot be picked to
+# flatter a result after the fact
+SUBSETS: dict[str, Callable[[RaceScore], bool]] = {
+    "post_reset_2022": lambda item: item.season == 2022 and 9 <= item.round <= 16,
+}
+
+
+def compare(
+    pane: Panel,
+    from_season: int,
+    holdout: int,
+    rng: np.random.Generator,
+    run_id: str,
+    base: Variant,
+    candidate: Variant,
+    label: str = "",
+    paths: int = race.PATHS,
+    seed: int = 0,
+    warmup: int = WARMUP,
+    until: date | None = None,
+    generated_at: datetime | None = None,
+) -> Comparison:
+    first = _walk(pane, from_season, holdout, seed, paths, warmup, until, base)
+    second = _walk(pane, from_season, holdout, seed, paths, warmup, until, candidate)
+    if [(item.season, item.round) for item in first.per_race] != [
+        (item.season, item.round) for item in second.per_race
+    ]:
+        raise NoForecastError("the two variants scored different races, nothing to pair")
+    outcome = first.outcome
+    race_of = first.race_of
+    theirs, mine = first.stacked(MODEL), second.stacked(MODEL)
+    gain = _paired(label or "candidate", mine, theirs, outcome, race_of, rng)
+    raw = _paired("raw", second.stacked(RAW), first.stacked(RAW), outcome, race_of, rng)
+
+    subsets: list[Subset] = []
+    for name, keep in SUBSETS.items():
+        chosen = [
+            label
+            for label, item in zip(np.unique(race_of), first.per_race, strict=True)
+            if keep(item)
+        ]
+        if not chosen:
+            continue
+        rows = np.isin(race_of, chosen)
+        subsets.append(
+            Subset(
+                name=name,
+                races=len(chosen),
+                log_loss_gain=_paired(
+                    name, mine[rows], theirs[rows], outcome[rows], race_of[rows], rng
+                ).log_loss_gain,
+            )
+        )
+
+    return Comparison(
+        generated_at=generated_at or datetime.now(UTC),
+        run_id=run_id,
+        label=label,
+        from_season=from_season,
+        until=until,
+        holdout=holdout,
+        warmup=warmup,
+        paths=paths,
+        seed=seed,
+        base=base,
+        candidate=candidate,
+        races=int(np.unique(race_of).shape[0]),
+        log_loss_gain=gain.log_loss_gain,
+        brier_gain=gain.brier_gain,
+        raw_log_loss_gain=raw.log_loss_gain,
+        events=gain.events,
+        subsets=subsets,
+        per_race=[
+            item.model_copy(
+                update={
+                    "log_loss": {
+                        "base": item.log_loss[MODEL],
+                        "candidate": other.log_loss[MODEL],
+                    }
+                }
+            )
+            for item, other in zip(first.per_race, second.per_race, strict=True)
+        ],
     )
 
 
@@ -1277,6 +1537,28 @@ def _paired(
     race_of: np.ndarray,
     rng: np.random.Generator,
 ) -> Paired:
+    events: dict[str, EventGain] = {}
+    for event in EVENTS:
+        ours, happened = _event(mine, outcome, event)
+        other, _ = _event(theirs, outcome, event)
+        events[event] = EventGain(
+            log_loss_gain=race_bootstrap(
+                race_of,
+                lambda rows, ours=ours, other=other, happened=happened: (
+                    binary_log_loss(other[rows], happened[rows])
+                    - binary_log_loss(ours[rows], happened[rows])
+                ),
+                rng,
+            ),
+            brier_gain=race_bootstrap(
+                race_of,
+                lambda rows, ours=ours, other=other, happened=happened: (
+                    binary_brier(other[rows], happened[rows])
+                    - binary_brier(ours[rows], happened[rows])
+                ),
+                rng,
+            ),
+        )
     return Paired(
         baseline=baseline,
         log_loss_gain=race_bootstrap(
@@ -1291,6 +1573,7 @@ def _paired(
             lambda rows: brier(theirs[rows], outcome[rows]) - brier(mine[rows], outcome[rows]),
             rng,
         ),
+        events=events,
     )
 
 
@@ -1303,15 +1586,27 @@ def _score(
 ) -> Scored:
     curves: dict[str, list[Bin]] = {}
     calibration: dict[str, float] = {}
+    events: dict[str, EventScore] = {}
     for event in EVENTS:
-        cut = EVENT_CUTOFF[event]
-        probability = grid[:, :cut].sum(axis=1)
-        happened = (outcome < cut).astype(float)
+        probability, happened = _event(grid, outcome, event)
         bins = curve(probability, happened)
         curves[event] = bins
         calibration[event] = float(
             sum(item.count * abs(item.forecast - item.observed) for item in bins)
             / max(sum(item.count for item in bins), 1)
+        )
+        events[event] = EventScore(
+            log_loss=race_bootstrap(
+                race_of,
+                lambda rows, p=probability, y=happened: binary_log_loss(p[rows], y[rows]),
+                rng,
+            ),
+            brier=race_bootstrap(
+                race_of,
+                lambda rows, p=probability, y=happened: binary_brier(p[rows], y[rows]),
+                rng,
+            ),
+            murphy=murphy(probability, happened),
         )
     return Scored(
         name=name,
@@ -1321,4 +1616,5 @@ def _score(
         brier=race_bootstrap(race_of, lambda rows: brier(grid[rows], outcome[rows]), rng),
         calibration=calibration,
         curves=curves,
+        events=events,
     )
