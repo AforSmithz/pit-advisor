@@ -55,16 +55,24 @@ class ScenarioWeights(BaseModel, frozen=True):
         return {Scenario.DRY: self.dry, Scenario.MIXED: self.mixed, Scenario.WET: self.wet}
 
 
-def hourly_wet(probability: float | None, millimetres: float) -> float:
-    """Open-Meteo's precipitation is already an expectation over the hour, so dividing it by
-    the chance of rain recovers how hard it would come down if it did rain. Drizzle that
-    never reaches the intermediate crossover is a dry hour however likely it is."""
-    if probability is None:
-        return 1.0 if millimetres >= WET_MM_PER_HOUR else 0.0
-    chance = probability / 100.0
-    if chance <= 0.0:
-        return 0.0
-    return chance if millimetres / chance >= WET_MM_PER_HOUR else 0.0
+def runs(latest: pl.DataFrame) -> np.ndarray:
+    """Hours by forecast runs, true where that run rains hard enough for intermediates. An
+    archive read or a snapshot from before the ensemble was fetched is a single run."""
+    spread = (
+        latest["ensemble_precipitation_mm"].to_list()
+        if "ensemble_precipitation_mm" in latest.columns
+        else []
+    )
+    if spread and all(spread) and len({len(hour) for hour in spread}) == 1:
+        grid = np.array(
+            [[np.nan if value is None else value for value in hour] for hour in spread],
+            dtype=float,
+        )
+        # the two ensembles end at different horizons, so a run with a gap is dropped whole
+        whole = grid[:, ~np.isnan(grid).any(axis=0)]
+        if whole.shape[1]:
+            return whole >= WET_MM_PER_HOUR
+    return latest["precipitation_mm"].to_numpy().astype(float)[:, None] >= WET_MM_PER_HOUR
 
 
 def scenario(
@@ -83,26 +91,21 @@ def scenario(
     # one circuit gets re-forecast every run, so keep the newest row per hour and no more
     latest = covering.sort("ingested_at").group_by("observed_at").last().sort("observed_at")
 
-    wet = np.array(
-        [
-            hourly_wet(row["precipitation_probability"], float(row["precipitation_mm"]))
-            for row in latest.iter_rows(named=True)
-        ]
-    )
-    # rain persists across hours far more than it flips, so the hours are coupled at the
-    # extreme rather than treated as independent. independence would invent a mixed race
-    # out of two hours that are really the same weather system
-    wettest, driest = float(wet.max()), float(wet.min())
+    # each run is one coherent weather system through the race, so a run wet in some hours
+    # and dry in others is a mixed race. treating hours as independent would invent one
+    wet = runs(latest)
+    always, ever = wet.all(axis=0), wet.any(axis=0)
+    hourly = wet.mean(axis=1)
     return ScenarioWeights(
-        dry=1.0 - wettest,
-        mixed=wettest - driest,
-        wet=driest,
+        dry=float(1.0 - ever.mean()),
+        mixed=float((ever & ~always).mean()),
+        wet=float(always.mean()),
         hours=latest.height,
         is_forecast=bool(latest["is_forecast"].any()),
         snapshot_at=latest["ingested_at"].max(),  # pyright: ignore[reportArgumentType]
         expected_mm=float(latest["precipitation_mm"].sum()),
-        wettest_hour=wettest,
-        driest_hour=driest,
+        wettest_hour=float(hourly.max()),
+        driest_hour=float(hourly.min()),
     )
 
 

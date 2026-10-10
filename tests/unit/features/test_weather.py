@@ -10,7 +10,6 @@ from pitadvisor.features.weather import (
     Scenario,
     ScenarioWeights,
     adjusted,
-    hourly_wet,
     scenario,
     wet_form,
 )
@@ -20,7 +19,7 @@ INGESTED = datetime(2024, 5, 4, 6, 0, tzinfo=UTC)
 
 
 def hours(
-    plan: list[tuple[float, float | None]],
+    plan: list[tuple[float, list[float | None] | None]],
     ingested: datetime = INGESTED,
     forecast: bool = True,
 ) -> pl.DataFrame:
@@ -32,57 +31,86 @@ def hours(
                 "ingested_at": ingested,
                 "is_forecast": forecast,
                 "precipitation_mm": millimetres,
-                "precipitation_probability": probability,
+                "precipitation_probability": None,
+                "ensemble_precipitation_mm": spread,
             }
-            for index, (millimetres, probability) in enumerate(plan)
-        ]
+            for index, (millimetres, spread) in enumerate(plan)
+        ],
+        schema_overrides={"ensemble_precipitation_mm": pl.List(pl.Float64)},
     )
 
 
 def test_a_dry_forecast_puts_everything_on_dry():
-    weights = scenario(hours([(0.0, 0.0), (0.0, 5.0), (0.0, 10.0)]), START)
+    weights = scenario(hours([(0.0, [0.0, 0.1]), (0.0, [0.0, 0.0]), (0.0, [0.2, 0.0])]), START)
     assert weights.dry == 1.0
     assert weights.wet == 0.0
     assert weights.mixed == 0.0
 
 
 def test_a_settled_downpour_puts_everything_on_wet():
-    weights = scenario(hours([(4.0, 100.0), (5.0, 100.0), (4.5, 100.0)]), START)
+    weights = scenario(hours([(4.0, [3.0, 5.0]), (5.0, [4.0, 6.0]), (4.5, [2.0, 1.0])]), START)
     assert weights.wet == 1.0
     assert weights.dry == 0.0
 
 
-def test_rain_arriving_mid_race_reads_as_mixed_not_as_half_a_wet_race():
-    weights = scenario(hours([(0.0, 0.0), (2.0, 80.0), (3.0, 90.0)]), START)
-    assert weights.mixed == pytest.approx(0.9)
-    assert weights.dry == pytest.approx(0.1)
+def test_a_run_that_rains_for_part_of_the_race_is_a_mixed_race():
+    plan = [(0.0, [0.0, 0.0, 0.0, 3.0]), (2.0, [0.0, 2.0, 0.0, 3.0]), (3.0, [0.0, 3.0, 0.0, 3.0])]
+    weights = scenario(hours(plan), START)
+    assert weights.dry == pytest.approx(0.5)
+    assert weights.mixed == pytest.approx(0.25)
+    assert weights.wet == pytest.approx(0.25)
+    assert weights.wettest_hour == pytest.approx(0.5)
+    assert weights.driest_hour == pytest.approx(0.25)
+
+
+def test_hours_wet_in_different_runs_do_not_add_up_to_a_wet_race():
+    # every hour has a wet run, but never the same one, so no run is wet all race
+    plan = [(0.0, [1.0, 0.0, 0.0]), (0.0, [0.0, 1.0, 0.0]), (0.0, [0.0, 0.0, 1.0])]
+    weights = scenario(hours(plan), START)
     assert weights.wet == 0.0
+    assert weights.mixed == pytest.approx(1.0)
 
 
 def test_the_three_weights_are_a_distribution():
     for plan in (
-        [(0.0, 0.0), (2.0, 80.0)],
-        [(4.0, 100.0), (5.0, 100.0)],
-        [(0.1, 40.0), (3.0, 60.0)],
+        [(0.0, [0.0, 2.0, 0.0]), (2.0, [0.6, 0.0, 0.0])],
+        [(4.0, [4.0, 1.0]), (5.0, [5.0, 0.0])],
+        [(0.1, None), (3.0, None)],
     ):
         weights = scenario(hours(plan), START)
         assert sum(weights.as_dict().values()) == pytest.approx(1.0)
         assert all(value >= 0.0 for value in weights.as_dict().values())
 
 
-def test_drizzle_that_never_reaches_the_crossover_is_a_dry_hour():
-    # 90% chance of 0.2 mm is 0.22 mm if it rains, which is a damp track on slicks
-    assert hourly_wet(90.0, 0.2) == 0.0
-    assert hourly_wet(90.0, 2.0) == pytest.approx(0.9)
+def test_a_zero_millimetre_deterministic_run_does_not_hide_the_ensemble():
+    # marina bay, 2026: the deterministic run said 0.0 mm with a 45% chance of rain, and
+    # the old weighting read that as a certainly dry race
+    spread = [[0.0] * 7 + [0.9], [0.0] * 8, [0.0] * 8]
+    weights = scenario(hours([(0.0, hour) for hour in spread]), START)
+    assert weights.mixed == pytest.approx(1 / 8)
+    assert weights.dry == pytest.approx(7 / 8)
 
 
-def test_a_certainty_with_no_probability_column_falls_back_to_intensity():
-    assert hourly_wet(None, 2.0) == 1.0
-    assert hourly_wet(None, 0.1) == 0.0
+def test_drizzle_that_never_reaches_the_crossover_is_a_dry_race():
+    weights = scenario(hours([(0.2, [0.3, 0.4, 0.2])] * 3), START)
+    assert weights.dry == 1.0
+
+
+def test_a_run_with_a_gap_is_dropped_rather_than_read_as_dry():
+    plan = [(0.0, [2.0, 0.0]), (0.0, [2.0, None]), (0.0, [2.0, None])]
+    weights = scenario(hours(plan), START)
+    assert weights.wet == 1.0
+
+
+def test_without_an_ensemble_the_single_run_decides():
+    assert scenario(hours([(2.0, None)] * 3), START).wet == 1.0
+    assert scenario(hours([(0.1, None)] * 3), START).dry == 1.0
+    legacy = hours([(2.0, None), (0.0, None)]).drop("ensemble_precipitation_mm")
+    assert scenario(legacy, START).mixed == 1.0
 
 
 def test_only_the_hours_inside_the_session_window_count():
-    plan = [(4.0, 100.0)] + [(0.0, 0.0)] * 3
+    plan = [(4.0, None)] + [(0.0, None)] * 3
     early = hours(plan).with_columns(pl.col("observed_at") - timedelta(hours=1))
     weights = scenario(early, START)
     assert weights.hours == 3
@@ -91,12 +119,12 @@ def test_only_the_hours_inside_the_session_window_count():
 
 def test_a_window_nothing_covers_raises_rather_than_guessing():
     with pytest.raises(NoForecastError):
-        scenario(hours([(0.0, 0.0)]), START + timedelta(days=2))
+        scenario(hours([(0.0, None)]), START + timedelta(days=2))
 
 
 def test_the_newest_snapshot_wins_and_an_older_one_can_be_replayed():
-    stale = hours([(4.0, 100.0), (4.0, 100.0)], ingested=INGESTED)
-    fresh = hours([(0.0, 0.0), (0.0, 0.0)], ingested=INGESTED + timedelta(days=1))
+    stale = hours([(4.0, [4.0]), (4.0, [4.0])], ingested=INGESTED)
+    fresh = hours([(0.0, [0.0]), (0.0, [0.0])], ingested=INGESTED + timedelta(days=1))
     both = pl.concat([stale, fresh])
     assert scenario(both, START).dry == 1.0
     replayed = scenario(both, START, as_of=INGESTED + timedelta(hours=1))
