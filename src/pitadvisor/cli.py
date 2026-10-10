@@ -621,6 +621,43 @@ def car_updates(
 
 
 @app.command(
+    name="jev-magnitudes",
+    help="Score each declared performance update with jev. Costs TypeSafe credit when it asks.",
+)
+def jev_magnitudes(
+    season: Annotated[int | None, typer.Option(help="One season only.")] = None,
+    ask: Annotated[
+        bool,
+        typer.Option("--ask/--replay", help="Call the API for responses not yet landed."),
+    ] = False,
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+) -> None:
+    from pitadvisor.ingest import typesafe
+    from pitadvisor.quality.checks import read_table
+
+    settings = get_settings()
+    store = LocalObjectStore(LOCAL_ROOT) if local else object_store(settings)
+    updates = read_table(store, Layer.BRONZE, "car_updates")
+    races = read_table(store, Layer.BRONZE, "races")
+    if updates is None or races is None:
+        typer.echo("no car_updates or races in bronze", err=True)
+        raise typer.Exit(1)
+    if ask and not settings.typesafe_api_key:
+        typer.echo("PITADV_TYPESAFE_API_KEY is not set", err=True)
+        raise typer.Exit(1)
+    key = settings.typesafe_api_key
+    asked, kept, dropped = typesafe.score(
+        RawStore(store),
+        updates,
+        races,
+        {"run_id": _run_id(), "ingested_at": datetime.now(UTC)},
+        (lambda body: typesafe.call(body, key)) if ask else None,
+        season,
+    )
+    typer.echo(f"{asked} requests, {kept} rows, {dropped} quarantined, model {typesafe.MODEL}")
+
+
+@app.command(
     name="incidents-extract",
     help="Read the stewards' documents that have no field block. Costs Bedrock tokens.",
 )

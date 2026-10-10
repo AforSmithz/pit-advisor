@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     guardrail_version: str = "DRAFT"
     # what the published dashboard may spend in a day, in questions
     ask_daily_limit: int = 20
+    # jev reads the declared car updates (U3). empty means replay landed responses only
+    typesafe_api_key: str = ""
 
     @model_validator(mode="after")
     def _derive_names(self) -> "Settings":
