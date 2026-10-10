@@ -130,10 +130,11 @@ def fetch(
                 fetched_at=datetime.now(UTC),
             )
             last = exc
-        except urllib.error.URLError as exc:
+        except (urllib.error.URLError, TimeoutError) as exc:
+            # a read that stalls past the timeout raises TimeoutError, not URLError
             last = exc
             if attempt == MAX_ATTEMPTS - 1:
-                raise FetchError(url, 0, str(exc.reason)) from exc
+                raise FetchError(url, 0, str(getattr(exc, "reason", exc))) from exc
             if limiter is not None:
                 limiter.backoff(attempt)
             continue

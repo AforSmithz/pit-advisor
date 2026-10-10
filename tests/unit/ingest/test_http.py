@@ -105,6 +105,15 @@ def test_a_network_failure_raises_after_the_retries(ledger, bucket):
         fetch("https://api.jolpi.ca/x", ledger, limiter, opener=opener)
 
 
+def test_a_stalled_read_is_retried_then_raised(ledger, bucket):
+    opener = Opener(TimeoutError("read timed out"), FakeResponse())
+    limiter = RateLimiter(bucket, sleep=lambda _: None, jitter=lambda: 0.0)
+    assert fetch("https://api.jolpi.ca/x", ledger, limiter, opener=opener).status == 200
+    opener = Opener(*[TimeoutError("read timed out")] * 4)
+    with pytest.raises(FetchError):
+        fetch("https://api.jolpi.ca/x", ledger, limiter, opener=opener)
+
+
 def test_plain_http_is_refused(ledger):
     with pytest.raises(ValueError, match="non-https"):
         fetch("http://api.jolpi.ca/x", ledger, opener=Opener(FakeResponse()))
