@@ -27,6 +27,8 @@ WANTED_KINDS: Final = frozenset(
         "final race classification",
         "final qualifying classification",
         "final starting grid",
+        # each team's declared car updates for the event, published from mid-2024
+        "car presentation submissions",
     }
 )
 
