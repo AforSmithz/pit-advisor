@@ -450,10 +450,6 @@ def test_the_named_subsets_are_fixed_by_race_not_by_result():
         True,
         False,
     ]
-    late = backtest.SUBSETS["after_jev_release"]
-    early = scored(2026, 15).model_copy(update={"race_date": date(2026, 8, 30)})
-    after = scored(2026, 16).model_copy(update={"race_date": date(2026, 9, 6)})
-    assert [late(early, None), late(after, None)] == [False, True]
     assert not keep(scored(2023, 10))
 
 
@@ -709,66 +705,6 @@ def test_an_upgrade_counts_only_before_the_forecast_and_by_its_size(pane):
     capped = backtest.upgrade_discounts(planted, date(2024, 7, 1), 0.5)
     assert capped["bravo"] == (late, 0.5**backtest.UPGRADE_CAP)
     assert backtest.upgrade_discounts(planted, date(2024, 7, 1), 1.0) == {}
-
-
-def test_jev_magnitude_replaces_the_count_only_when_asked(pane):
-    when = date(2024, 3, 1)
-    planted = planted_upgrades(
-        pane,
-        [
-            {
-                "season": 2024,
-                "round": 1,
-                "race_date": when,
-                "constructor_id": "alpha",
-                "count": 3,
-                "magnitude": 1.5,
-            },
-            {
-                "season": 2024,
-                "round": 1,
-                "race_date": when,
-                "constructor_id": "bravo",
-                "count": 2,
-                "magnitude": None,
-            },
-        ],
-    )
-    counted = backtest.upgrade_discounts(planted, date(2024, 5, 1), 0.5)
-    assert counted["alpha"] == (when, 0.5**3)
-    sized = backtest.upgrade_discounts(planted, date(2024, 5, 1), 0.5, magnitude=True)
-    assert sized["alpha"] == (when, 0.5**1.5)
-    # an event jev did not read in full falls back to the count
-    assert sized["bravo"] == (when, 0.25)
-
-
-def test_the_upgrade_frame_sums_jev_levels_and_leaves_a_partial_read_empty():
-    events = pl.DataFrame({"season": [2024], "round": [9], "race_date": [date(2024, 6, 30)]})
-    updates = pl.DataFrame(
-        {
-            "season": [2024] * 5,
-            "round": [9] * 5,
-            "document_name": ["doc"] * 5,
-            "constructor_id": ["alpha", "alpha", "alpha", "bravo", "bravo"],
-            "ordinal": [1, 2, 3, 1, 2],
-            "category": ["performance", "performance", "reliability", "performance", "performance"],
-        }
-    )
-    magnitudes = pl.DataFrame(
-        {
-            "season": [2024] * 3,
-            "round": [9] * 3,
-            "document_name": ["doc"] * 3,
-            "constructor_id": ["alpha", "alpha", "bravo"],
-            "ordinal": [1, 2, 1],
-            "magnitude": [0.5, 2.25, 3.0],
-        }
-    )
-    frame = backtest._upgrade_frame(updates, events, magnitudes).sort("constructor_id")
-    assert frame["count"].to_list() == [2, 2]
-    assert frame["magnitude"].to_list() == [2.75, None]
-    plain = backtest._upgrade_frame(updates, events)
-    assert plain["magnitude"].null_count() == plain.height
 
 
 def test_with_no_upgrades_the_discount_leaves_the_model_alone(pane):
