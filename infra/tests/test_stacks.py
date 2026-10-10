@@ -493,7 +493,16 @@ def test_the_two_machines_share_one_role(transform_template: Template) -> None:
 
 def test_the_pipeline_builds_bronze_then_silver_then_views(transform_template: Template) -> None:
     definition = weekend_definition(transform_template)
-    for step in ("IngestWeather", "IngestSessions", "QualityGate", "DbtBuild", "CheckLineage"):
+    for step in (
+        "IngestWeather",
+        "IngestStewards",
+        "RebuildStewards",
+        "CarUpdates",
+        "IngestSessions",
+        "QualityGate",
+        "DbtBuild",
+        "CheckLineage",
+    ):
         assert step in definition
     assert definition.index("QualityGate") < definition.index("DbtBuild")
     assert "dbt build --project-dir transform --target athena_task" in definition
@@ -542,7 +551,7 @@ def test_the_pipeline_emits_every_view_the_dashboard_reads(transform_template: T
 
 def test_a_step_cannot_overwrite_the_season_and_round(transform_template: Template) -> None:
     definition = weekend_definition(transform_template)
-    assert definition.count('"ResultPath":"$.lastTask"') == 8
+    assert definition.count('"ResultPath":"$.lastTask"') == 11
     assert "$.season" in definition
 
 

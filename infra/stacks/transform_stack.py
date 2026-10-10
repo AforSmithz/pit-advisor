@@ -294,6 +294,13 @@ class TransformStack(Stack):
                     "pitadv ingest --source open_meteo --season $SEASON --round $ROUND",
                 )
             )
+            # the stewards' documents for the season: grid drops for saturday night's grid and
+            # each team's declared car updates. the crawl skips anything already landed
+            .next(self._step("IngestStewards", "pitadv ingest --source fia_docs --season $SEASON"))
+            .next(
+                self._step("RebuildStewards", "pitadv rebuild --source fia_docs --season $SEASON")
+            )
+            .next(self._step("CarUpdates", "pitadv car-updates --season $SEASON"))
             .next(
                 self._run(
                     "IngestSessions",
