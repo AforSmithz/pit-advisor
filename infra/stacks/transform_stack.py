@@ -304,7 +304,9 @@ class TransformStack(Stack):
             .next(
                 self._run(
                     "IngestSessions",
-                    "pitadv backfill --source fastf1 --from $FROM --to $SEASON --session race",
+                    # sprint qualifying sets the sprint grid and the sprint feeds race pace
+                    "pitadv backfill --source fastf1 --from $FROM --to $SEASON --session race"
+                    " --session sprint_qualifying --session sprint",
                     environment=[
                         {"Name": "FROM", "Value.$": "States.Format('{}', $.walk_from)"},
                         {"Name": "SEASON", "Value.$": "States.Format('{}', $.season)"},
@@ -322,7 +324,7 @@ class TransformStack(Stack):
             .next(
                 self._step(
                     "EmitViews",
-                    "pitadv emit-views --views pipeline,weekend,driver,track,forecast,brief",
+                    "pitadv emit-views --views pipeline,weekend,driver,track,forecast,sprint,brief",
                 )
             )
         )
@@ -430,6 +432,24 @@ class TransformStack(Stack):
             rule_name=f"pitadvisor-after-quali-{env_name}",
             description="refreshes the forecast on the qualifying order once qualifying is in",
             schedule=events.Schedule.cron(minute="30", hour="23", week_day="SAT"),
+            enabled=str(self.node.try_get_context("enableSchedule")).lower() != "false",
+            targets=[
+                targets.SfnStateMachine(
+                    self.state_machine, input=events.RuleTargetInput.from_object({})
+                )
+            ],
+        )
+
+        # and once more on saturday morning for the sprint, after sprint qualifying has landed.
+        # 00:30 utc is two hours after the latest friday session ends (austin) and two and a
+        # half before the earliest sprint (shanghai). on a weekend without a sprint the plan
+        # stops at NothingToRefresh, so about six runs a year do work
+        self.sprint_morning = events.Rule(
+            self,
+            "SprintMorningSchedule",
+            rule_name=f"pitadvisor-sprint-morning-{env_name}",
+            description="forecasts the sprint once sprint qualifying is in",
+            schedule=events.Schedule.cron(minute="30", hour="0", week_day="SAT"),
             enabled=str(self.node.try_get_context("enableSchedule")).lower() != "false",
             targets=[
                 targets.SfnStateMachine(

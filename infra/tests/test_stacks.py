@@ -507,7 +507,10 @@ def test_the_pipeline_builds_bronze_then_silver_then_views(transform_template: T
     assert definition.index("QualityGate") < definition.index("DbtBuild")
     assert "dbt build --project-dir transform --target athena_task" in definition
     # sessions walk from the plan, so a season's finale lands at the next season's first race
-    assert "pitadv backfill --source fastf1 --from $FROM --to $SEASON --session race" in definition
+    assert (
+        "pitadv backfill --source fastf1 --from $FROM --to $SEASON --session race"
+        " --session sprint_qualifying --session sprint"
+    ) in definition
 
 
 def test_the_pipeline_plans_before_it_spends(transform_template: Template) -> None:
@@ -545,7 +548,7 @@ def test_the_state_machine_reads_only_the_plan(transform_template: Template) -> 
 def test_the_pipeline_emits_every_view_the_dashboard_reads(transform_template: Template) -> None:
     definition = weekend_definition(transform_template)
     # the default is pipeline only, which leaves the dashboard republishing stale numbers
-    assert "pitadv emit-views --views pipeline,weekend,driver,track" in definition
+    assert "pitadv emit-views --views pipeline,weekend,driver,track,forecast,sprint" in definition
     assert definition.index("CheckLineage") < definition.index("EmitViews")
 
 
@@ -575,7 +578,7 @@ def test_the_pipeline_role_cannot_reach_another_task(transform_template: Templat
     )
 
 
-def test_the_schedule_runs_thursday_morning_and_saturday_night(
+def test_the_schedule_runs_thursday_morning_saturday_morning_and_saturday_night(
     transform_template: Template,
 ) -> None:
     rules = transform_template.find_resources("AWS::Events::Rule")
@@ -585,6 +588,9 @@ def test_the_schedule_runs_thursday_morning_and_saturday_night(
     )
     assert found[f"pitadvisor-after-quali-{ENV_NAME}"]["ScheduleExpression"] == (
         "cron(30 23 ? * SAT *)"
+    )
+    assert found[f"pitadvisor-sprint-morning-{ENV_NAME}"]["ScheduleExpression"] == (
+        "cron(30 0 ? * SAT *)"
     )
     for rule in found.values():
         assert rule["State"] == "ENABLED"
@@ -598,7 +604,7 @@ def test_the_schedule_can_be_paused_from_context() -> None:
         app, TRANSFORM_STACK, env_name=ENV_NAME, env=cdk.Environment(account=ACCOUNT, region=REGION)
     )
     rules = Template.from_stack(stack).find_resources("AWS::Events::Rule")
-    assert len(rules) == 2
+    assert len(rules) == 3
     assert all(rule["Properties"]["State"] == "DISABLED" for rule in rules.values())
 
 
