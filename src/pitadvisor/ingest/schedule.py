@@ -37,6 +37,9 @@ class WeekendPlan(BaseModel, frozen=True):
     # before that it would publish thursday's forecast again, after it a forecast of the past
     after_qualifying: bool = False
     qualified: bool = False
+    # the saturday-morning run only does work on a sprint weekend before the sprint starts
+    sprint_morning: bool = False
+    sprint_at: datetime | None = None
     refresh: bool = False
 
 
@@ -54,6 +57,7 @@ def plan(
     today: date,
     now: datetime | None = None,
     after_qualifying: bool = False,
+    sprint_morning: bool = False,
 ) -> WeekendPlan:
     now = now or datetime.now(UTC)
     races = read_table(store, Layer.BRONZE, "races")
@@ -70,6 +74,13 @@ def plan(
         starts_at = starts_at.replace(tzinfo=UTC)
     qualified = _qualified(store, int(upcoming["season"]), int(upcoming["round"]))
     started = starts_at is not None and starts_at <= now
+    sprint_at: datetime | None = upcoming.get("sprint_utc")
+    if sprint_at is not None and sprint_at.tzinfo is None:
+        sprint_at = sprint_at.replace(tzinfo=UTC)
+    if sprint_morning:
+        refresh = race_week and sprint_at is not None and sprint_at > now
+    else:
+        refresh = race_week and (not after_qualifying or (qualified and not started))
     return WeekendPlan(
         planned_at=now,
         today=today,
@@ -85,7 +96,9 @@ def plan(
         starts_at=starts_at,
         after_qualifying=after_qualifying,
         qualified=qualified,
-        refresh=race_week and (not after_qualifying or (qualified and not started)),
+        sprint_morning=sprint_morning,
+        sprint_at=sprint_at,
+        refresh=refresh,
     )
 
 

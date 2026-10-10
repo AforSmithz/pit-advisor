@@ -13,7 +13,7 @@ CALENDAR = ((1, date(2026, 9, 27)), (2, date(2026, 10, 11)), (3, date(2026, 10, 
 CIRCUITS = {1: "sepang", 2: "marina_bay", 3: "americas"}
 
 
-def calendar(store, rounds=CALENDAR, circuits=CIRCUITS):
+def calendar(store, rounds=CALENDAR, circuits=CIRCUITS, sprints=()):
     for round_, day in rounds:
         row = RaceRow(
             run_id="run-1",
@@ -27,6 +27,12 @@ def calendar(store, rounds=CALENDAR, circuits=CIRCUITS):
             longitude=2.0,
             race_date=day,
             start_utc=datetime(day.year, day.month, day.day, 13, tzinfo=UTC),
+            sprint_date=date(day.year, day.month, day.day - 1) if round_ in sprints else None,
+            sprint_utc=(
+                datetime(day.year, day.month, day.day - 1, 4, tzinfo=UTC)
+                if round_ in sprints
+                else None
+            ),
         )
         write_bronze(store, "races", EventKey(season=2026, round=round_), [row])
 
@@ -157,3 +163,28 @@ def test_a_race_that_has_already_started_is_not_forecast_again(store):
     assert weekend.qualified
     assert weekend.starts_at is not None
     assert not weekend.refresh
+
+
+SPRINT_MORNING = datetime(2026, 10, 10, 0, 30, tzinfo=UTC)
+
+
+def test_the_sprint_morning_refreshes_a_sprint_weekend_before_the_sprint(store):
+    calendar(store, sprints=(2,))
+    weekend = plan(store, SPRINT_MORNING.date(), SPRINT_MORNING, sprint_morning=True)
+    assert weekend.sprint_morning
+    assert weekend.sprint_at == datetime(2026, 10, 10, 4, tzinfo=UTC)
+    assert weekend.refresh
+
+
+def test_the_sprint_morning_of_an_ordinary_weekend_does_nothing(store):
+    calendar(store)
+    weekend = plan(store, SPRINT_MORNING.date(), SPRINT_MORNING, sprint_morning=True)
+    assert weekend.race_week
+    assert weekend.sprint_at is None
+    assert not weekend.refresh
+
+
+def test_a_sprint_that_has_started_is_not_forecast(store):
+    calendar(store, sprints=(2,))
+    late = datetime(2026, 10, 10, 5, tzinfo=UTC)
+    assert not plan(store, late.date(), late, sprint_morning=True).refresh
