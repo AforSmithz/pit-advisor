@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { calibrationView } from "./schemas";
+import { calibrationView, sprintView } from "./schemas";
 
 const bounds = { value: 0.2, low: 0.1, high: 0.3, races: 36, draws: 2000 };
 
@@ -60,5 +60,45 @@ describe("calibrationView", () => {
     expect(() =>
       calibrationView.parse(view({ events: { win: { log_loss: 0.2 } } })),
     ).toThrow();
+  });
+});
+
+const event = {
+  season: 2026,
+  round: 19,
+  circuit_id: "americas",
+  race_name: "United States Grand Prix",
+  race_date: "2026-10-25",
+  start_utc: "2026-10-25T19:00:00Z",
+};
+
+const head = {
+  view: "sprint_view",
+  schema_version: "1.1.0",
+  generated_at: "2026-10-24T00:40:00Z",
+  run_id: "run-1",
+  event,
+};
+
+describe("sprintView", () => {
+  it("reads a weekend without a sprint", () => {
+    const parsed = sprintView.parse({
+      ...head,
+      sprint_utc: null,
+      state: "no_sprint",
+      forecast: null,
+    });
+    expect(parsed.forecast).toBeNull();
+  });
+
+  it("refuses a state the backend does not emit", () => {
+    expect(
+      sprintView.safeParse({
+        ...head,
+        sprint_utc: null,
+        state: "maybe",
+        forecast: null,
+      }).success,
+    ).toBe(false);
   });
 });

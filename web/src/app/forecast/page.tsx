@@ -3,12 +3,18 @@ import { Order, OrderRuler, Spread } from "@/components/forecast";
 import { Engraved, Plate } from "@/components/plate";
 import { Provenance } from "@/components/provenance";
 import { assumption, isoDate, label } from "@/lib/format";
-import { loadForecast } from "@/lib/load";
+import { loadForecast, loadSprint } from "@/lib/load";
+import type { SprintView } from "@/lib/schemas";
 
 export const metadata = { title: "Forecast · Pit Advisor" };
 
 export default async function ForecastPage() {
   const view = await loadForecast();
+  const sprint = await loadSprint();
+  const sameWeekend =
+    sprint !== null &&
+    sprint.event.season === view.event.season &&
+    sprint.event.round === view.event.round;
   const field = view.drivers.length;
   const weights = Object.fromEntries(
     view.scenarios.map((item) => [item.scenario, item.weight]),
@@ -64,6 +70,7 @@ export default async function ForecastPage() {
 
       <div className="mt-10 grid gap-10 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="flex flex-col gap-10">
+          {sameWeekend && sprint && <Sprint sprint={sprint} />}
           <Plate
             title="Where the paths finish"
             note={
@@ -177,5 +184,47 @@ export default async function ForecastPage() {
         </aside>
       </div>
     </div>
+  );
+}
+
+function Sprint({ sprint }: { sprint: SprintView }) {
+  if (sprint.state === "awaiting_grid") {
+    return (
+      <Plate
+        title="Sprint"
+        note="This is a sprint weekend. The sprint forecast is published on the morning of the sprint, once sprint qualifying has set the grid."
+      >
+        <p className="engraved">waiting for sprint qualifying</p>
+      </Plate>
+    );
+  }
+  const body = sprint.forecast;
+  if (sprint.state !== "forecast" || body === null) {
+    return null;
+  }
+  const field = body.drivers.length;
+  const evidence = body.evidence;
+  return (
+    <Plate
+      title="Sprint"
+      note={`The grid is sprint qualifying, read off the timing laps as a knockout, and the pts column is the top eight a sprint pays. ${
+        evidence
+          ? `Held out over ${evidence.races} sprints the simulation scored ${evidence.log_loss.simulation?.value.toFixed(4)} of log loss against ${evidence.log_loss.grid?.value.toFixed(4)} for the grid alone.`
+          : "No sprint backtest was attached to this forecast."
+      }`}
+    >
+      <OrderRuler field={field} />
+      {body.drivers.map((driver) => (
+        <Order key={driver.driver_code} driver={driver} field={field} />
+      ))}
+      <Provenance
+        view={sprint.view}
+        runId={sprint.run_id}
+        asOf={body.as_of}
+        stands={`${body.laps} laps, ${body.paths.toLocaleString("en-GB")} paths a scenario${
+          sprint.sprint_utc ? `, lights out ${isoDate(sprint.sprint_utc)}` : ""
+        }`}
+      />
+    </Plate>
   );
 }

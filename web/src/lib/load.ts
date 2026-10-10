@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ZodType } from "zod";
 import {
@@ -8,6 +8,7 @@ import {
   driverView,
   forecastView,
   pipelineView,
+  sprintView,
   trackView,
   weekendView,
 } from "./schemas";
@@ -32,6 +33,16 @@ async function read<T>(name: string, schema: ZodType<T>): Promise<T> {
   return parsed.data;
 }
 
+// the sprint view arrived after the others, so a lake that predates it builds without the plate
+async function optional<T>(name: string, schema: ZodType<T>): Promise<T | null> {
+  try {
+    await access(path.join(dataDir, `${name}.json`));
+  } catch {
+    return null;
+  }
+  return read(name, schema);
+}
+
 export const loadWeekend = () => read("weekend_view", weekendView);
 export const loadDriver = () => read("driver_view", driverView);
 export const loadTrack = () => read("track_view", trackView);
@@ -40,3 +51,4 @@ export const loadForecast = () => read("forecast_view", forecastView);
 export const loadCalibration = () => read("calibration_view", calibrationView);
 export const loadCost = () => read("cost_view", costView);
 export const loadBrief = () => read("brief_view", briefView);
+export const loadSprint = () => optional("sprint_view", sprintView);

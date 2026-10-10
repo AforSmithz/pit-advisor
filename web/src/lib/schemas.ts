@@ -229,6 +229,16 @@ export const forecastView = z
   })
   .strict();
 
+export const sprintView = z
+  .object({
+    ...viewHead,
+    event: eventContext,
+    sprint_utc: z.string().nullable(),
+    state: z.enum(["no_sprint", "awaiting_grid", "forecast", "run"]),
+    forecast: forecastView.nullable(),
+  })
+  .strict();
+
 export const calibrationView = z
   .object({
     ...viewHead,
@@ -432,6 +442,7 @@ export type BriefView = z.infer<typeof briefView>;
 export type Bounds = z.infer<typeof bounds>;
 export type Assumption = z.infer<typeof assumption>;
 export type ForecastView = z.infer<typeof forecastView>;
+export type SprintView = z.infer<typeof sprintView>;
 export type CalibrationView = z.infer<typeof calibrationView>;
 export type ScoredModel = CalibrationView["scored"][number];
 export type CurvePoint = ScoredModel["curves"][string][number];
