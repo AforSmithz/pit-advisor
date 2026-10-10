@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict
 
 from pitadvisor.features import form, quali_race, reliability, track_fit
 from pitadvisor.features import grid as starting
+from pitadvisor.features import practice as friday
 from pitadvisor.features import weather as wet_weather
 from pitadvisor.features.assemble import (
     PACE_SCHEMA,
@@ -67,9 +68,8 @@ WET_SAFETY_CAR = 2.2
 DEFAULT_RACE_DAY_SD = 0.35
 DEFAULT_QUALI_ANCHOR_SD = 0.5
 PRIOR_REGIME_RACES = 6.0
-# measured on 2021-2023 race laps: a stop under the safety car against the cars that stayed out
-# on the same two laps, as a share of a green stop, over 139 stops
-MEASURED_SAFETY_CAR_DISCOUNT = 0.759
+# how many races of evidence before the fitted practice weight is believed at full strength
+PRACTICE_PRIOR_RACES = 10.0
 # what a forecast is allowed to see: everything up to the start of the race, or only what was
 # known before main qualifying, when neither the grid nor this weekend's quali exists yet
 STAGES = ("race", "pre_quali")
@@ -91,10 +91,10 @@ class Variant(BaseModel, frozen=True):
 
     # the sprint as one more pace event, dated the day it ran, so sunday's forecast sees it
     sprint_pace: bool = True
-    # a stop under a safety car at the measured share of a green stop instead of the assumed one
-    measured_safety_car_discount: bool = False
-    # a stop under the safety car costs places: the queue forms after the stop, not before it
-    bunch_after_stops: bool = False
+    # the pass model also reads how much fresher the chaser's tyres are
+    tyre_age_passing: bool = False
+    # before qualifying, the team level moves by the fitted share of its long-run offset
+    practice_pace: bool = False
 
 
 TYPES: dict[str, type[pl.DataType]] = {
@@ -141,6 +141,13 @@ class Panel:
     stints: pl.DataFrame = dataclass_field(default_factory=lambda: _empty(tyres.STINT_COLUMNS))
     # grid sanctions resolved to the race they are served at, for a grid nobody has started from
     penalties: pl.DataFrame = dataclass_field(default_factory=starting.empty)
+    practice: pl.DataFrame = dataclass_field(
+        default_factory=lambda: pl.DataFrame(schema=friday.SCHEMA)
+    )
+    # the team level each half-weekend predicted, filled as the practice weight needs it
+    practice_levels: dict[tuple[int, int], dict[str, float]] = dataclass_field(
+        default_factory=dict[tuple[int, int], dict[str, float]], repr=False
+    )
     # the same columns as pace, one row per driver per sprint, dated the sprint's day
     sprint_pace: pl.DataFrame = dataclass_field(
         default_factory=lambda: pl.DataFrame(schema=PACE_SCHEMA)
@@ -148,7 +155,7 @@ class Panel:
 
 
 # bump when Panel changes shape, so a cache written by older code is never read by newer code
-PANEL_VERSION = 8
+PANEL_VERSION = 10
 PANEL_TABLES = (
     "races",
     "results",
@@ -175,6 +182,7 @@ FRAMES = (
     "stints",
     "penalties",
     "sprint_pace",
+    "practice",
 )
 
 
@@ -238,6 +246,7 @@ def load_panel(store: ObjectStore, key: str) -> Panel | None:
         laps={(season, round_): laps for season, round_, laps in state.laps},
         entries={(item.season, item.round): item for item in state.entries},
         qualified={(season, round_): order for season, round_, order in state.qualified},
+        practice_levels={},
     )
 
 
@@ -303,6 +312,11 @@ def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:
             read_table(store, layer, "incident_sanctions"),
             read_table(store, layer, "incidents"),
             results,
+        ),
+        practice=friday.offsets(
+            laps.filter(pl.col("session").is_in([str(SessionKind.FP1), str(SessionKind.FP2)])),
+            results,
+            read_table(store, layer, "races"),
         ),
         sprint_pace=_sprint_pace_frame(
             laps.filter(pl.col("session") == str(SessionKind.SPRINT)),
@@ -783,6 +797,8 @@ def setup(
     drift = race_day_sd(pane, as_of)
     anchor_sd = quali_anchor_sd(pane, as_of)
     percent, error = _ratings(shape, track, rain, seats, codes, scenario, drift)
+    if chosen.practice_pace and unknown:
+        percent = _practised(percent, pane, context, seats, codes, practice_weight(pane, as_of))
     percent, error = _anchored(pane, context, as_of, codes, percent, error, scenario, anchor_sd)
     drivers = [
         race.Driver(
@@ -808,23 +824,18 @@ def setup(
         reference_millis=reference,
         drivers=drivers,
         start=starts.fit(pane.starts, as_of),
-        tyre=_discounted(
-            _tyre_model(pane, context.circuit_id, as_of, scenario),
-            chosen.measured_safety_car_discount,
-        ),
-        passing=overtake.fit(pane.passes, context.circuit_id, as_of, traffic=pane.traffic),
+        tyre=_tyre_model(pane, context.circuit_id, as_of, scenario),
+        passing=_passing(pane, context.circuit_id, as_of, chosen.tyre_age_passing),
         safety_car=caution,
         retirement=dnf.build(hazard, seats, ids),
         grid_known=not unknown,
-        bunch_after_stops=chosen.bunch_after_stops,
         quali_noise_millis=reference * anchor_sd / 100.0 if unknown else 0.0,
     )
 
 
-def _discounted(model: tyres.TyreModel, measured: bool) -> tyres.TyreModel:
-    if not measured:
-        return model
-    return model.model_copy(update={"safety_car_discount": MEASURED_SAFETY_CAR_DISCOUNT})
+def _passing(pane: Panel, circuit_id: str, as_of: date, aged: bool) -> overtake.PassModel:
+    fitted = overtake.fit(pane.passes, circuit_id, as_of, traffic=pane.traffic)
+    return fitted if aged else fitted.model_copy(update={"age_slope": 0.0})
 
 
 def _tyre_model(pane: Panel, circuit_id: str, as_of: date, scenario: str) -> tyres.TyreModel:
@@ -928,6 +939,78 @@ def _ratings(
         percent[code] = value
         error[code] = float(np.hypot(spread, race_day_sd))
     return percent, error
+
+
+def practice_weight(pane: Panel, as_of: date) -> float:
+    """How far a team's practice offset should move its level, fitted on earlier weekends: the
+    slope of what the race showed beyond the team level on what practice said, through zero."""
+    earlier = pane.practice.filter(pl.col("race_date") < as_of)
+    if not earlier.height:
+        return 0.0
+    teams = team_frame(pane.pace)
+    xs: list[float] = []
+    ys: list[float] = []
+    used: set[tuple[int, int]] = set()
+    weekends = earlier.select("season", "round").unique().iter_rows()
+    for season, round_ in sorted((int(a), int(b)) for a, b in weekends):
+        here = teams.filter((pl.col("season") == season) & (pl.col("round") == round_))
+        if not here.height:
+            continue
+        predicted = _level_before(pane, season, round_, here)
+        said = earlier.filter((pl.col("season") == season) & (pl.col("round") == round_))
+        offset = dict(zip(said["constructor_id"].to_list(), said["offset"].to_list(), strict=True))
+        for team, value in zip(
+            here["constructor_id"].to_list(), here["value"].to_list(), strict=True
+        ):
+            if team in offset and team in predicted:
+                xs.append(float(offset[team]))
+                ys.append(float(value) - predicted[team])
+                used.add((season, round_))
+    if not xs:
+        return 0.0
+    x, y = np.asarray(xs), np.asarray(ys)
+    denominator = float(x @ x)
+    if denominator <= 0.0:
+        return 0.0
+    slope = min(max(float(x @ y) / denominator, 0.0), 1.0)
+    races = len(used)
+    return slope * races / (races + PRACTICE_PRIOR_RACES)
+
+
+def _level_before(pane: Panel, season: int, round_: int, here: pl.DataFrame) -> dict[str, float]:
+    key = (season, round_)
+    if key in pane.practice_levels:
+        return pane.practice_levels[key]
+    when = here["race_date"][0]
+    before = team_frame(pane.pace).filter(pl.col("race_date") < when)
+    found: dict[str, float] = {}
+    if before.height:
+        try:
+            fitted = track_fit.fit(before, str(here["circuit_id"][0]), when)
+        except track_fit.UnknownCircuitError:
+            fitted = None
+        if fitted is not None:
+            found = {item.constructor_id: item.estimate for item in fitted.similarity}
+            found.update({item.constructor_id: item.estimate for item in fitted.regression})
+    pane.practice_levels[key] = found
+    return found
+
+
+def _practised(
+    percent: dict[str, float],
+    pane: Panel,
+    context: EventContext,
+    seats: dict[str, str],
+    codes: list[str],
+    weight: float,
+) -> dict[str, float]:
+    said = pane.practice.filter(
+        (pl.col("season") == context.season) & (pl.col("round") == context.round)
+    )
+    if not said.height or weight <= 0.0:
+        return percent
+    offset = dict(zip(said["constructor_id"].to_list(), said["offset"].to_list(), strict=True))
+    return {code: percent[code] + weight * float(offset.get(seats[code], 0.0)) for code in codes}
 
 
 def _anchored(

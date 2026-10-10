@@ -607,20 +607,6 @@ def test_the_sprint_subset_is_every_weekend_the_schedule_dated_a_sprint(pane):
     assert backtest.sprint_weekends(marked) == {(int(first["season"]), int(first["round"]))}
 
 
-def test_the_measured_safety_car_discount_only_when_asked(pane, store):
-    context = event_at(store, 2024, 4)
-    shipped = backtest.setup(pane, context, context.race_date, "dry")
-    measured = backtest.setup(
-        pane,
-        context,
-        context.race_date,
-        "dry",
-        variant=backtest.Variant(measured_safety_car_discount=True),
-    )
-    assert shipped.tyre.safety_car_discount == backtest.tyres.SAFETY_CAR_DISCOUNT
-    assert measured.tyre.safety_car_discount == backtest.MEASURED_SAFETY_CAR_DISCOUNT
-
-
 def test_before_qualifying_the_weekend_leaves_no_trace(pane, store):
     context = event_at(store, 2024, 3)
     friday = backtest.before_qualifying(pane, context)
@@ -671,3 +657,45 @@ def test_a_pre_qualifying_walk_drops_the_grid_baseline_and_the_grid_pool(pane):
 def test_an_unknown_stage_is_refused(pane):
     with pytest.raises(ValueError, match="stage"):
         backtest.run(pane, 2024, 3, np.random.default_rng(SEED), "x", paths=50, stage="friday")
+
+
+def test_the_tyre_age_attack_stays_off_unless_asked(pane, store):
+    context = event_at(store, 2024, 4)
+    shipped = backtest.setup(pane, context, context.race_date, "dry")
+    assert shipped.passing.age_slope == 0.0
+    assert "age_delta" in pane.passes.columns
+
+
+def test_the_practice_weight_reads_only_earlier_weekends(pane):
+    assert backtest.practice_weight(pane, date(2000, 1, 1)) == 0.0
+    weight = backtest.practice_weight(pane, date(2030, 1, 1))
+    assert 0.0 <= weight <= 1.0
+
+
+def test_practice_moves_a_team_only_before_qualifying(pane, store):
+    context = event_at(store, 2024, 3)
+    seats, _ = backtest.seats_for(pane, context, context.race_date)
+    codes = sorted(seats)
+    team = seats[codes[0]]
+    planted = dataclasses.replace(
+        pane,
+        practice=pl.DataFrame(
+            {
+                "season": [2024],
+                "round": [3],
+                "race_date": [context.race_date],
+                "constructor_id": [team],
+                "offset": [1.0],
+            }
+        ),
+    )
+    percent = {code: 0.0 for code in codes}
+    moved = backtest._practised(percent, planted, context, seats, codes, 0.5)
+    assert all(moved[c] == 0.5 for c in codes if seats[c] == team)
+    assert all(moved[c] == 0.0 for c in codes if seats[c] != team)
+    on = backtest.Variant(practice_pace=True)
+    after = backtest.setup(planted, context, context.race_date, "dry", variant=on)
+    plain = backtest.setup(pane, context, context.race_date, "dry", variant=on)
+    assert [d.pace_millis for d in after.drivers] == pytest.approx(
+        [d.pace_millis for d in plain.drivers]
+    )

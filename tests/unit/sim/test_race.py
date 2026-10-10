@@ -297,17 +297,3 @@ def test_a_change_to_the_safety_car_leaves_the_pace_draws_alone():
     assert calm.position != busy.position
     pace = race.streams(np.random.default_rng(9))["pace"].normal(size=5)
     assert np.array_equal(pace, race.streams(np.random.default_rng(9))["pace"].normal(size=5))
-
-
-def test_a_stop_under_the_safety_car_costs_places_once_the_queue_forms_after_it():
-    """With the queue built from the order the lap started in, a car that pits under the
-    safety car rejoins in its old slot and the stop is free. Built after the stop, it is not."""
-    base = setup(laps=12, safety_car=0.3, pass_base=-6.0)
-    stopping = base.model_copy(
-        update={"tyre": base.tyre.model_copy(update={"stop_counts": [0.0, 1.0, 0.0, 0.0]})}
-    )
-    free = race.simulate(stopping, np.random.default_rng(7), paths=400)
-    honest = race.simulate(
-        stopping.model_copy(update={"bunch_after_stops": True}), np.random.default_rng(7), paths=400
-    )
-    assert honest.position != free.position

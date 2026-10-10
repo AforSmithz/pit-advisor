@@ -63,9 +63,6 @@ class RaceSetup(BaseModel, frozen=True):
     retirement: RetirementModel
     # false before qualifying: each path then runs its own qualifying off the pace it drew
     grid_known: bool = True
-    # queue the field behind a safety car in the order this lap left it, stops included. off is
-    # the order the lap started in, which let a car pit under the safety car for nothing
-    bunch_after_stops: bool = False
     quali_noise_millis: float = 0.0
 
 
@@ -164,14 +161,11 @@ def simulate(
         out = retire <= lap
 
         # fresher rubber is what makes an undercut work, so the attack reads the tyres too
-        elapsed = _resolve(setup, elapsed, pace + tyre, order, out, rows, draw["pass"])
+        elapsed = _resolve(setup, elapsed, pace + tyre, order, out, rows, draw["pass"], age)
         if under.any():
-            queue = (
-                np.argsort(elapsed + out * OUT_OF_RACE_MILLIS, axis=1, kind="stable")
-                if setup.bunch_after_stops
-                else order
-            )
-            elapsed = _bunch(elapsed, queue, out, under.ravel())
+            # the queue is built from the order the lap started in, so a stop made under the
+            # safety car costs no places. building it after the stop was measured and lost
+            elapsed = _bunch(elapsed, order, out, under.ravel())
         order = np.argsort(elapsed + out * OUT_OF_RACE_MILLIS, axis=1, kind="stable")
 
     completed = np.minimum(retire - 1, laps)
@@ -190,6 +184,7 @@ def _resolve(
     out: npt.NDArray[np.bool_],
     rows: npt.NDArray[np.int64],
     rng: np.random.Generator,
+    age: npt.NDArray[np.float64] | None = None,
 ) -> npt.NDArray[np.float64]:
     """Track position. A car only gets by if the pass comes off, and one that does not sits
     in the gearbox of the car ahead, which is what builds a train."""
@@ -205,7 +200,8 @@ def _resolve(
         if not attacking.any():
             continue
         delta = (pace[rows, leader] - pace[rows, chaser]) * scale
-        chance = probability(setup.passing, delta)
+        fresher = None if age is None else age[rows, leader] - age[rows, chaser]
+        chance = probability(setup.passing, delta, fresher)
         blocked = attacking & (rng.random(paths) > chance)
         elapsed[rows, chaser] = np.where(blocked, ahead + FOLLOWING_GAP_MILLIS, behind)
     return elapsed
