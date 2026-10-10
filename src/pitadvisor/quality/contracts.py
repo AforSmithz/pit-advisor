@@ -185,6 +185,31 @@ class IncidentArticleRow(BronzeRow):
     raw_key: str
 
 
+class CarUpdateRow(BronzeRow):
+    document_name: str
+    # when the FIA issued the document, local to the event, as printed in its header
+    issued: datetime | None = None
+    constructor_id: str
+    # the team as the document names it, verbatim
+    team: str
+    # 0 is the row for a team that declared no updates for the event
+    ordinal: int = Field(ge=0, le=40)
+    category: str
+    reason: str
+    text: str
+    raw_key: str
+
+
+class MarketOddsRow(BronzeRow):
+    source: str
+    market: str
+    driver_code: str
+    snapshot_utc: datetime
+    # the venue's own price for "yes", before the race's prices are normalised to each other
+    price: float = Field(ge=0.0, le=1.0)
+    raw_key: str
+
+
 TABLES: dict[str, type[BronzeRow]] = {
     "races": RaceRow,
     "results": ResultRow,
@@ -197,6 +222,8 @@ TABLES: dict[str, type[BronzeRow]] = {
     "incidents": IncidentRow,
     "incident_articles": IncidentArticleRow,
     "incident_sanctions": IncidentSanctionRow,
+    "car_updates": CarUpdateRow,
+    "market_odds": MarketOddsRow,
 }
 
 

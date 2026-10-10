@@ -44,6 +44,8 @@ def test_unparseable_durations_are_none(text):
 
 def test_every_table_has_a_contract():
     assert set(TABLES) == {
+        "car_updates",
+        "market_odds",
         "races",
         "results",
         "sprint",

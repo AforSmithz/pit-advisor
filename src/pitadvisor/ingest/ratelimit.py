@@ -24,6 +24,10 @@ HOURLY_CAPS: dict[str, int] = {
     "open_meteo": OPEN_METEO_HOURLY_CAP,
     "wikipedia": WIKIPEDIA_HOURLY_CAP,
     "fia_docs": FIA_HOURLY_CAP,
+    # both document a per-second read limit far above this, kept low because a baseline does
+    # not need to be fetched quickly
+    "kalshi": 3000,
+    "polymarket": 3000,
 }
 LEDGER_TTL = timedelta(days=30)
 MAX_CONTENTION_RETRIES = 6

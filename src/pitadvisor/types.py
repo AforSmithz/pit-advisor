@@ -22,6 +22,8 @@ class Source(StrEnum):
     FIA_DOCS = "fia_docs"
     WIKIPEDIA = "wikipedia"
     CURATED = "curated"
+    KALSHI = "kalshi"
+    POLYMARKET = "polymarket"
 
 
 class SessionKind(StrEnum):
