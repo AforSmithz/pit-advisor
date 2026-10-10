@@ -82,10 +82,13 @@ answer every time, which is the gate doing its job rather than a gate worth lowe
 
 The forecast clears its own bar too. The holdout is the last sixty races run, from the 2024
 Chinese Grand Prix to the sixteenth round of 2026, so sixteen of them are in 2026's
-twenty-two-car field. The published forecast's multiclass log loss is 2.550 [2.476, 2.621],
+twenty-two-car field. The published forecast's multiclass log loss is 2.546 [2.474, 2.617],
 against 2.608 for grid position alone, 2.726 for championship standings and 2.825 for last
-race's result. Resampled at the race level, the gain over the grid is +0.058 [+0.013, +0.101],
-so it is separated from all three baselines.
+race's result. Resampled at the race level, the gain over the grid is +0.062 [+0.018, +0.106],
+so it is separated from all three baselines. The same forecast is also scored the way the
+published F1 work scores it, as three events summed out of the place distribution: a win, a
+podium and a points finish, each with a binary log loss, a Brier score and the Brier's split into
+reliability, resolution and uncertainty.
 
 It was not always. The simulation on its own scores 2.591 and cannot be told apart from the
 starting order, and the reason is measurable: it spreads the field wider than races do. In
@@ -108,6 +111,21 @@ The same re-run also closed two small leaks the first backtest had: two spread p
 measured over the whole lake rather than as of each race, and a circuit's first race took its
 distance from every race in the lake, later ones included. Fixed and re-run on the original sixty
 races, they move the simulation's log loss in the fifth decimal place.
+
+Most ideas for improving the forecast did not survive being measured, and the way they were
+measured matters more than any one of them. Changes are chosen on a separate development window,
+the 36 races from mid-2022 to the end of 2023, and the sixty-race holdout above was scored once,
+after every decision had been made, so it never picked anything. Each candidate is run against
+the model as it ships on the same races with the same random draws, so the paired difference is
+the change and not the luck. Of eleven candidates, one was kept: reading the sprint as a
+same-weekend pace observation, which helped on the development window (+0.008 [+0.000, +0.017],
++0.026 on sprint weekends) and is inside noise on the holdout (+0.000 [-0.006, +0.006], +0.007
+[-0.005, +0.019] on its seventeen sprint weekends). A shorter memory for team pace, a discount on
+results from before a rule change, a virtual safety car regime, slow pit stops, a debutant
+penalty, tyre age in the pass model and Friday long runs all made the forecast worse or no
+better, and were taken back out. One of them is a real bug left standing on purpose: under a
+safety car the simulation queues the field before the stops, so a stop costs nothing, and
+correcting that made the forecast slightly worse, not better.
 
 ## Architecture
 
@@ -399,9 +417,12 @@ The Thursday forecast runs before qualifying, so the grid is not known. Each sim
 then runs its own qualifying first, drawn from the same pace the race uses plus each driver's
 Saturday-to-Sunday conversion, which spreads the favourites further than a grid-conditioned
 forecast would. The Saturday night run replaces that with the qualifying order and anchors race
-pace on the session itself. The qualifying order is not quite the grid: penalties applied after
-qualifying only show up in the race result, so a driver dropped ten places starts from their
-qualifying slot in the forecast. The run is timed for the latest qualifying session on the
+pace on the session itself. The qualifying order is not quite the grid, so the Saturday run
+applies the stewards' grid drops and back-of-grid starts from the decisions in the lake, in the
+order the stewards build a grid. Rebuilt that way, 86% of grid slots in 2021-2025 match the grid
+the race actually started from, against 74% for the plain qualifying order; the rest are mostly
+penalties the document crawl does not capture and pit-lane starts decided on Sunday. The crawl
+is not yet scheduled, so for 2026 the Saturday grid is still the qualifying order. The run is timed for the latest qualifying session on the
 calendar to have reached Jolpica and the earliest Sunday start to be hours away; if qualifying
 has not landed, it does nothing and the Thursday forecast stands. The published backtest is
 unaffected: it scores races on the grid they actually had.
