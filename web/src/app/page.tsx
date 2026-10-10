@@ -36,10 +36,11 @@ export default async function CalibrationPage() {
 
       <p className="mt-6 max-w-[74ch] text-sm leading-relaxed text-lume-dim">
         The holdout is the last {view.holdout} races run, of which the{" "}
-        {ours?.races ?? 0} at circuits in the taxonomy are scored, one at a time,
-        with every fit behind the forecast seeing only what had happened when it
-        was made. Intervals are bootstrapped over races rather than drivers,
-        because the cars in one race share a track, a strategy and a safety car, and resampling them independently reports a spread several
+        {ours?.races ?? 0} at circuits in the taxonomy are scored, one at a
+        time, with every fit behind the forecast seeing only what had happened
+        when it was made. Intervals are bootstrapped over races rather than
+        drivers, because the cars in one race share a track, a strategy and a
+        safety car, and resampling them independently reports a spread several
         times tighter than the evidence supports.{" "}
         {separated.length
           ? `This holdout separates the simulation from ${separated
@@ -111,6 +112,63 @@ export default async function CalibrationPage() {
               </div>
             ))}
           </Plate>
+
+          {ours && Object.keys(ours.events).length > 0 && (
+            <Plate
+              title="By event"
+              note="The place distribution summed to a win, a podium and a points finish, each scored on its own. The split reads the Brier as reliability less resolution plus uncertainty: low reliability is honest, high resolution is sharp."
+            >
+              <div className="grid grid-cols-[7.5rem_4.5rem_1fr_1fr_1fr] items-baseline gap-x-4 pb-1">
+                <span className="engraved">model</span>
+                <span className="engraved">event</span>
+                <span className="engraved">log loss</span>
+                <span className="engraved">brier</span>
+                <span className="engraved">rel · res · unc</span>
+              </div>
+              {view.scored.flatMap((model) =>
+                view.events.flatMap((event) => {
+                  const split = model.events[event];
+                  if (!split) return [];
+                  return [
+                    <div
+                      key={`${model.name}-${event}`}
+                      className="grid grid-cols-[7.5rem_4.5rem_1fr_1fr_1fr] items-baseline gap-x-4 border-t border-engrave py-2"
+                    >
+                      <span
+                        className={`text-sm tracking-plate ${
+                          model.name === view.model_name
+                            ? "text-lume"
+                            : "text-steel"
+                        }`}
+                      >
+                        {label(model.name)}
+                      </span>
+                      <span className="engraved">{event}</span>
+                      {([split.log_loss, split.brier] as const).map(
+                        (score, index) => (
+                          <span key={index}>
+                            <span className="figure block text-sm text-lume">
+                              {score.value.toFixed(4)}
+                            </span>
+                            <span className="engraved block tabular-nums text-lume-dim">
+                              {score.low === null || score.high === null
+                                ? "not resampled"
+                                : `${score.low.toFixed(4)} to ${score.high.toFixed(4)}`}
+                            </span>
+                          </span>
+                        ),
+                      )}
+                      <span className="figure text-sm tabular-nums text-lume-dim">
+                        {split.reliability.toFixed(4)} ·{" "}
+                        {split.resolution.toFixed(4)} ·{" "}
+                        {split.uncertainty.toFixed(4)}
+                      </span>
+                    </div>,
+                  ];
+                }),
+              )}
+            </Plate>
+          )}
 
           <Plate
             title="Race by race"

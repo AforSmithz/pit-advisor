@@ -19,7 +19,7 @@ from pitadvisor.model.backtest import Assumption
 from pitadvisor.quality.checks import QualityReport, Status
 from pitadvisor.types import Layer, Source
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 
 TABLE_SOURCE: dict[str, Source] = {
     "races": Source.JOLPICA,
@@ -647,6 +647,19 @@ class CurvePoint(BaseModel, frozen=True):
     count: int
 
 
+class EventSplit(BaseModel, frozen=True):
+    log_loss: Bounds
+    brier: Bounds
+    reliability: float
+    resolution: float
+    uncertainty: float
+
+
+class EventGainView(BaseModel, frozen=True):
+    log_loss_gain: Bounds
+    brier_gain: Bounds
+
+
 class ScoredModel(BaseModel, frozen=True):
     name: str
     rows: int
@@ -655,6 +668,7 @@ class ScoredModel(BaseModel, frozen=True):
     brier: Bounds
     calibration: dict[str, float]
     curves: dict[str, list[CurvePoint]]
+    events: dict[str, EventSplit] = {}
 
 
 class PairedGain(BaseModel, frozen=True):
@@ -664,6 +678,7 @@ class PairedGain(BaseModel, frozen=True):
     baseline: str
     log_loss_gain: Bounds
     brier_gain: Bounds
+    events: dict[str, EventGainView] = {}
 
 
 class RaceLoss(BaseModel, frozen=True):
@@ -720,6 +735,16 @@ def calibration_view(
                     event: [CurvePoint(**point.model_dump()) for point in bins]
                     for event, bins in item.curves.items()
                 },
+                events={
+                    event: EventSplit(
+                        log_loss=_bounds(split.log_loss, item.races),
+                        brier=_bounds(split.brier, item.races),
+                        reliability=split.murphy.reliability,
+                        resolution=split.murphy.resolution,
+                        uncertainty=split.murphy.uncertainty,
+                    )
+                    for event, split in item.events.items()
+                },
             )
             for item in report.scored
         ],
@@ -731,6 +756,13 @@ def calibration_view(
                 baseline=item.baseline,
                 log_loss_gain=_bounds(item.log_loss_gain, len(report.per_race)),
                 brier_gain=_bounds(item.brier_gain, len(report.per_race)),
+                events={
+                    event: EventGainView(
+                        log_loss_gain=_bounds(split.log_loss_gain, len(report.per_race)),
+                        brier_gain=_bounds(split.brier_gain, len(report.per_race)),
+                    )
+                    for event, split in item.events.items()
+                },
             )
             for item in report.paired
         ],

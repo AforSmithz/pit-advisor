@@ -247,6 +247,18 @@ export const calibrationView = z
         log_loss: bounds,
         brier: bounds,
         calibration: z.record(z.string(), z.number()),
+        events: z
+          .record(
+            z.string(),
+            z.object({
+              log_loss: bounds,
+              brier: bounds,
+              reliability: z.number(),
+              resolution: z.number(),
+              uncertainty: z.number(),
+            }),
+          )
+          .default({}),
         curves: z.record(
           z.string(),
           z.array(
@@ -278,6 +290,12 @@ export const calibrationView = z
         baseline: z.string(),
         log_loss_gain: bounds,
         brier_gain: bounds,
+        events: z
+          .record(
+            z.string(),
+            z.object({ log_loss_gain: bounds, brier_gain: bounds }),
+          )
+          .default({}),
       }),
     ),
     assumptions: z.array(assumption),

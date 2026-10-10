@@ -315,6 +315,17 @@ def test_the_calibration_view_carries_a_curve_for_every_model_and_event(seeded):
             assert all(0.0 <= point.observed <= 1.0 for point in points)
 
 
+def test_the_calibration_view_carries_the_event_scores_with_their_intervals(seeded):
+    view = calibration_view(report_for(seeded()), generated_at=NOW)
+    for scored in view.scored:
+        assert set(scored.events) == set(view.events)
+        for split in scored.events.values():
+            assert split.log_loss.races == scored.races
+            assert split.reliability >= 0.0
+    for paired in view.paired:
+        assert set(paired.events) == set(view.events)
+
+
 def test_the_calibration_view_keeps_the_per_race_series(seeded):
     view = calibration_view(report_for(seeded()), generated_at=NOW)
     assert view.per_race
