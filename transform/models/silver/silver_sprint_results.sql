@@ -7,7 +7,27 @@
 
 with source_rows as (
 
-    select * from {{ source('bronze', 'sprint') }}
+    select * from {{ optional_source('bronze', 'sprint', "
+        select
+            cast(null as varchar) as run_id,
+            cast(null as timestamp with time zone) as ingested_at,
+            cast(null as bigint) as season,
+            cast(null as bigint) as round,
+            cast(null as varchar) as driver_id,
+            cast(null as varchar) as driver_code,
+            cast(null as varchar) as constructor_id,
+            cast(null as bigint) as car_number,
+            cast(null as bigint) as grid,
+            cast(null as bigint) as position,
+            cast(null as varchar) as position_text,
+            cast(null as double) as points,
+            cast(null as bigint) as laps_completed,
+            cast(null as varchar) as status,
+            cast(null as bigint) as time_millis,
+            cast(null as bigint) as fastest_lap_rank,
+            cast(null as bigint) as fastest_lap_millis
+        where false
+    ") }}
     {% if is_incremental() %}
     {{ newer_than_loaded() }}
     {% endif %}

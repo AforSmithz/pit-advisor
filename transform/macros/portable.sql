@@ -49,3 +49,21 @@ cardinality({{ column }})
 len({{ column }})
 {%- endif -%}
 {% endmacro %}
+
+
+{% macro optional_source(source_name, table_name, empty_select) %}
+{#- a bronze table that only some lakes have yet (sprint arrives only once a sprint has run).
+    duckdb refuses a glob that matches nothing, so it gets an empty typed select instead. on
+    athena the catalog registers every contract table up front, so the source always exists -#}
+{%- if target.type != 'athena' and execute -%}
+{%- set location = env_var('PITADV_LOCAL_LAKE', 'data/local') ~ '/bronze/table=' ~ table_name ~ '/**/*.parquet' -%}
+{%- set found = run_query("select count(*) from glob('" ~ location ~ "')").columns[0].values()[0] -%}
+{%- if found == 0 -%}
+({{ empty_select }})
+{%- else -%}
+{{ source(source_name, table_name) }}
+{%- endif -%}
+{%- else -%}
+{{ source(source_name, table_name) }}
+{%- endif -%}
+{% endmacro %}
