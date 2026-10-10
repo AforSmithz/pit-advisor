@@ -73,7 +73,14 @@ class Client:
         # conditional gets would return 304 against bytes that may not be in raw, and a
         # settled market never changes, so every read is a plain one
         response = self.fetch(url, http.Unconditional(self.ledger), self.limiters.get(source))
-        return json.loads(response.body), response.body, response
+        try:
+            return json.loads(response.body), response.body, response
+        except json.JSONDecodeError as exc:
+            # an archived market sometimes answers 200 with nothing in it
+            raise http.FetchError(url, response.status, "not json") from exc
+
+    def landed(self, source: Source, key: EventKey, name: str) -> bool:
+        return self.raw.latest(source, key, name) is not None
 
     def land(
         self, source: Source, key: EventKey, name: str, body: bytes, response: http.Response
@@ -115,13 +122,22 @@ def kalshi(client: Client, schedule: pl.DataFrame) -> list[str]:
             stop = int((when + timedelta(hours=6)).timestamp())
             for market in markets:
                 name = str(market["ticker"])
+                if client.landed(Source.KALSHI, key, f"candles-{name}"):
+                    continue
                 query = urlencode({"start_ts": start, "end_ts": stop, "period_interval": 60})
-                url = f"{KALSHI}/historical/markets/{name}/candlesticks?{query}"
-                try:
-                    _, body, response = client.get(Source.KALSHI, url)
-                except http.FetchError:
-                    url = f"{KALSHI}/series/{series}/markets/{name}/candlesticks?{query}"
-                    _, body, response = client.get(Source.KALSHI, url)
+                read = None
+                for path in (
+                    f"historical/markets/{name}/candlesticks",
+                    f"series/{series}/markets/{name}/candlesticks",
+                ):
+                    try:
+                        read = client.get(Source.KALSHI, f"{KALSHI}/{path}?{query}")
+                        break
+                    except http.FetchError:
+                        continue
+                if read is None:
+                    continue
+                _, body, response = read
                 landed.append(client.land(Source.KALSHI, key, f"candles-{name}", body, response))
     return landed
 
@@ -171,10 +187,15 @@ def polymarket(client: Client, schedule: pl.DataFrame) -> list[str]:
             if asked is None or not tokens:
                 continue
             driver = fold(asked.group(1))
+            if client.landed(Source.POLYMARKET, key, f"prices-win-{driver}"):
+                continue
             query = urlencode(
                 {"market": tokens[0], "startTs": start, "endTs": stop, "fidelity": 60}
             )
-            _, body, response = client.get(Source.POLYMARKET, f"{CLOB}/prices-history?{query}")
+            try:
+                _, body, response = client.get(Source.POLYMARKET, f"{CLOB}/prices-history?{query}")
+            except http.FetchError:
+                continue
             landed.append(
                 client.land(Source.POLYMARKET, key, f"prices-win-{driver}", body, response)
             )

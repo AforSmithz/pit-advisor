@@ -39,6 +39,8 @@ def test_source_values():
         "fia_docs",
         "wikipedia",
         "curated",
+        "kalshi",
+        "polymarket",
     }
 
 
