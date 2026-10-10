@@ -226,3 +226,57 @@ def test_agreement_counts_a_grid_it_rebuilt_exactly():
     assert measured.slots == 5
     assert measured.slots_matched == 5
     assert measured.quali_slots_matched < 5
+
+
+def session_laps(times: dict[str, list[tuple[int, int]]]) -> pl.DataFrame:
+    """times maps a driver to (session clock in seconds, lap time in millis) pairs."""
+    return pl.DataFrame(
+        [
+            {
+                "season": 2024,
+                "round": 6,
+                "driver_code": code,
+                "session_time_millis": clock * 1000,
+                "lap_time_millis": lap,
+                "is_deleted": False,
+            }
+            for code, laps in times.items()
+            for clock, lap in laps
+        ]
+    )
+
+
+def test_a_knockout_ranks_by_the_segment_reached_before_the_lap_time():
+    # three segments separated by long silences; CCC set the quickest lap of all in the first
+    # segment and went no further, so he starts behind both cars that reached the last one
+    laps = session_laps(
+        {
+            "AAA": [(100, 90_500), (1_000, 90_200), (2_000, 89_900)],
+            "BBB": [(110, 90_600), (1_010, 90_300), (2_010, 90_000)],
+            "CCC": [(120, 89_000)],
+            "DDD": [(130, 91_000), (1_020, 90_900)],
+        }
+    )
+    order = grid.knockout(laps)
+    assert grid.knockout_grid(order) == {"AAA": 1, "BBB": 2, "DDD": 3, "CCC": 4}
+    reach = dict(zip(order["driver_code"], order["reach"], strict=True))
+    assert reach == {"AAA": 3, "BBB": 3, "DDD": 2, "CCC": 1}
+
+
+def test_a_knockout_reading_is_a_percent_off_the_quickest_three():
+    laps = session_laps(
+        {
+            "AAA": [(100, 90_000), (1_000, 90_000), (2_000, 90_000)],
+            "BBB": [(110, 90_000), (1_010, 90_000), (2_010, 90_000)],
+            "CCC": [(120, 90_000), (1_020, 90_900)],
+            "DDD": [(130, 91_800)],
+        }
+    )
+    percent = dict(zip(*grid.knockout(laps).select("driver_code", "percent"), strict=True))
+    assert percent["AAA"] == pytest.approx(0.0)
+    assert percent["DDD"] == pytest.approx(2.0)
+
+
+def test_a_session_with_too_little_in_it_gives_no_order():
+    laps = session_laps({"AAA": [(100, 90_000)]})
+    assert grid.knockout(laps).height == 0

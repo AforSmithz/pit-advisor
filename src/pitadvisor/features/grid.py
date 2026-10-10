@@ -1,6 +1,7 @@
 # pyright: reportUnknownMemberType=false
 from collections.abc import Mapping, Set
 
+import numpy as np
 import polars as pl
 from pydantic import BaseModel
 
@@ -218,3 +219,64 @@ def _ranks(slots: Mapping[str, int], codes: list[str]) -> dict[str, int]:
     shift every slot behind him by one."""
     ranked = sorted(codes, key=lambda code: slots[code])
     return {code: index for index, code in enumerate(ranked)}
+
+
+KNOCKOUT_COLUMNS = ("season", "round", "driver_code", "reach", "best_millis", "percent")
+KNOCKOUT_SCHEMA: dict[str, type[pl.DataType]] = {
+    "season": pl.Int64,
+    "round": pl.Int64,
+    "driver_code": pl.String,
+    "reach": pl.Int64,
+    "best_millis": pl.Float64,
+    "percent": pl.Float64,
+}
+SEGMENTS = 3
+TRIM = 3
+
+
+def knockout(laps: pl.DataFrame) -> pl.DataFrame:
+    """One knockout qualifying session as the format ranks it: the furthest segment a driver
+    set a valid lap in, then the best valid lap in that segment. FastF1 does not label the
+    segments, so the session is split at its two longest silences."""
+    timed = laps.filter(
+        pl.col("session_time_millis").is_not_null()
+        & pl.col("lap_time_millis").is_not_null()
+        & ~pl.col("is_deleted")
+    ).sort("session_time_millis")
+    if timed.height < SEGMENTS or timed["driver_code"].n_unique() < 2:
+        return pl.DataFrame(schema=KNOCKOUT_SCHEMA)
+    clock = timed["session_time_millis"].to_numpy().astype(float)
+    gaps = np.diff(clock)
+    cuts = sorted(float(clock[i + 1]) for i in np.argsort(gaps)[-(SEGMENTS - 1) :])
+    segment = pl.lit(1, dtype=pl.Int64)
+    for cut in cuts:
+        segment = segment + (pl.col("session_time_millis") >= cut).cast(pl.Int64)
+    segmented = timed.with_columns(segment.alias("segment"))
+    reached = segmented.group_by("driver_code").agg(pl.col("segment").max().alias("reach"))
+    best = (
+        segmented.join(reached, on="driver_code")
+        .filter(pl.col("segment") == pl.col("reach"))
+        .group_by("driver_code", "reach")
+        .agg(pl.col("lap_time_millis").min().cast(pl.Float64).alias("best_millis"))
+    )
+    fastest = segmented.group_by("driver_code").agg(pl.col("lap_time_millis").min())
+    benchmark = float(np.sort(fastest["lap_time_millis"].to_numpy().astype(float))[:TRIM].mean())
+    first = timed.row(0, named=True)
+    return (
+        best.join(fastest.rename({"lap_time_millis": "own_best"}), on="driver_code")
+        .with_columns(
+            pl.lit(int(first["season"])).cast(pl.Int64).alias("season"),
+            pl.lit(int(first["round"])).cast(pl.Int64).alias("round"),
+            (100.0 * (pl.col("own_best").cast(pl.Float64) - benchmark) / benchmark).alias(
+                "percent"
+            ),
+            pl.col("reach").cast(pl.Int64),
+        )
+        .select(KNOCKOUT_COLUMNS)
+        .sort(["reach", "best_millis"], descending=[True, False])
+    )
+
+
+def knockout_grid(order: pl.DataFrame) -> dict[str, int]:
+    ranked = order.sort(["reach", "best_millis"], descending=[True, False])
+    return {str(code): index + 1 for index, code in enumerate(ranked["driver_code"].to_list())}
