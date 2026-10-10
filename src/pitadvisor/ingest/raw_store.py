@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import shutil
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -56,7 +57,10 @@ class LocalObjectStore:
     def put(self, key: str, body: bytes) -> str:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(body)
+        # parallel local runs share the panel cache, so a reader must never see half a file
+        staged = path.with_name(f"{path.name}.{os.getpid()}.part")
+        staged.write_bytes(body)
+        staged.replace(path)
         return f"file://{path}"
 
     def get(self, key: str) -> bytes:
@@ -71,7 +75,7 @@ class LocalObjectStore:
         if not root.is_dir():
             return
         for path in sorted(root.rglob("*")):
-            if not path.is_file():
+            if not path.is_file() or path.name.endswith(".part"):
                 continue
             key = path.relative_to(self.root).as_posix()
             if not key.startswith(prefix):

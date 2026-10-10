@@ -35,6 +35,17 @@ def test_local_put_get_exists(store):
     assert not store.exists("raw/missing.json")
 
 
+def test_a_local_put_swaps_the_file_in_and_never_lists_a_staged_one(store):
+    store.put("cache/panel/a.parquet", b"one")
+    path = store.root / "cache/panel/a.parquet"
+    before = path.stat().st_ino
+    store.put("cache/panel/a.parquet", b"two")
+    assert path.stat().st_ino != before
+    assert store.get("cache/panel/a.parquet") == b"two"
+    (path.parent / "b.parquet.123.part").write_bytes(b"half")
+    assert [item.key for item in store.list("cache/panel/")] == ["cache/panel/a.parquet"]
+
+
 def test_local_list_filters_by_prefix(store):
     store.put("raw/source=jolpica/a.json", b"1")
     store.put("bronze/table=races/b.parquet", b"2")
