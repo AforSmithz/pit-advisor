@@ -8,9 +8,11 @@ from pitadvisor.model.metrics import (
     MalformedForecastError,
     accuracy,
     binary_brier,
+    binary_log_loss,
     brier,
     calibration_error,
     log_loss,
+    murphy,
     race_bootstrap,
     reliability,
 )
@@ -155,3 +157,61 @@ def test_an_empty_scoring_set_is_not_a_number_rather_than_a_crash():
     assert np.isnan(log_loss(np.zeros((0, 5)), np.zeros(0, dtype=int)))
     assert np.isnan(brier(np.zeros((0, 5)), np.zeros(0, dtype=int)))
     assert np.isnan(binary_brier(np.zeros(0), np.zeros(0)))
+
+
+@given(
+    p=st.lists(st.floats(0.0, 1.0), min_size=1, max_size=40),
+    seed=st.integers(0, 1000),
+)
+@settings(max_examples=60, deadline=None)
+def test_binary_log_loss_is_never_negative(p, seed):
+    y = np.random.default_rng(seed).integers(0, 2, len(p)).astype(float)
+    assert binary_log_loss(np.asarray(p), y) >= 0.0
+
+
+def test_a_certain_and_right_event_forecast_costs_nothing():
+    y = np.array([1.0, 0.0, 1.0])
+    assert binary_log_loss(y, y) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_binary_log_loss_is_the_two_class_log_loss():
+    p = np.array([0.2, 0.7, 0.55, 0.9])
+    y = np.array([0, 1, 0, 1])
+    grid = np.column_stack([1.0 - p, p])
+    assert binary_log_loss(p, y.astype(float)) == pytest.approx(log_loss(grid, y))
+
+
+def test_an_event_forecast_of_the_wrong_shape_is_refused():
+    with pytest.raises(MalformedForecastError):
+        binary_log_loss(np.array([0.5, 0.5]), np.array([1.0]))
+
+
+@given(
+    levels=st.lists(st.integers(0, 9), min_size=2, max_size=60),
+    seed=st.integers(0, 1000),
+)
+@settings(max_examples=60, deadline=None)
+def test_murphy_sums_back_to_the_brier_when_each_bin_holds_one_forecast(levels, seed):
+    """The decomposition is exact when every forecast in a bin is the same number, so with the
+    forecasts placed at bin centres it has to reproduce the Brier to rounding."""
+    p = (np.asarray(levels, dtype=float) + 0.5) / 10.0
+    y = np.random.default_rng(seed).integers(0, 2, len(p)).astype(float)
+    split = murphy(p, y)
+    assert split.reliability >= 0.0
+    assert split.resolution >= 0.0
+    assert 0.0 <= split.uncertainty <= 0.25
+    assert split.reliability - split.resolution + split.uncertainty == pytest.approx(
+        split.brier, abs=1e-12
+    )
+
+
+def test_a_forecast_that_says_the_base_rate_has_no_resolution():
+    y = np.array([1.0, 0.0, 0.0, 1.0])
+    split = murphy(np.full(4, 0.5), y)
+    assert split.resolution == pytest.approx(0.0)
+    assert split.reliability == pytest.approx(0.0)
+    assert split.uncertainty == pytest.approx(0.25)
+
+
+def test_murphy_of_nothing_is_not_a_number():
+    assert np.isnan(murphy(np.array([]), np.array([])).brier)

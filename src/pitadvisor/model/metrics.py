@@ -64,6 +64,17 @@ def binary_brier(probability: np.ndarray, outcome: np.ndarray) -> float:
     return float(((p - y) ** 2).mean())
 
 
+def binary_log_loss(probability: np.ndarray, outcome: np.ndarray) -> float:
+    p = np.asarray(probability, dtype=float)
+    y = np.asarray(outcome, dtype=float)
+    if p.shape != y.shape:
+        raise MalformedForecastError(f"{p.shape} probabilities against {y.shape} outcomes")
+    if not p.size:
+        return float("nan")
+    clipped = np.clip(p, FLOOR, 1.0 - FLOOR)
+    return float(-(y * np.log(clipped) + (1.0 - y) * np.log(1.0 - clipped)).mean())
+
+
 def accuracy(probabilities: np.ndarray, actual: np.ndarray) -> float:
     grid, truth = _checked(probabilities, actual)
     if not grid.size:
@@ -108,6 +119,35 @@ def calibration_error(curve: Sequence[Bin]) -> float:
     if not total:
         return float("nan")
     return sum(item.count * abs(item.forecast - item.observed) for item in curve) / total
+
+
+class Murphy(BaseModel, frozen=True):
+    """Brier = reliability - resolution + uncertainty, over the same bins as the curve. Exact
+    when every forecast in a bin is the same number; otherwise the spread inside a bin is left
+    out, and `brier` is kept beside it so the gap shows."""
+
+    reliability: float
+    resolution: float
+    uncertainty: float
+    brier: float
+
+
+def murphy(probability: np.ndarray, outcome: np.ndarray, bins: int = BINS) -> Murphy:
+    p = np.asarray(probability, dtype=float)
+    y = np.asarray(outcome, dtype=float)
+    if not p.size:
+        nan = float("nan")
+        return Murphy(reliability=nan, resolution=nan, uncertainty=nan, brier=nan)
+    curve = reliability(p, y, bins)
+    total = float(p.size)
+    base = float(y.mean())
+    return Murphy(
+        reliability=sum(item.count * (item.forecast - item.observed) ** 2 for item in curve)
+        / total,
+        resolution=sum(item.count * (item.observed - base) ** 2 for item in curve) / total,
+        uncertainty=base * (1.0 - base),
+        brier=binary_brier(p, y),
+    )
 
 
 class Interval(BaseModel, frozen=True):
