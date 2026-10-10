@@ -49,6 +49,7 @@ from pitadvisor.model import calibrate
 from pitadvisor.model import sprint as sprint_model
 from pitadvisor.outputs import brief as brief_outputs
 from pitadvisor.outputs import cost as cost_outputs
+from pitadvisor.outputs import published
 from pitadvisor.outputs.view_contracts import (
     Evidence,
     ForecastView,
@@ -811,9 +812,14 @@ def emit_views(
     if "calibration" in wanted:
         typer.echo(emit(store, calibration_view(_report(results))))
     if "forecast" in wanted:
-        typer.echo(emit(store, _forecast(store, event, paths, seed, results)))
+        race = _forecast(store, event, paths, seed, results)
+        typer.echo(emit(store, race))
+        _keep(published.archive(store, race, "race", race.event.start_utc))
     if "sprint" in wanted:
-        typer.echo(emit(store, _sprint(store, event, paths, seed, results)))
+        sprint = _sprint(store, event, paths, seed, results)
+        typer.echo(emit(store, sprint))
+        if sprint.forecast is not None:
+            _keep(published.archive(store, sprint.forecast, "sprint", sprint.sprint_utc))
     # last, because it is read off the views written above rather than computed again
     if "brief" in wanted:
         try:
@@ -821,6 +827,36 @@ def emit_views(
         except brief_outputs.StaleViewsError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(1) from exc
+
+
+def _keep(key: str | None) -> None:
+    typer.echo(f"kept {key}" if key else "not kept: already kept, or the session has started")
+
+
+@app.command(
+    name="score-published",
+    help="Score every forecast published before its session against what happened.",
+)
+def score_published(
+    output: Annotated[Path, typer.Option(help="Where scores.json lands.")] = Path(
+        "results/published"
+    ),
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+) -> None:
+    from pitadvisor.quality.checks import read_table
+
+    store, _, _ = _runtime(local, get_settings())
+    pane = _panel(store)
+    sprints = sprint_model.sprint_frame(
+        read_table(store, Layer.BRONZE, "sprint"), read_table(store, Layer.BRONZE, "races")
+    )
+    scores = published.score(store, pane, sprints)
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "scores.json").write_text(
+        json.dumps([item.model_dump(mode="json") for item in scores], indent=2) + "\n"
+    )
+    typer.echo(published.summarise(scores), nl=False)
+    typer.echo(f"wrote {output / 'scores.json'}")
 
 
 def _report(results: Path) -> forecast_model.Report:

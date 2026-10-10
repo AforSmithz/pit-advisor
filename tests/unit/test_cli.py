@@ -710,6 +710,9 @@ def test_emit_views_writes_the_forecast_and_the_calibration_view(lake, seed_lake
     calibration = json.loads((lake / "views" / "calibration_view.json").read_text())
     assert forecast["view"] == "forecast_view"
     assert forecast["evidence"]["beats_baselines"] in (True, False)
+    # the seeded race has already run, so re-emitting it is a backtest and is not kept
+    assert "not kept" in result.stdout
+    assert not (lake / "views" / "history").exists()
     assert calibration["view"] == "calibration_view"
     assert calibration["per_race"]
 
@@ -724,6 +727,16 @@ def test_emit_views_writes_a_sprint_view_even_on_a_weekend_without_one(lake, see
     assert view["view"] == "sprint_view"
     assert view["state"] == "no_sprint"
     assert view["forecast"] is None
+
+
+def test_score_published_says_when_nothing_has_a_result(lake, seed_lake, tmp_path):
+    seeded_local(lake, seed_lake)
+    result = CliRunner().invoke(
+        cli.app, ["score-published", "--output", str(tmp_path / "published"), "--local"]
+    )
+    assert result.exit_code == 0, result.stdout
+    assert "nothing published has a result yet" in result.stdout
+    assert json.loads((tmp_path / "published" / "scores.json").read_text()) == []
 
 
 def test_the_forecast_view_does_not_read_an_archive_as_a_forecast(lake, seed_lake):
