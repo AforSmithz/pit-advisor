@@ -2,11 +2,13 @@
 # pyright: reportUnknownMemberType=false
 import dataclasses
 from datetime import UTC, date, datetime
+from typing import Literal
 
 import numpy as np
 import polars as pl
 
 from pitadvisor.features import form, track_fit
+from pitadvisor.features import grid as starting
 from pitadvisor.features.assemble import EventContext
 from pitadvisor.model import backtest, baselines
 from pitadvisor.model import pool as pooling
@@ -28,6 +30,9 @@ COLUMNS = (
     "laps_completed",
 )
 WARMUP = 4
+SprintState = Literal["no_sprint", "awaiting_grid", "forecast", "run"]
+# a sprint pays the top eight
+SPRINT_POINTS = 8
 
 
 def sprint_frame(sprint: pl.DataFrame | None, schedule: pl.DataFrame | None) -> pl.DataFrame:
@@ -67,7 +72,7 @@ def sprint_laps(sprints: pl.DataFrame, pane: backtest.Panel, context: EventConte
     return max(round(backtest.race_laps(pane, context, context.race_date) * SPRINT_SHARE), 1)
 
 
-def forecast(
+def scenarios(
     pane: backtest.Panel,
     sprints: pl.DataFrame,
     context: EventContext,
@@ -75,15 +80,19 @@ def forecast(
     rng: np.random.Generator,
     paths: int = race.PATHS,
     variant: backtest.Variant | None = None,
-) -> race.Outcome:
-    field = sprints.filter(
-        (pl.col("season") == context.season) & (pl.col("round") == context.round)
-    ).drop_nulls("driver_code")
-    back = max(backtest.FIELD, field.height)
-    grid = {
-        str(row["driver_code"]): (int(row["grid"]) if int(row["grid"]) > 0 else back)
-        for row in field.iter_rows(named=True)
-    }
+    grid: dict[str, int] | None = None,
+) -> tuple[dict[str, race.Outcome], dict[str, float], int]:
+    """Each weather scenario simulated over the sprint distance. The grid is the sprint
+    classification's when the sprint has run, and the one passed in when it has not."""
+    if grid is None:
+        field = sprints.filter(
+            (pl.col("season") == context.season) & (pl.col("round") == context.round)
+        ).drop_nulls("driver_code")
+        back = max(backtest.FIELD, field.height)
+        grid = {
+            str(row["driver_code"]): (int(row["grid"]) if int(row["grid"]) > 0 else back)
+            for row in field.iter_rows(named=True)
+        }
     morning = before_sprint(pane, context)
     laps = sprint_laps(sprints, pane, context)
     mix = backtest.scenario_weights(pane, context.circuit_id, sprint_date)
@@ -111,7 +120,121 @@ def forecast(
         outcomes[name] = race.simulate(built, np.random.default_rng(int(keys[name])), paths, name)
     if not outcomes:
         raise backtest.NoForecastError("every scenario carries zero weight")
+    return outcomes, mix, laps
+
+
+def forecast(
+    pane: backtest.Panel,
+    sprints: pl.DataFrame,
+    context: EventContext,
+    sprint_date: date,
+    rng: np.random.Generator,
+    paths: int = race.PATHS,
+    variant: backtest.Variant | None = None,
+) -> race.Outcome:
+    outcomes, mix, _ = scenarios(pane, sprints, context, sprint_date, rng, paths, variant)
     return race.blend(outcomes, mix, "blended")
+
+
+def timing(
+    races: pl.DataFrame | None, context: EventContext
+) -> tuple[date | None, datetime | None]:
+    if races is None or "sprint_date" not in races.columns:
+        return None, None
+    here = races.filter(
+        (pl.col("season") == context.season) & (pl.col("round") == context.round)
+    ).drop_nulls("sprint_date")
+    if not here.height:
+        return None, None
+    day = here["sprint_date"][0]
+    when = here["sprint_utc"][0] if "sprint_utc" in here.columns else None
+    if isinstance(when, datetime) and when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return (day if isinstance(day, date) else date.fromisoformat(str(day))), when
+
+
+def state(
+    sprints: pl.DataFrame,
+    pane: backtest.Panel,
+    context: EventContext,
+    races: pl.DataFrame | None,
+    now: datetime,
+) -> SprintState:
+    day, when = timing(races, context)
+    if day is None:
+        return "no_sprint"
+    held = sprints.filter(
+        (pl.col("season") == context.season) & (pl.col("round") == context.round)
+    ).height
+    if held or (when is not None and when <= now):
+        return "run"
+    return "forecast" if live_grid(pane, context) else "awaiting_grid"
+
+
+def live_grid(pane: backtest.Panel, context: EventContext) -> dict[str, int]:
+    """Sprint qualifying read off the timing laps. Sprint grid drops are rare and not applied."""
+    order = pane.sprint_quali.filter(
+        (pl.col("season") == context.season) & (pl.col("round") == context.round)
+    )
+    return starting.knockout_grid(order) if order.height else {}
+
+
+def live(
+    pane: backtest.Panel,
+    sprints: pl.DataFrame,
+    context: EventContext,
+    sprint_date: date,
+    rng: np.random.Generator,
+    pool: pooling.Pool | None,
+    paths: int = race.PATHS,
+) -> backtest.Forecast:
+    """The sprint forecast for the morning of a sprint, pooled with the grid baseline the way
+    the sprint backtest scored it."""
+    grid = live_grid(pane, context)
+    if not grid:
+        raise backtest.NoForecastError(
+            f"no sprint qualifying laps for {context.season}:{context.round}"
+        )
+    outcomes, mix, laps = scenarios(pane, sprints, context, sprint_date, rng, paths, grid=grid)
+    blended = race.blend(outcomes, mix, "blended")
+    codes = blended.driver_code
+    width = len(blended.position[0])
+    back = max(backtest.FIELD, len(codes))
+    fitted = baselines.fit(
+        pane.results.select(baselines.COLUMNS), sprint_date, known=pane.entries, width=width
+    )
+    prior = fitted.lookups["grid"].predict([grid.get(code, back) for code in codes], width)
+
+    def apply(outcome: race.Outcome) -> race.Outcome:
+        mixed = outcome.probabilities()
+        if pool is not None:
+            mixed = pooling.combine(mixed, prior, len(outcome.driver_code), pool)
+        rank = np.arange(1, mixed.shape[1] + 1, dtype=np.float64)
+        return outcome.model_copy(
+            update={
+                "position": [[float(value) for value in row] for row in mixed],
+                "win": [float(row[0]) for row in mixed],
+                "podium": [float(row[:3].sum()) for row in mixed],
+                "points": [float(row[:SPRINT_POINTS].sum()) for row in mixed],
+                "expected_position": [float(np.dot(row, rank)) for row in mixed],
+            }
+        )
+
+    return backtest.Forecast(
+        season=context.season,
+        round=context.round,
+        circuit_id=context.circuit_id,
+        race_date=context.race_date,
+        as_of=sprint_date,
+        paths=paths,
+        laps=laps,
+        scenario_weights=mix,
+        weights_are_forecast=False,
+        outcome=apply(blended),
+        scenarios={name: apply(outcome) for name, outcome in outcomes.items()},
+        assumptions=[],
+        pool=pool,
+    )
 
 
 def run(
