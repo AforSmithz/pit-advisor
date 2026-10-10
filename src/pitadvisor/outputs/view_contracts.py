@@ -16,6 +16,7 @@ from pitadvisor.ingest.ratelimit import BucketState
 from pitadvisor.ingest.raw_store import ObjectStore
 from pitadvisor.model import backtest
 from pitadvisor.model.backtest import Assumption
+from pitadvisor.model.sprint import SprintState
 from pitadvisor.quality.checks import QualityReport, Status
 from pitadvisor.types import Layer, Source
 
@@ -636,6 +637,38 @@ def forecast_view(
         assumptions=predicted.assumptions,
         evidence=evidence,
         grid_sampled=predicted.grid_sampled,
+    )
+
+
+class SprintView(BaseModel, frozen=True):
+    """The coming sprint. Emitted every run, so a weekend without one says so instead of
+    leaving last month's sprint on the page."""
+
+    view: str = "sprint_view"
+    schema_version: str = SCHEMA_VERSION
+    generated_at: datetime
+    run_id: str
+    event: EventContext
+    sprint_utc: datetime | None
+    state: SprintState
+    forecast: ForecastView | None = None
+
+
+def sprint_view(
+    context: EventContext,
+    run_id: str,
+    sprint_utc: datetime | None,
+    state: SprintState,
+    forecast: ForecastView | None = None,
+    generated_at: datetime | None = None,
+) -> SprintView:
+    return SprintView(
+        generated_at=generated_at or datetime.now(UTC),
+        run_id=run_id,
+        event=context,
+        sprint_utc=sprint_utc,
+        state=state,
+        forecast=forecast if state == "forecast" else None,
     )
 
 

@@ -714,6 +714,18 @@ def test_emit_views_writes_the_forecast_and_the_calibration_view(lake, seed_lake
     assert calibration["per_race"]
 
 
+def test_emit_views_writes_a_sprint_view_even_on_a_weekend_without_one(lake, seed_lake):
+    seeded_local(lake, seed_lake)
+    result = CliRunner().invoke(
+        cli.app, ["emit-views", "--views", "sprint", "--paths", "150", "--local"]
+    )
+    assert result.exit_code == 0, result.stdout
+    view = json.loads((lake / "views" / "sprint_view.json").read_text())
+    assert view["view"] == "sprint_view"
+    assert view["state"] == "no_sprint"
+    assert view["forecast"] is None
+
+
 def test_the_forecast_view_does_not_read_an_archive_as_a_forecast(lake, seed_lake):
     """Archived weather says what happened. Only a real forecast is allowed to weight the
     scenarios, or the simulation would know whether it rained before predicting the race."""

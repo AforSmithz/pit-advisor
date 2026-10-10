@@ -12,6 +12,7 @@ from pitadvisor.outputs.view_contracts import (
     evidence_from,
     forecast_view,
     pipeline_view,
+    sprint_view,
     track_view,
     view_key,
     weekend_view,
@@ -347,3 +348,21 @@ def test_both_new_views_round_trip_through_the_store(seeded, store):
         stored = json.loads(store.get(view_key(view.view)).decode())
         assert stored["schema_version"] == SCHEMA_VERSION
         assert stored["view"] == view.view
+
+
+def test_a_sprint_view_without_a_forecast_says_why(seeded):
+    _, context, forecast, seats, grid = predicted_for(seeded())
+    body = forecast_view(forecast, context, "run-1", seats, grid, generated_at=NOW)
+    quiet = sprint_view(context, "run-1", None, "no_sprint", body, generated_at=NOW)
+    assert quiet.view == "sprint_view"
+    assert quiet.state == "no_sprint"
+    assert quiet.forecast is None
+
+
+def test_a_sprint_view_in_the_forecast_state_carries_the_forecast(seeded):
+    _, context, forecast, seats, grid = predicted_for(seeded())
+    body = forecast_view(forecast, context, "run-1", seats, grid, generated_at=NOW)
+    when = datetime(2024, 4, 6, 3, tzinfo=UTC)
+    view = sprint_view(context, "run-1", when, "forecast", body, generated_at=NOW)
+    assert view.forecast == body
+    assert view.sprint_utc == when

@@ -52,12 +52,14 @@ from pitadvisor.outputs import cost as cost_outputs
 from pitadvisor.outputs.view_contracts import (
     Evidence,
     ForecastView,
+    SprintView,
     calibration_view,
     driver_view,
     emit,
     evidence_from,
     forecast_view,
     pipeline_view,
+    sprint_view,
     track_view,
     weekend_view,
 )
@@ -418,12 +420,22 @@ def weekend_plan(
             help="Saturday's run. Left out, it is read off the day: saturday in UTC is after.",
         ),
     ] = None,
+    sprint_morning: Annotated[
+        bool | None,
+        typer.Option(
+            "--sprint-morning/--no-sprint-morning",
+            help="The run before a sprint. Left out, saturday before noon in UTC is the morning.",
+        ),
+    ] = None,
 ) -> None:
     settings = get_settings()
     store, ledger, bucket_for = _runtime(local, settings)
     now = datetime.now(UTC)
     today = now.date()
-    saturday = today.weekday() == 5 if after_qualifying is None else after_qualifying
+    morning = today.weekday() == 5 and now.hour < 12 if sprint_morning is None else sprint_morning
+    saturday = (
+        today.weekday() == 5 and not morning if after_qualifying is None else after_qualifying
+    )
     client = None
     if refresh:
         limiter = RateLimiter(bucket_for("jolpica"))
@@ -433,7 +445,7 @@ def weekend_plan(
         except QuotaExhaustedError as exc:
             typer.echo(f"calendar refresh stopped: {exc}. planning on what is in the lake")
     try:
-        weekend = weekend_schedule.plan(store, today, now, saturday)
+        weekend = weekend_schedule.plan(store, today, now, saturday, morning)
     except weekend_schedule.NoCalendarError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
@@ -447,7 +459,7 @@ def weekend_plan(
             )
         except QuotaExhaustedError as exc:
             typer.echo(f"qualifying for {coming.season}:{coming.round} stopped: {exc}")
-        weekend = weekend_schedule.plan(store, today, now, saturday)
+        weekend = weekend_schedule.plan(store, today, now, saturday, morning)
     if client is not None and weekend.last_season and weekend.last_round:
         # penalties amend a result days after the race, and the backfill skips what it holds
         last = EventKey(season=weekend.last_season, round=weekend.last_round)
@@ -463,6 +475,12 @@ def weekend_plan(
         f"{verdict}: next is {weekend.season}:{weekend.round} {weekend.race_name} "
         f"on {weekend.race_date}"
     )
+    if morning and weekend.race_week:
+        typer.echo(
+            "sprint qualifying is in, forecasting the sprint"
+            if weekend.refresh
+            else "no sprint this weekend, or it has started: nothing to refresh"
+        )
     if saturday and weekend.race_week:
         typer.echo(
             "qualifying is in, refreshing on the real grid"
@@ -705,7 +723,7 @@ def quality_report(
 
 
 EVENT_VIEWS = {"weekend": weekend_view, "driver": driver_view, "track": track_view}
-SIM_VIEWS = ("forecast", "calibration")
+SIM_VIEWS = ("forecast", "calibration", "sprint")
 RESULTS = Path("results/backtest")
 DEV_RESULTS = RESULTS / "dev"
 
@@ -757,6 +775,8 @@ def emit_views(
         typer.echo(emit(store, calibration_view(_report(results))))
     if "forecast" in wanted:
         typer.echo(emit(store, _forecast(store, event, paths, seed, results)))
+    if "sprint" in wanted:
+        typer.echo(emit(store, _sprint(store, event, paths, seed, results)))
     # last, because it is read off the views written above rather than computed again
     if "brief" in wanted:
         try:
@@ -821,6 +841,47 @@ def _forecast(store: ObjectStore, event: str, paths: int, seed: int, results: Pa
         forecast_model.grid_for(pane, context, predicted.outcome.driver_code),
         _evidence(results),
     )
+
+
+def _sprint(store: ObjectStore, event: str, paths: int, seed: int, results: Path) -> SprintView:
+    from pitadvisor.quality.checks import read_table
+
+    pane = _panel(store)
+    context = _event(store, event)
+    races = read_table(store, Layer.BRONZE, "races")
+    sprints = sprint_model.sprint_frame(read_table(store, Layer.BRONZE, "sprint"), races)
+    day, when = sprint_model.timing(races, context)
+    stage = sprint_model.state(sprints, pane, context, races, datetime.now(UTC))
+    typer.echo(f"sprint for {context.season}:{context.round}: {stage}")
+    if stage != "forecast" or day is None:
+        return sprint_view(context, _run_id(), when, stage)
+    source = results / "sprint" / calibrate.REPORT
+    report = (
+        forecast_model.Report.model_validate_json(source.read_text()) if source.exists() else None
+    )
+    try:
+        predicted = sprint_model.live(
+            pane,
+            sprints,
+            context,
+            day,
+            np.random.default_rng(seed),
+            report.pool if report is not None else None,
+            paths=paths,
+        )
+    except forecast_model.NoForecastError as exc:
+        typer.echo(str(exc), err=True)
+        return sprint_view(context, _run_id(), when, "awaiting_grid")
+    seats, _ = forecast_model.seats_for(pane, context, day)
+    body = forecast_view(
+        predicted,
+        context,
+        _run_id(),
+        seats,
+        sprint_model.live_grid(pane, context),
+        evidence_from(report) if report is not None else None,
+    )
+    return sprint_view(context, _run_id(), when, "forecast", body)
 
 
 @app.command(help="Fit the feature stack for one event and print what it stands on.")
