@@ -97,6 +97,8 @@ class Variant(BaseModel, frozen=True):
     sprint_pace: bool = True
     # a team's older pace counts for less after it declares performance updates
     upgrade_signal: bool = False
+    # before main qualifying on a sprint weekend, sprint qualifying anchors race pace
+    sprint_quali_anchor: bool = False
 
 
 TYPES: dict[str, type[pl.DataType]] = {
@@ -172,6 +174,10 @@ class Panel:
     upgrades: pl.DataFrame = dataclass_field(default_factory=lambda: _empty_upgrades())
     # prediction-market prices an hour before each race, a baseline and never an input
     markets: pl.DataFrame = dataclass_field(default_factory=lambda: _empty_markets())
+    # sprint qualifying read as a knockout, one row per driver per sprint weekend
+    sprint_quali: pl.DataFrame = dataclass_field(
+        default_factory=lambda: pl.DataFrame(schema=starting.KNOCKOUT_SCHEMA)
+    )
     # one-step-ahead team pace error per race and upgrade discount, filled as a walk needs it
     upgrade_errors: dict[tuple[int, int], dict[float, float]] = dataclass_field(
         default_factory=dict[tuple[int, int], dict[float, float]], repr=False
@@ -183,7 +189,7 @@ class Panel:
 
 
 # bump when Panel changes shape, so a cache written by older code is never read by newer code
-PANEL_VERSION = 14
+PANEL_VERSION = 15
 PANEL_TABLES = (
     "races",
     "results",
@@ -214,6 +220,7 @@ FRAMES = (
     "sprint_pace",
     "upgrades",
     "markets",
+    "sprint_quali",
 )
 
 
@@ -346,6 +353,13 @@ def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:
         ),
         upgrades=_upgrade_frame(read_table(store, layer, "car_updates"), events),
         markets=_market_frame(read_table(store, layer, "market_odds")),
+        sprint_quali=_knockout_frame(
+            laps.filter(
+                pl.col("session").is_in(
+                    [str(SessionKind.SPRINT_QUALIFYING), str(SessionKind.SPRINT_SHOOTOUT)]
+                )
+            )
+        ),
         sprint_pace=_sprint_pace_frame(
             laps.filter(pl.col("session") == str(SessionKind.SPRINT)),
             results,
@@ -485,6 +499,14 @@ def _stop_frame(racing: pl.DataFrame, dated: pl.DataFrame, results: pl.DataFrame
         )
         .select(tyres.COLUMNS)
     )
+
+
+def _knockout_frame(laps: pl.DataFrame) -> pl.DataFrame:
+    read = [starting.knockout(rows) for _, rows in laps.group_by("season", "round")]
+    read = [frame for frame in read if frame.height]
+    if not read:
+        return pl.DataFrame(schema=starting.KNOCKOUT_SCHEMA)
+    return pl.concat(read)
 
 
 def _market_frame(odds: pl.DataFrame | None) -> pl.DataFrame:
@@ -864,6 +886,8 @@ def setup(
     anchor_sd = quali_anchor_sd(pane, as_of)
     percent, error = _ratings(shape, track, rain, seats, codes, scenario, drift)
     percent, error = _anchored(pane, context, as_of, codes, percent, error, scenario, anchor_sd)
+    if chosen.sprint_quali_anchor and unknown:
+        percent, error = _sprint_anchored(pane, context, as_of, percent, error, scenario, anchor_sd)
     drivers = [
         race.Driver(
             driver_code=code,
@@ -1090,6 +1114,41 @@ def _anchored(
         current = quali_race.fit_event(session)
     except quali_race.NoQualifyingLapError:
         return percent, error
+    readings = {driver.driver_code: driver.quali_percent_off for driver in current.drivers}
+    return _anchor(pane, as_of, readings, percent, error, scenario, anchor_sd)
+
+
+def _sprint_anchored(
+    pane: Panel,
+    context: EventContext,
+    as_of: date,
+    percent: dict[str, float],
+    error: dict[str, float],
+    scenario: str,
+    anchor_sd: float,
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Before main qualifying on a sprint weekend, sprint qualifying is the weekend's reading
+    of one-lap pace, converted the same way."""
+    session = pane.sprint_quali.filter(
+        (pl.col("season") == context.season) & (pl.col("round") == context.round)
+    )
+    if not session.height:
+        return percent, error
+    readings = dict(
+        zip(session["driver_code"].to_list(), session["percent"].to_list(), strict=True)
+    )
+    return _anchor(pane, as_of, readings, percent, error, scenario, anchor_sd)
+
+
+def _anchor(
+    pane: Panel,
+    as_of: date,
+    readings: dict[str, float],
+    percent: dict[str, float],
+    error: dict[str, float],
+    scenario: str,
+    anchor_sd: float,
+) -> tuple[dict[str, float], dict[str, float]]:
     history = [item for item in pane.quali_events if item[0] < as_of]
     if not history:
         return percent, error
@@ -1105,14 +1164,13 @@ def _anchored(
 
     blended: dict[str, float] = dict(percent)
     spread: dict[str, float] = dict(error)
-    for driver in current.drivers:
-        code = driver.driver_code
+    for code, reading in readings.items():
         if code not in percent:
             continue
         own = deltas.get(code)
         delta = own.delta if own else field_delta
         delta_error = own.standard_error if own else field_error
-        anchor = driver.quali_percent_off - delta
+        anchor = reading - delta
         anchor_var = (np.hypot(delta_error, anchor_sd) * widen) ** 2
         rating_var = error[code] ** 2
         if anchor_var <= 0.0 or rating_var <= 0.0:
@@ -1470,8 +1528,10 @@ def before_qualifying(pane: Panel, context: EventContext) -> Panel:
     qualifying, and its sprint only if the sprint already ran before qualifying."""
     held = (pl.col("season") == context.season) & (pl.col("round") == context.round)
     sprint = pane.sprint_pace
+    knockout = pane.sprint_quali
     if context.season < SPRINT_BEFORE_QUALI_FROM:
         sprint = sprint.filter(~held)
+        knockout = knockout.filter(~held)
     return dataclasses.replace(
         pane,
         results=pane.results.filter(~held),
@@ -1482,6 +1542,7 @@ def before_qualifying(pane: Panel, context: EventContext) -> Panel:
             if key != (context.season, context.round)
         },
         sprint_pace=sprint,
+        sprint_quali=knockout,
     )
 
 

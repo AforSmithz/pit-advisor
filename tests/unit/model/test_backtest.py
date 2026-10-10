@@ -759,3 +759,50 @@ def test_the_model_is_scored_against_the_market_on_the_races_it_priced(pane):
     assert found[0].races == 1
     assert found[0].sources == {"kalshi": 1}
     assert backtest.market_scores(walk, pane, np.random.default_rng(SEED)) == []
+
+
+def test_sprint_qualifying_anchors_only_before_main_qualifying_and_only_when_asked(pane, store):
+    context = event_at(store, 2024, 3)
+    friday = backtest.before_qualifying(pane, context)
+    seats, _ = backtest.seats_for(pane, context, context.race_date)
+    codes = sorted(seats)
+    reading = pl.DataFrame(
+        {
+            "season": [2024] * len(codes),
+            "round": [3] * len(codes),
+            "driver_code": codes,
+            "reach": [3] * len(codes),
+            "best_millis": [90_000.0] * len(codes),
+            "percent": [5.0 if index == 0 else 0.0 for index in range(len(codes))],
+        }
+    )
+    planted = dataclasses.replace(friday, sprint_quali=reading)
+    on = backtest.Variant(sprint_quali_anchor=True)
+    plain = backtest.setup(planted, context, context.race_date, "dry")
+    anchored = backtest.setup(planted, context, context.race_date, "dry", variant=on)
+    # a driver with only one qualifying-to-race sample has an unbounded delta error and is left
+    # where he was, exactly as the main-qualifying anchor leaves him
+    assert [d.pace_millis for d in anchored.drivers] != [d.pace_millis for d in plain.drivers]
+    # after qualifying the grid is known and the sprint reading is not used
+    saturday = dataclasses.replace(pane, sprint_quali=reading)
+    after = backtest.setup(saturday, context, context.race_date, "dry", variant=on)
+    again = backtest.setup(saturday, context, context.race_date, "dry")
+    assert [d.pace_millis for d in after.drivers] == pytest.approx(
+        [d.pace_millis for d in again.drivers], rel=1e-12
+    )
+
+
+def test_a_pre_2024_shootout_ran_after_qualifying_and_is_hidden_from_it(pane, store):
+    context = event_at(store, 2023, 3)
+    reading = pl.DataFrame(
+        {
+            "season": [2023],
+            "round": [3],
+            "driver_code": ["AAA"],
+            "reach": [3],
+            "best_millis": [90_000.0],
+            "percent": [0.0],
+        }
+    )
+    planted = dataclasses.replace(pane, sprint_quali=reading)
+    assert backtest.before_qualifying(planted, context).sprint_quali.height == 0
