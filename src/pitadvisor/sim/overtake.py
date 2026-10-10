@@ -25,6 +25,7 @@ COLUMNS = (
     "behind",
     "passed",
     "delta",
+    "age_delta",
 )
 TRAFFIC_COLUMNS = ("season", "round", "race_date", "circuit_id", "driver_code", "penalty_millis")
 PRIOR_TRAFFIC = 6.0
@@ -47,6 +48,9 @@ class PassModel(BaseModel, frozen=True):
     attempts: float
     slope_rows: int
     events_used: int
+    # per lap of tyre age the car ahead has over the chaser, on the same logit scale. zero is
+    # an attack that reads only the pace gap
+    age_slope: float = 0.0
 
 
 def decay(events_ago: np.ndarray, half_life: float = HALF_LIFE_EVENTS) -> np.ndarray:
@@ -62,6 +66,8 @@ def pairs(laps: pl.DataFrame) -> pl.DataFrame:
     """Every lap on which one car sat inside striking range of the one ahead, and whether it
     was in front by the end of the next one. A pit lap on either side is not racing."""
     found: list[pl.DataFrame] = []
+    if "lap_in_stint" not in laps.columns:
+        laps = laps.with_columns(pl.lit(None, dtype=pl.Int64).alias("lap_in_stint"))
     for _, race in laps.group_by("season", "round"):
         racing = with_gap_ahead(race).filter(
             is_green(pl.col("track_status"))
@@ -70,10 +76,21 @@ def pairs(laps: pl.DataFrame) -> pl.DataFrame:
             & ~pl.col("pit_out")
         )
         chasing = racing.select(
-            "season", "round", "lap", "position", "driver_code", "gap_ahead_millis"
+            "season",
+            "round",
+            "lap",
+            "position",
+            "driver_code",
+            "gap_ahead_millis",
+            pl.col("lap_in_stint").alias("behind_age"),
         )
         leading = chasing.select(
-            "season", "round", "lap", pl.col("position") + 1, pl.col("driver_code").alias("ahead")
+            "season",
+            "round",
+            "lap",
+            pl.col("position") + 1,
+            pl.col("driver_code").alias("ahead"),
+            pl.col("behind_age").alias("ahead_age"),
         )
         # where each car ran a lap later, which is the only place a pass can show up
         later = racing.select(
@@ -99,6 +116,7 @@ def pairs(laps: pl.DataFrame) -> pl.DataFrame:
                 "ahead",
                 "behind",
                 (pl.col("behind_then") < pl.col("ahead_then")).alias("passed"),
+                (pl.col("ahead_age") - pl.col("behind_age")).cast(pl.Float64).alias("age_delta"),
             )
         )
     if not found:
@@ -110,6 +128,7 @@ def pairs(laps: pl.DataFrame) -> pl.DataFrame:
                 "ahead": pl.String,
                 "behind": pl.String,
                 "passed": pl.Boolean,
+                "age_delta": pl.Float64,
             }
         )
     return pl.concat(found)
@@ -212,6 +231,18 @@ def fit(
             scored_weight,
         )
         rows = scored.height
+    aged = scored.drop_nulls("age_delta") if "age_delta" in scored.columns else scored.head(0)
+    age_slope = 0.0
+    if aged.height:
+        aged_offsets = np.where(
+            (aged["circuit_id"] == circuit_id).to_numpy(), _logit(rate), _logit(field_rate)
+        ) + slope * aged["delta"].to_numpy().astype(float)
+        age_slope = _slope(
+            aged["age_delta"].to_numpy().astype(float),
+            aged["passed"].to_numpy().astype(float),
+            aged_offsets,
+            decay(aged["events_ago"].to_numpy().astype(float), half_life),
+        )
     return PassModel(
         as_of=as_of,
         circuit_id=circuit_id,
@@ -224,10 +255,17 @@ def fit(
         attempts=attempts,
         slope_rows=rows,
         events_used=events.height,
+        age_slope=float(age_slope),
     )
 
 
-def probability(model: PassModel, delta: np.ndarray) -> npt.NDArray[np.float64]:
-    """delta is how much faster the chasing car is, in percent of a lap. Positive attacks."""
+def probability(
+    model: PassModel, delta: np.ndarray, age_delta: np.ndarray | None = None
+) -> npt.NDArray[np.float64]:
+    """delta is how much faster the chasing car is, in percent of a lap. Positive attacks.
+    age_delta is how many more laps the car ahead has on its tyres."""
     scaled: npt.NDArray[np.float64] = np.asarray(delta, dtype=np.float64)
-    return 1.0 / (1.0 + np.exp(-(model.base + model.slope * scaled)))
+    logit = model.base + model.slope * scaled
+    if age_delta is not None and model.age_slope:
+        logit = logit + model.age_slope * np.asarray(age_delta, dtype=np.float64)
+    return 1.0 / (1.0 + np.exp(-logit))

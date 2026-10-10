@@ -121,3 +121,48 @@ def test_a_red_flag_early_on_still_leaves_duels_to_count():
     found = overtake.pairs(pl.DataFrame(rows))
     assert found.height > 0
     assert found["passed"].any()
+
+
+def aged_duels(age_slope: float, rows: int = 4000) -> pl.DataFrame:
+    rng = np.random.default_rng(11)
+    built = []
+    for index in range(rows):
+        delta = float(rng.normal(0.0, 1.0))
+        age = float(rng.integers(-15, 16))
+        p = 1.0 / (1.0 + np.exp(-(-2.2 + 1.5 * delta + age_slope * age)))
+        built.append(
+            {
+                "season": 2024,
+                "round": index % 8 + 1,
+                "race_date": AS_OF - timedelta(days=7 * (10 - index % 8)),
+                "circuit_id": "monza",
+                "lap": index,
+                "ahead": "AAA",
+                "behind": "BBB",
+                "passed": bool(rng.random() < p),
+                "delta": delta,
+                "age_delta": age,
+            }
+        )
+    return pl.DataFrame(built)
+
+
+def test_fresher_tyres_behind_come_back_as_a_positive_age_slope():
+    fitted = overtake.fit(aged_duels(0.08), "monza", AS_OF)
+    assert 0.03 < fitted.age_slope < 0.13
+    flat = overtake.fit(aged_duels(0.0), "monza", AS_OF)
+    assert abs(flat.age_slope) < 0.03
+
+
+def test_the_age_term_only_moves_the_odds_when_it_has_a_slope():
+    fitted = overtake.fit(aged_duels(0.08), "monza", AS_OF)
+    delta = np.zeros(3)
+    fresher = np.array([-10.0, 0.0, 10.0])
+    chances = overtake.probability(fitted, delta, fresher)
+    assert chances[0] < chances[1] < chances[2]
+    silent = fitted.model_copy(update={"age_slope": 0.0})
+    assert np.allclose(overtake.probability(silent, delta, fresher), chances[1])
+
+
+def test_a_frame_without_tyre_age_fits_no_age_slope():
+    assert overtake.fit(duels({"monza": 0.1}), "monza", AS_OF).age_slope == 0.0
