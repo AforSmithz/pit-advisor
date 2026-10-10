@@ -91,8 +91,6 @@ class Variant(BaseModel, frozen=True):
 
     # the sprint as one more pace event, dated the day it ran, so sunday's forecast sees it
     sprint_pace: bool = True
-    # the pass model also reads how much fresher the chaser's tyres are
-    tyre_age_passing: bool = False
     # before qualifying, the team level moves by the fitted share of its long-run offset
     practice_pace: bool = False
 
@@ -155,7 +153,7 @@ class Panel:
 
 
 # bump when Panel changes shape, so a cache written by older code is never read by newer code
-PANEL_VERSION = 10
+PANEL_VERSION = 11
 PANEL_TABLES = (
     "races",
     "results",
@@ -825,17 +823,12 @@ def setup(
         drivers=drivers,
         start=starts.fit(pane.starts, as_of),
         tyre=_tyre_model(pane, context.circuit_id, as_of, scenario),
-        passing=_passing(pane, context.circuit_id, as_of, chosen.tyre_age_passing),
+        passing=overtake.fit(pane.passes, context.circuit_id, as_of, traffic=pane.traffic),
         safety_car=caution,
         retirement=dnf.build(hazard, seats, ids),
         grid_known=not unknown,
         quali_noise_millis=reference * anchor_sd / 100.0 if unknown else 0.0,
     )
-
-
-def _passing(pane: Panel, circuit_id: str, as_of: date, aged: bool) -> overtake.PassModel:
-    fitted = overtake.fit(pane.passes, circuit_id, as_of, traffic=pane.traffic)
-    return fitted if aged else fitted.model_copy(update={"age_slope": 0.0})
 
 
 def _tyre_model(pane: Panel, circuit_id: str, as_of: date, scenario: str) -> tyres.TyreModel:

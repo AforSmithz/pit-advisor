@@ -161,7 +161,7 @@ def simulate(
         out = retire <= lap
 
         # fresher rubber is what makes an undercut work, so the attack reads the tyres too
-        elapsed = _resolve(setup, elapsed, pace + tyre, order, out, rows, draw["pass"], age)
+        elapsed = _resolve(setup, elapsed, pace + tyre, order, out, rows, draw["pass"])
         if under.any():
             # the queue is built from the order the lap started in, so a stop made under the
             # safety car costs no places. building it after the stop was measured and lost
@@ -184,7 +184,6 @@ def _resolve(
     out: npt.NDArray[np.bool_],
     rows: npt.NDArray[np.int64],
     rng: np.random.Generator,
-    age: npt.NDArray[np.float64] | None = None,
 ) -> npt.NDArray[np.float64]:
     """Track position. A car only gets by if the pass comes off, and one that does not sits
     in the gearbox of the car ahead, which is what builds a train."""
@@ -200,8 +199,7 @@ def _resolve(
         if not attacking.any():
             continue
         delta = (pace[rows, leader] - pace[rows, chaser]) * scale
-        fresher = None if age is None else age[rows, leader] - age[rows, chaser]
-        chance = probability(setup.passing, delta, fresher)
+        chance = probability(setup.passing, delta)
         blocked = attacking & (rng.random(paths) > chance)
         elapsed[rows, chaser] = np.where(blocked, ahead + FOLLOWING_GAP_MILLIS, behind)
     return elapsed

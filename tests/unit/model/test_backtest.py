@@ -659,13 +659,6 @@ def test_an_unknown_stage_is_refused(pane):
         backtest.run(pane, 2024, 3, np.random.default_rng(SEED), "x", paths=50, stage="friday")
 
 
-def test_the_tyre_age_attack_stays_off_unless_asked(pane, store):
-    context = event_at(store, 2024, 4)
-    shipped = backtest.setup(pane, context, context.race_date, "dry")
-    assert shipped.passing.age_slope == 0.0
-    assert "age_delta" in pane.passes.columns
-
-
 def test_the_practice_weight_reads_only_earlier_weekends(pane):
     assert backtest.practice_weight(pane, date(2000, 1, 1)) == 0.0
     weight = backtest.practice_weight(pane, date(2030, 1, 1))
