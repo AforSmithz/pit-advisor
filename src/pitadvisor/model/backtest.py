@@ -804,7 +804,7 @@ def setup(
         round=context.round,
         circuit_id=context.circuit_id,
         race_date=context.race_date,
-        laps=_race_laps(pane, context, as_of),
+        laps=race_laps(pane, context, as_of),
         reference_millis=reference,
         drivers=drivers,
         start=starts.fit(pane.starts, as_of),
@@ -854,7 +854,7 @@ def quali_shifts(pane: Panel, as_of: date, codes: list[str]) -> dict[str, float]
     return {code: own.get(code, field) for code in codes}
 
 
-def _race_laps(pane: Panel, context: EventContext, as_of: date) -> int:
+def race_laps(pane: Panel, context: EventContext, as_of: date) -> int:
     """How long the race is scheduled to be, taken from what this circuit has run before.
     The distance this particular race actually went is not known until it has been run: a
     red flag shortens it, and reading that off the result would be a leak."""
@@ -1248,7 +1248,7 @@ class Report(BaseModel, frozen=True):
     pool_without_grid: pooling.Pool = pooling.IDENTITY
 
 
-def _renormalised(grid: np.ndarray, starters: int, width: int = FIELD) -> np.ndarray:
+def renormalised(grid: np.ndarray, starters: int, width: int = FIELD) -> np.ndarray:
     """A twenty class forecast on a nineteen car race puts mass on a position that cannot
     happen. Moving it back onto the positions that can is fairer to every predictor, model
     and baseline alike. The array stays width wide, the widest field in the holdout, so
@@ -1409,10 +1409,10 @@ def _walk(
         starters = len(predicted.outcome.driver_code)
         seen = {code: slot for slot, code in enumerate(predicted.outcome.driver_code)}
         keep = [seen[code] for code in codes]
-        sim = _renormalised(predicted.outcome.probabilities()[keep], starters, width)
+        sim = renormalised(predicted.outcome.probabilities()[keep], starters, width)
         fitted = baselines.fit(entries, context.race_date, known=pane.entries, width=field.width)
         guessed = {
-            name: _renormalised(values[rows], starters, width)
+            name: renormalised(values[rows], starters, width)
             for name, values in fitted.predict(field).items()
         }
         actual = np.array([finished[code] for code in codes]) - 1
@@ -1473,7 +1473,9 @@ def run(
     )
     outcome = walk.outcome
     race_of = walk.race_of
-    scored_models = [_score(name, walk.stacked(name), outcome, race_of, rng) for name in walk.names]
+    scored_models = [
+        score_model(name, walk.stacked(name), outcome, race_of, rng) for name in walk.names
+    ]
     ours = next(item for item in scored_models if item.name == MODEL)
     beats = all(
         ours.log_loss.value < item.log_loss.value
@@ -1482,7 +1484,7 @@ def run(
     )
     mine = walk.stacked(MODEL)
     paired = [
-        _paired(name, mine, walk.stacked(name), outcome, race_of, rng) for name in walk.features
+        paired_gain(name, mine, walk.stacked(name), outcome, race_of, rng) for name in walk.features
     ]
     separated = [
         item.baseline
@@ -1583,8 +1585,8 @@ def compare(
     outcome = first.outcome
     race_of = first.race_of
     theirs, mine = first.stacked(MODEL), second.stacked(MODEL)
-    gain = _paired(label or "candidate", mine, theirs, outcome, race_of, rng)
-    raw = _paired("raw", second.stacked(RAW), first.stacked(RAW), outcome, race_of, rng)
+    gain = paired_gain(label or "candidate", mine, theirs, outcome, race_of, rng)
+    raw = paired_gain("raw", second.stacked(RAW), first.stacked(RAW), outcome, race_of, rng)
 
     subsets: list[Subset] = []
     for name, keep in SUBSETS.items():
@@ -1600,7 +1602,7 @@ def compare(
             Subset(
                 name=name,
                 races=len(chosen),
-                log_loss_gain=_paired(
+                log_loss_gain=paired_gain(
                     name, mine[rows], theirs[rows], outcome[rows], race_of[rows], rng
                 ).log_loss_gain,
             )
@@ -1646,7 +1648,7 @@ def _finishers(pane: Panel, context: EventContext) -> dict[str, int]:
     return {str(row["driver_code"]): int(row["position"]) for row in rows.iter_rows(named=True)}
 
 
-def _paired(
+def paired_gain(
     baseline: str,
     mine: np.ndarray,
     theirs: np.ndarray,
@@ -1694,7 +1696,7 @@ def _paired(
     )
 
 
-def _score(
+def score_model(
     name: str,
     grid: np.ndarray,
     outcome: np.ndarray,

@@ -90,7 +90,7 @@ def test_the_race_distance_is_read_from_the_circuit_not_from_the_result(pane, st
     """A red flag shortens a race, and reading how far it went off its own result would be
     a leak, so the distance comes from what this circuit has run before."""
     context = event_at(store, 2024, 2)
-    shortened = backtest._race_laps(pane, context, context.race_date)
+    shortened = backtest.race_laps(pane, context, context.race_date)
     assert shortened == pane.laps[(2023, 2)]
 
 
@@ -122,17 +122,17 @@ def test_a_holdout_with_no_races_is_refused(pane):
 
 def test_a_nineteen_car_race_does_not_get_mass_on_a_place_that_cannot_happen():
     grid = np.full((3, backtest.FIELD), 1.0 / backtest.FIELD)
-    trimmed = backtest._renormalised(grid, 19)
+    trimmed = backtest.renormalised(grid, 19)
     assert trimmed.shape == (3, backtest.FIELD)
     assert trimmed[:, 19].sum() == 0.0
     assert np.allclose(trimmed.sum(axis=1), 1.0)
 
 
 def test_a_22_car_race_keeps_all_22_places_and_a_20_car_race_pads_to_it():
-    wide = backtest._renormalised(np.full((2, 22), 1.0 / 22), 22, 22)
+    wide = backtest.renormalised(np.full((2, 22), 1.0 / 22), 22, 22)
     assert np.allclose(wide.sum(axis=1), 1.0)
     assert (wide[:, 20:] > 0).all()
-    narrow = backtest._renormalised(np.full((2, 20), 1.0 / 20), 20, 22)
+    narrow = backtest.renormalised(np.full((2, 20), 1.0 / 20), 20, 22)
     assert narrow.shape == (2, 22)
     assert narrow[:, 20:].sum() == 0.0
     assert np.allclose(narrow.sum(axis=1), 1.0)
@@ -288,10 +288,10 @@ def test_a_circuits_first_race_takes_its_distance_from_the_past_not_the_lake(pan
         if row["race_date"] >= context.race_date
     }
     padded = dataclasses.replace(pane, laps={**pane.laps, **later})
-    assert backtest._race_laps(padded, first, context.race_date) == backtest._race_laps(
+    assert backtest.race_laps(padded, first, context.race_date) == backtest.race_laps(
         pane, first, context.race_date
     )
-    assert backtest._race_laps(padded, first, context.race_date) < 999
+    assert backtest.race_laps(padded, first, context.race_date) < 999
 
 
 def test_the_warmup_feeds_the_pool_but_is_never_scored(pane):

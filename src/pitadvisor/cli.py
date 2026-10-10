@@ -46,6 +46,7 @@ from pitadvisor.ingest.weather import fetchable as weather_fetchable
 from pitadvisor.ingest.weather import ingest_event as weather_ingest_event
 from pitadvisor.model import backtest as forecast_model
 from pitadvisor.model import calibrate
+from pitadvisor.model import sprint as sprint_model
 from pitadvisor.outputs import brief as brief_outputs
 from pitadvisor.outputs import cost as cost_outputs
 from pitadvisor.outputs.view_contracts import (
@@ -932,6 +933,43 @@ def compare(
     target.write_text(result.model_dump_json(indent=2) + "\n")
     typer.echo(calibrate.describe(result), nl=False)
     typer.echo(f"\nwrote {target}")
+
+
+@app.command(name="sprint-backtest", help="Walk the sprints forward and score the sprint forecast.")
+def sprint_backtest(
+    until: Annotated[
+        datetime | None,
+        typer.Option(formats=["%Y-%m-%d"], help="Only sprints before this date."),
+    ] = datetime(2024, 1, 1),
+    paths: Annotated[int, typer.Option(help="Simulated races per sprint.")] = 4000,
+    seed: Annotated[int, typer.Option(help="Seed, so the report reproduces.")] = 11,
+    output: Annotated[Path, typer.Option(help="Where the report lands.")] = DEV_RESULTS / "sprint",
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+) -> None:
+    from pitadvisor.quality.checks import read_table
+
+    store, _, _ = _runtime(local, get_settings())
+    pane = _panel(store)
+    sprints = sprint_model.sprint_frame(
+        read_table(store, Layer.BRONZE, "sprint"), read_table(store, Layer.BRONZE, "races")
+    )
+    try:
+        report = sprint_model.run(
+            pane,
+            sprints,
+            np.random.default_rng(seed),
+            _run_id(),
+            paths=paths,
+            seed=seed,
+            until=until.date() if until else None,
+        )
+    except forecast_model.NoForecastError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    output.mkdir(parents=True, exist_ok=True)
+    (output / calibrate.REPORT).write_text(report.model_dump_json(indent=2) + "\n")
+    typer.echo(calibrate.summarise(report), nl=False)
+    typer.echo(f"\nwrote {output / calibrate.REPORT}")
 
 
 @app.command(name="calibration-report", help="Reliability curves and the summary, from a backtest.")
