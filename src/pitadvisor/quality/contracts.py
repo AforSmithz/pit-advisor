@@ -200,6 +200,18 @@ class CarUpdateRow(BronzeRow):
     raw_key: str
 
 
+class CarUpdateMagnitudeRow(BronzeRow):
+    document_name: str
+    constructor_id: str
+    ordinal: int = Field(ge=1, le=40)
+    # jev's probability-weighted level, 0 adds no general pace and 3 is a new concept
+    magnitude: float = Field(ge=0.0, le=3.0)
+    package: float = Field(ge=0.0, le=1.0)
+    model: str
+    question_version: str
+    raw_key: str
+
+
 class MarketOddsRow(BronzeRow):
     source: str
     market: str
@@ -223,6 +235,7 @@ TABLES: dict[str, type[BronzeRow]] = {
     "incident_articles": IncidentArticleRow,
     "incident_sanctions": IncidentSanctionRow,
     "car_updates": CarUpdateRow,
+    "car_update_magnitudes": CarUpdateMagnitudeRow,
     "market_odds": MarketOddsRow,
 }
 

@@ -24,6 +24,7 @@ class Source(StrEnum):
     CURATED = "curated"
     KALSHI = "kalshi"
     POLYMARKET = "polymarket"
+    TYPESAFE = "typesafe"
 
 
 class SessionKind(StrEnum):

@@ -41,6 +41,7 @@ def test_source_values():
         "curated",
         "kalshi",
         "polymarket",
+        "typesafe",
     }
 
 

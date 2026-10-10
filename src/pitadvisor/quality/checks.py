@@ -32,6 +32,7 @@ NATURAL_KEYS: dict[str, tuple[str, ...]] = {
     "incident_articles": ("season", "round", "document_name", "entry", "code"),
     "incident_sanctions": ("season", "round", "document_name", "entry", "ordinal"),
     "car_updates": ("season", "round", "document_name", "constructor_id", "ordinal"),
+    "car_update_magnitudes": ("season", "round", "document_name", "constructor_id", "ordinal"),
     "market_odds": ("season", "round", "source", "market", "driver_code"),
 }
 
