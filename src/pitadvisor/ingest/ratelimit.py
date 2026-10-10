@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import random
 import time
 from collections.abc import Callable
@@ -92,7 +93,10 @@ class LocalLedger:
         data = self._load()
         data[url_id(entry.url)] = entry.model_dump(mode="json")
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(data, indent=2, sort_keys=True))
+        # two local jobs can share this file, and a truncate-then-write lets the other read ""
+        staged = self.path.with_name(f"{self.path.name}.{os.getpid()}")
+        staged.write_text(json.dumps(data, indent=2, sort_keys=True))
+        staged.replace(self.path)
 
 
 class LocalBucket:

@@ -36,6 +36,15 @@ def test_local_ledger_round_trip(local_ledger):
     assert found.status == 200
 
 
+def test_local_ledger_replaces_the_file_rather_than_rewriting_it(local_ledger):
+    local_ledger.record(entry())
+    before = local_ledger.path.stat().st_ino
+    local_ledger.record(entry("https://api.jolpi.ca/y"))
+    assert local_ledger.path.stat().st_ino != before
+    assert [p.name for p in local_ledger.path.parent.iterdir()] == [local_ledger.path.name]
+    assert local_ledger.lookup("https://api.jolpi.ca/x") is not None
+
+
 def test_local_ledger_misses_are_none(local_ledger):
     assert local_ledger.lookup("https://api.jolpi.ca/never") is None
 
