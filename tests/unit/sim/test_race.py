@@ -174,7 +174,10 @@ def test_a_safety_car_shuffles_the_order_more_than_a_clean_race():
             pace=[float(i) * 0.4 for i in range(len(CODES))],
         )
     )
-    assert chaotic.win[0] < clean.win[0]
+    # same draws for both, so this is the caution's own effect: the quickest car still wins
+    # nearly every time from pole, but the order behind it is less settled
+    assert chaotic.win[0] <= clean.win[0]
+    assert chaotic.probabilities().max(axis=1).mean() < clean.probabilities().max(axis=1).mean()
 
 
 def test_blending_two_scenarios_weights_them():
@@ -272,3 +275,25 @@ def test_a_race_run_on_compound_strategies_still_hands_out_every_place():
     grid = outcome.probabilities()
     assert np.allclose(grid.sum(axis=1), 1.0)
     assert sum(outcome.win) == pytest.approx(1.0)
+
+
+def test_each_component_draws_from_its_own_stream():
+    first = race.streams(np.random.default_rng(3))
+    again = race.streams(np.random.default_rng(3))
+    assert set(first) == set(race.STREAMS)
+    for name in race.STREAMS:
+        assert first[name].random() == again[name].random()
+    values = {name: first[name].random() for name in race.STREAMS}
+    assert len(set(values.values())) == len(race.STREAMS)
+
+
+def test_a_change_to_the_safety_car_leaves_the_pace_draws_alone():
+    """Common random numbers: a variant that only touches the caution model must not hand the
+    pace or the start a different set of draws, or the comparison measures luck."""
+    calm = race.simulate(setup(spread=600.0), np.random.default_rng(9), paths=400)
+    busy = race.simulate(setup(spread=600.0, safety_car=0.05), np.random.default_rng(9), paths=400)
+    fixed = race.simulate(setup(spread=600.0), np.random.default_rng(9), paths=400)
+    assert calm.position == fixed.position
+    assert calm.position != busy.position
+    pace = race.streams(np.random.default_rng(9))["pace"].normal(size=5)
+    assert np.array_equal(pace, race.streams(np.random.default_rng(9))["pace"].normal(size=5))

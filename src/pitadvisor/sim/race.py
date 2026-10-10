@@ -25,6 +25,14 @@ LAP_NOISE_MILLIS = 300.0
 # retired cars are held out of the running order rather than deleted, so the arrays keep
 # their shape. one lap of separation is more than any real gap
 OUT_OF_RACE_MILLIS = 1e9
+# one generator per component, so a change to how one of them draws leaves the others' draws
+# alone and two variants of the model can be compared on the same luck
+STREAMS = ("pace", "quali", "start", "retire", "caution", "plan", "lap", "pass")
+
+
+def streams(rng: np.random.Generator) -> dict[str, np.random.Generator]:
+    keys = rng.integers(0, 2**63, size=len(STREAMS))
+    return {name: np.random.default_rng(int(key)) for name, key in zip(STREAMS, keys, strict=True)}
 
 
 class Driver(BaseModel, frozen=True):
@@ -87,11 +95,14 @@ def simulate(
     codes = [driver.driver_code for driver in setup.drivers]
     cars, laps = len(codes), setup.laps
     rows: npt.NDArray[np.int64] = np.arange(paths, dtype=np.int64)
+    draw = streams(rng)
 
     mean = np.asarray([driver.pace_millis for driver in setup.drivers])
     spread = np.asarray([driver.pace_sd_millis for driver in setup.drivers])
     # one draw per path, not per lap: a driver who has a quick Sunday has it all afternoon
-    pace = rng.normal(mean.reshape(1, -1), np.maximum(spread, 1.0).reshape(1, -1), (paths, cars))
+    pace = draw["pace"].normal(
+        mean.reshape(1, -1), np.maximum(spread, 1.0).reshape(1, -1), (paths, cars)
+    )
 
     if setup.grid_known:
         grid = np.asarray([driver.grid for driver in setup.drivers])
@@ -100,17 +111,17 @@ def simulate(
         lap = (
             pace
             + shift.reshape(1, -1)
-            + rng.normal(0.0, max(setup.quali_noise_millis, 1.0), (paths, cars))
+            + draw["quali"].normal(0.0, max(setup.quali_noise_millis, 1.0), (paths, cars))
         )
         grid = np.argsort(np.argsort(lap, axis=1), axis=1) + 1
-    opening = starts.sample(setup.start, grid, rng, paths)
-    retire = sample_retirements(setup.retirement, codes, laps, paths, rng)
-    caution = sample_safety_car(setup.safety_car, laps, paths, rng)
+    opening = starts.sample(setup.start, grid, draw["start"], paths)
+    retire = sample_retirements(setup.retirement, codes, laps, paths, draw["retire"])
+    caution = sample_safety_car(setup.safety_car, laps, paths, draw["caution"])
     compounds = bool(setup.tyre.strategies)
     if compounds:
-        pitting, plan = tyres.sample_plan(setup.tyre, grid, paths, cars, laps, rng)
+        pitting, plan = tyres.sample_plan(setup.tyre, grid, paths, cars, laps, draw["plan"])
     else:
-        pitting = tyres.sample_stops(setup.tyre, paths, cars, laps, rng)
+        pitting = tyres.sample_stops(setup.tyre, paths, cars, laps, draw["plan"])
         plan = np.zeros((paths, cars, 1), dtype=np.int64)
     wear = setup.tyre.degradation_millis * np.asarray(
         [setup.tyre.wear_ratio.get(name, 1.0) for name in tyres.SLICKS]
@@ -136,7 +147,7 @@ def simulate(
             tyre = wear[fitted] * age
         else:
             tyre = setup.tyre.degradation_millis * age
-        time = pace + tyre + rng.normal(0.0, LAP_NOISE_MILLIS, (paths, cars))
+        time = pace + tyre + draw["lap"].normal(0.0, LAP_NOISE_MILLIS, (paths, cars))
         # dirty air is why the quick car behind stays behind: it does not get to spend the
         # advantage that closed the gap in the first place
         time = time + np.where(held & ~under, setup.passing.dirty_air_millis, 0.0)
@@ -150,7 +161,7 @@ def simulate(
         out = retire <= lap
 
         # fresher rubber is what makes an undercut work, so the attack reads the tyres too
-        elapsed = _resolve(setup, elapsed, pace + tyre, order, out, rows, rng)
+        elapsed = _resolve(setup, elapsed, pace + tyre, order, out, rows, draw["pass"])
         if under.any():
             elapsed = _bunch(elapsed, order, out, under.ravel())
         order = np.argsort(elapsed + out * OUT_OF_RACE_MILLIS, axis=1, kind="stable")
