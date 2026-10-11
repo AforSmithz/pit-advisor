@@ -69,6 +69,8 @@ class Action(BaseModel, frozen=True):
     round: int
     reason: str
     mark: str | None = None
+    # a full run ingests every session that is in, so the others ready with it are settled too
+    also: list[str] = []
 
 
 class Probes(BaseModel, frozen=True, arbitrary_types_allowed=True):
@@ -143,21 +145,26 @@ def due(now: datetime, weekend: Weekend, state: WatchState, probes: Probes) -> A
     """One action a poll, most valuable first: a session's data, then a new stewards' document,
     then the weather before the next session. Two runs at once would race to write the views."""
     clock = probes.sessions(weekend)
-    for session in clock:
+
+    def ready(session: Session) -> bool:
         mark = session_id(weekend, session.kind)
         if mark in state.handled or now < session.ends_at or now > session.ends_at + PATIENCE:
-            continue
+            return False
         if session.kind in ARCHIVED and not probes.archived(session):
-            continue
+            return False
         resource = CLASSIFICATION.get(session.kind)
-        if resource is not None and not probes.classified(weekend, resource):
-            continue
+        return resource is None or probes.classified(weekend, resource)
+
+    landed = [session for session in clock if ready(session)]
+    if landed:
+        first, *rest = landed
         return Action(
             mode="full",
             season=weekend.season,
             round=weekend.round,
-            reason=f"{session.kind} is in",
-            mark=mark,
+            reason=f"{first.kind} is in",
+            mark=session_id(weekend, first.kind),
+            also=[session_id(weekend, session.kind) for session in rest],
         )
     pending = probes.documents(weekend, state)
     if pending:
@@ -186,7 +193,7 @@ def record(state: WatchState, action: Action) -> WatchState:
     if action.mark is None:
         return state
     if action.mode == "full":
-        return state.model_copy(update={"handled": [*state.handled, action.mark]})
+        return state.model_copy(update={"handled": [*state.handled, action.mark, *action.also]})
     return state.model_copy(update={"snapshots": [*state.snapshots, action.mark]})
 
 

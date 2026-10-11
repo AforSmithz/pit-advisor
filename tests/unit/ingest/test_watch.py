@@ -408,3 +408,14 @@ def test_session_model_round_trips():
         path="p/",
     )
     assert Session.model_validate_json(session.model_dump_json()) == session
+
+
+def test_one_full_run_settles_every_session_already_in():
+    # the watch went live two days into the weekend: one run ingests all three
+    late = AT["race"].ends_at + timedelta(hours=4)
+    ready = probes(archived={"sprint", "race"}, classified={"sprint", "qualifying", "results"})
+    action = due(late, WEEKEND, WatchState(), ready)
+    assert action is not None
+    assert action.mark == "2026-17-sprint"
+    assert action.also == ["2026-17-qualifying", "2026-17-race"]
+    assert due(late, WEEKEND, record(WatchState(), action), ready) is None
