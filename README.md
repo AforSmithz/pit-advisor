@@ -188,7 +188,7 @@ EventBridge rules (Thursday and Monday 06:00 UTC, every 15 minutes for the watch
         +-- dbt build            silver and gold, Iceberg MERGE
         +-- lineage check        every gold model traced back to raw
         +-- emit views           every view the dashboard reads
-        +-- publish              repository_dispatch: github rebuilds the static site
+        +-- publish              workflow dispatch: github rebuilds the static site
 
 S3 (one bucket, prefix separated)
   raw/  bronze/  silver/  gold/  views/  quarantine/  docs/  cache/
@@ -350,7 +350,8 @@ lands in bronze once and is never refetched, so pulling it half written would be
 requests skip the request ledger on purpose: recording a probe's ETag would turn the pipeline's
 real fetch of the same URL into a 304 for a payload `raw/` never received. The site is a static
 export, so a refreshed view only reaches it when GitHub rebuilds it; the pipeline's last step asks
-for that with a `repository_dispatch`, using a fine-grained token kept as an SSM SecureString.
+for that with a workflow dispatch, using a fine-grained token that can run Actions and nothing
+else, kept as an SSM SecureString.
 
 Some of this is deliberately over-engineered for the data volume. A medallion lake and a dbt
 project for two hundred megabytes is more machinery than the problem needs, which is the point:

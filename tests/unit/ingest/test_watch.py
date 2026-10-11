@@ -392,9 +392,11 @@ def test_dispatch_asks_github_for_the_publish_workflow():
 
     assert dispatch("owner/repo", "token-1", opener) == 204
     request = sent[0]
-    assert request.full_url == "https://api.github.com/repos/owner/repo/dispatches"
+    assert request.full_url == (
+        "https://api.github.com/repos/owner/repo/actions/workflows/publish.yml/dispatches"
+    )
     assert request.get_method() == "POST"
-    assert json.loads(request.data) == {"event_type": "views-updated"}
+    assert json.loads(request.data) == {"ref": "main"}
     assert request.headers["Authorization"] == "Bearer token-1"
 
 

@@ -3,10 +3,8 @@ name: publish
 on:
   push:
     branches: [main]
+  # also what the pipeline's last step calls once new views are in the lake
   workflow_dispatch:
-  # the pipeline's last step asks for this once new views are in the lake
-  repository_dispatch:
-    types: [views-updated]
 
 # no static credentials anywhere: the role is assumed with a token github mints per run
 permissions:

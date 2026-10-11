@@ -16,6 +16,7 @@ from pitadvisor.types import Layer
 
 STATE_KEY: Final = f"{Layer.CACHE}/watch.json"
 TIMING: Final = "https://livetiming.formula1.com/static"
+WORKFLOW: Final = "publish.yml"
 
 # a weekend is watched from the thursday before its race to the tuesday after it
 BEFORE: Final = timedelta(days=4)
@@ -329,11 +330,12 @@ def _open(request: urllib.request.Request, timeout: float) -> Any:
 
 
 def dispatch(repo: str, token: str, opener: Opener = _open) -> int:
-    """Asks github to run the publish workflow: the site is a static export, so new views only
-    reach it when it is built again."""
+    """Starts the publish workflow on main: the site is a static export, so new views only reach
+    it when it is built again. A workflow dispatch needs a token that can run actions and
+    nothing else, where a repository dispatch would need one that can push code."""
     request = urllib.request.Request(
-        f"https://api.github.com/repos/{repo}/dispatches",
-        data=json.dumps({"event_type": "views-updated"}).encode(),
+        f"https://api.github.com/repos/{repo}/actions/workflows/{WORKFLOW}/dispatches",
+        data=json.dumps({"ref": "main"}).encode(),
         method="POST",
         headers={
             "Accept": "application/vnd.github+json",
