@@ -324,7 +324,10 @@ class TransformStack(Stack):
             .next(
                 self._step(
                     "EmitViews",
-                    "pitadv emit-views --views pipeline,weekend,driver,track,forecast,sprint,brief",
+                    # history and debrief read the forecasts kept above, so the emitter runs
+                    # them after forecast and sprint whatever order they are listed in
+                    "pitadv emit-views --views pipeline,weekend,driver,track,forecast,sprint,"
+                    "calibration,history,stewards,upgrades,debrief,lineage,brief",
                 )
             )
         )

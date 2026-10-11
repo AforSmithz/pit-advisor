@@ -549,6 +549,7 @@ def test_the_pipeline_emits_every_view_the_dashboard_reads(transform_template: T
     definition = weekend_definition(transform_template)
     # the default is pipeline only, which leaves the dashboard republishing stale numbers
     assert "pitadv emit-views --views pipeline,weekend,driver,track,forecast,sprint" in definition
+    assert "history,stewards,upgrades,debrief,lineage,brief" in definition
     assert definition.index("CheckLineage") < definition.index("EmitViews")
 
 

@@ -49,7 +49,12 @@ from pitadvisor.model import calibrate
 from pitadvisor.model import sprint as sprint_model
 from pitadvisor.outputs import brief as brief_outputs
 from pitadvisor.outputs import cost as cost_outputs
+from pitadvisor.outputs import debrief as debrief_outputs
+from pitadvisor.outputs import history as history_outputs
+from pitadvisor.outputs import lineage as lineage_outputs
 from pitadvisor.outputs import published
+from pitadvisor.outputs import stewards as stewards_outputs
+from pitadvisor.outputs import upgrades as upgrades_outputs
 from pitadvisor.outputs.view_contracts import (
     Evidence,
     ForecastView,
@@ -762,6 +767,7 @@ def quality_report(
 
 EVENT_VIEWS = {"weekend": weekend_view, "driver": driver_view, "track": track_view}
 SIM_VIEWS = ("forecast", "calibration", "sprint")
+LAKE_VIEWS = ("history", "stewards", "upgrades", "debrief", "lineage")
 RESULTS = Path("results/backtest")
 DEV_RESULTS = RESULTS / "dev"
 
@@ -796,7 +802,9 @@ def emit_views(
     settings = get_settings()
     store, _, bucket_for = _runtime(local, settings)
     wanted = [name.strip() for name in views.split(",") if name.strip()]
-    unknown = set(wanted) - {"pipeline", "brief"} - set(EVENT_VIEWS) - set(SIM_VIEWS)
+    unknown = (
+        set(wanted) - {"pipeline", "brief"} - set(EVENT_VIEWS) - set(SIM_VIEWS) - set(LAKE_VIEWS)
+    )
     if unknown:
         raise typer.BadParameter(f"no emitter yet for {', '.join(sorted(unknown))}")
     if "pipeline" in wanted:
@@ -820,6 +828,9 @@ def emit_views(
         typer.echo(emit(store, sprint))
         if sprint.forecast is not None:
             _keep(published.archive(store, sprint.forecast, "sprint", sprint.sprint_utc))
+    for name in LAKE_VIEWS:
+        if name in wanted:
+            typer.echo(emit(store, _lake_view(store, name, event)))
     # last, because it is read off the views written above rather than computed again
     if "brief" in wanted:
         try:
@@ -827,6 +838,44 @@ def emit_views(
         except brief_outputs.StaleViewsError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(1) from exc
+
+
+def _lake_view(store: ObjectStore, name: str, event: str) -> BaseModel:
+    from pitadvisor.quality.checks import read_table
+
+    run_id = _run_id()
+    if name == "lineage":
+        return lineage_outputs.lineage_view(store, checks.report(store, Layer.BRONZE), run_id)
+    context = _event(store, event)
+    if name == "history":
+        return history_outputs.history_view(store, context, run_id)
+    if name == "upgrades":
+        return upgrades_outputs.upgrades_view(
+            read_table(store, Layer.BRONZE, "car_updates"),
+            read_table(store, Layer.BRONZE, "races"),
+            context,
+            run_id,
+        )
+    results = read_table(store, Layer.BRONZE, "results")
+    if results is None:
+        typer.echo("no results in bronze", err=True)
+        raise typer.Exit(1)
+    if name == "stewards":
+        return stewards_outputs.stewards_view(
+            read_table(store, Layer.BRONZE, "incidents"),
+            read_table(store, Layer.BRONZE, "incident_sanctions"),
+            read_table(store, Layer.BRONZE, "incident_articles"),
+            results,
+            context,
+            run_id,
+        )
+    # a debrief is about the race just run, so 'next' means the latest race day, not the coming one
+    if event == "next":
+        context = feature_assemble.last_event(store)
+    sprints = sprint_model.sprint_frame(
+        read_table(store, Layer.BRONZE, "sprint"), read_table(store, Layer.BRONZE, "races")
+    )
+    return debrief_outputs.debrief_view(store, _panel(store), sprints, context, run_id)
 
 
 def _keep(key: str | None) -> None:
