@@ -38,12 +38,13 @@ race delta, two independent track-fit estimators that are shown side by side and
 a weather scenario mix, and a pooled retirement hazard. A Monte Carlo race simulation turns them
 into a finishing-position distribution for the next race, and a time-forward backtest judges it.
 Each of these is published as a versioned JSON view that passed the quality gate, and a static
-Next.js dashboard renders the views. A Bedrock agent answers questions over the same views, the
+Next.js dashboard renders the views across five pages: race week, the paddock, circuits, the
+stewards and the track record. A Bedrock agent answers questions over the same views, the
 marts and a regulations and race-report corpus, with citations.
 
 The lake covers 2021 to the current race of 2026. Every Thursday a state machine checks the
 calendar, and in a race week it refreshes the weather, the sessions, the marts and every view,
-including a short weekend brief at the top of the weekend page. On a sprint weekend it runs
+including a short weekend brief. On a sprint weekend it runs
 again early on Saturday, once sprint qualifying is in, and publishes a sprint forecast. On
 Saturday night it runs a last time, and once qualifying is in it refreshes the race forecast on
 the qualifying order.
@@ -60,8 +61,9 @@ sample. Three are used: grid position alone, championship standings alone, and l
 result. The comparison runs on a time-forward holdout of at least sixty races, scored with
 multiclass log loss and Brier, with bootstrap intervals resampled at the race level rather than
 the driver level, because drivers within a race are correlated and resampling them individually
-gives intervals that are far too tight. The calibration page is the dashboard's landing route,
-not a tab behind the predictions. If the model does not beat the baselines, the dashboard says
+gives intervals that are far too tight. The forecast never appears without its
+evidence: the race page carries the holdout result beside the favourite and links to the track
+record, where every published call is scored. If the model does not beat the baselines, the dashboard says
 so and the forecast tool is removed from the agent. That is a successful outcome, not a failed
 one.
 
@@ -111,7 +113,7 @@ pooling: each driver's distribution is raised to a power, multiplied by a small 
 grid baseline, and rebalanced so every place is taken exactly once. The two powers are refitted
 before every scored race on the races forecast before it, thirty of them warm-up races that are
 never scored, so the pool is as blind to the race it is judged on as the simulation is. The raw
-simulation stays on the calibration page next to the pooled one, so the correction is never
+simulation stays on the track record page next to the pooled one, so the correction is never
 mistaken for the model.
 
 Two things are worth knowing about how that number was reached. A race in a twenty-two-car field
@@ -212,7 +214,9 @@ quality gate stops the run before dbt touches silver.
 
 On failure the pipeline quarantines rather than corrupts. A row that fails its contract goes to
 `quarantine/` with the reason attached, the load continues, and the count by reason is published
-on the pipeline health page beside source freshness and remaining API quota. A data product that
+in the pipeline view beside source freshness and remaining API quota, and any figure on the
+dashboard opens a trace back through its view to the bronze tables behind it and how fresh they
+are. A data product that
 hides its own staleness is lying about itself. Upstream, the Jolpica cap of roughly two hundred
 requests an hour is enforced by a DynamoDB token bucket and a persisted request ledger rather
 than by hoping the schedule stays polite. The ledger matters more than it looks: a Step Functions
