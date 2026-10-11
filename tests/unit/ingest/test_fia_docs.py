@@ -241,3 +241,11 @@ def test_a_document_whose_name_prefixes_another_is_still_fetched(raw, ledger):
     fia_docs.ingest_document(raw, first, 17, ledger, "run-1", fetch=fetch)
     assert fia_docs._landed(raw, 2023, 17, fia_docs._name(first))
     assert not fia_docs._landed(raw, 2023, 17, fia_docs._name(second))
+
+
+def test_pending_lists_the_wanted_documents_raw_does_not_hold(raw, ledger):
+    waiting = fia_docs.pending(raw, EVENT_PAGE, 2023, "Qatar Grand Prix", 17)
+    assert sorted(item.kind for item in waiting) == ["decision", "offence"]
+
+    fia_docs.ingest_document(raw, waiting[0], 17, ledger, "run-1", fetch=FakePdfFetch({}))
+    assert len(fia_docs.pending(raw, EVENT_PAGE, 2023, "Qatar Grand Prix", 17)) == 1

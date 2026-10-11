@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     ask_daily_limit: int = 20
     # jev reads the declared car updates (U3). empty means replay landed responses only
     typesafe_api_key: str = ""
+    # the race-weekend watch starts these and tells github to publish once the views are out
+    weekend_machine_arn: str = ""
+    light_machine_arn: str = ""
+    dispatch_parameter: str = ""
+    github_repo: str = ""
 
     @model_validator(mode="after")
     def _derive_names(self) -> "Settings":

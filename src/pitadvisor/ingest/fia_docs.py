@@ -177,6 +177,14 @@ def _name(listing: Listing) -> str:
     return f"{stamp}-{slug}"
 
 
+def pending(raw: RawStore, html: str, season: int, event: str, round_: int) -> list[Listing]:
+    return [
+        listing
+        for listing in listings(html, season, event)
+        if wanted(listing) and not _landed(raw, season, round_, _name(listing))
+    ]
+
+
 def _landed(raw: RawStore, season: int, round_: int, name: str) -> bool:
     # versions() matches on a prefix, so a document whose name is a prefix of another one is
     # reported as already present and never fetched. "... (corrected)" is exactly that shape

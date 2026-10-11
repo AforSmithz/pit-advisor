@@ -25,6 +25,8 @@ HOURLY_CAPS: dict[str, int] = {
     "open_meteo": OPEN_METEO_HOURLY_CAP,
     "wikipedia": WIKIPEDIA_HOURLY_CAP,
     "fia_docs": FIA_HOURLY_CAP,
+    # the race-weekend watch asks f1's timing archive two or three small files every 15 minutes
+    "f1_timing": 240,
     # both document a per-second read limit far above this, kept low because a baseline does
     # not need to be fetched quickly
     "kalshi": 3000,
