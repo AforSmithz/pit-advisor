@@ -10,6 +10,7 @@ from pitadvisor.ingest.fastf1_session import (
     held_events,
     ingest_session,
     millis,
+    running_events,
     serialize,
     sessions_for,
     to_records,
@@ -286,3 +287,62 @@ def test_a_red_flag_lap_keeps_its_session_clock():
     rows = records(lap(LapTime=None, Time=timedelta(hours=1)))
     assert rows[0]["lap_time_millis"] is None
     assert rows[0]["session_time_millis"] == 3_600_000
+
+
+SINGAPORE = {
+    "RoundNumber": 17,
+    "EventFormat": "sprint_qualifying",
+    "EventDate": date(2026, 10, 11),
+    "Session1": "Practice 1",
+    "Session1DateUtc": datetime(2026, 10, 9, 8, 30),
+    "Session2": "Sprint Qualifying",
+    "Session2DateUtc": datetime(2026, 10, 9, 12, 30),
+    "Session3": "Sprint",
+    "Session3DateUtc": datetime(2026, 10, 10, 9, 0),
+    "Session4": "Qualifying",
+    "Session4DateUtc": datetime(2026, 10, 10, 13, 0),
+    "Session5": "Race",
+    "Session5DateUtc": datetime(2026, 10, 11, 12, 0),
+}
+
+
+def test_a_weekend_under_way_offers_only_the_sessions_already_run():
+    friday_night = datetime(2026, 10, 9, 15, tzinfo=UTC)
+    assert running_events([SINGAPORE], friday_night) == {
+        17: ("sprint_qualifying", frozenset({SessionKind.FP1, SessionKind.SPRINT_QUALIFYING}))
+    }
+    saturday_night = datetime(2026, 10, 10, 16, tzinfo=UTC)
+    assert SessionKind.QUALIFYING in running_events([SINGAPORE], saturday_night)[17][1]
+    assert SessionKind.RACE not in running_events([SINGAPORE], saturday_night)[17][1]
+
+
+def test_a_session_still_going_is_not_offered():
+    during = datetime(2026, 10, 9, 13, 30, tzinfo=UTC)
+    assert running_events([SINGAPORE], during)[17][1] == frozenset({SessionKind.FP1})
+
+
+def test_a_weekend_whose_race_day_has_come_is_left_to_the_held_events():
+    assert running_events([SINGAPORE], datetime(2026, 10, 11, 18, tzinfo=UTC)) == {}
+
+
+def test_backfill_takes_the_run_sessions_of_a_weekend_under_way(store):
+    outcomes = backfill(
+        store,
+        2026,
+        cache_dir=None,
+        run_id="run-1",
+        kinds=(SessionKind.SPRINT_QUALIFYING, SessionKind.SPRINT, SessionKind.RACE),
+        loader=lambda *_: Laps([lap()]),
+        schedule=schedule(**{"16": "conventional"}),
+        in_progress=lambda season, cache_dir: {
+            17: ("sprint_qualifying", frozenset({SessionKind.SPRINT_QUALIFYING}))
+        },
+    )
+    assert [(o.round, o.rows) for o in outcomes] == [(16, 1), (17, 1)]
+    assert store.exists(
+        "bronze/table=session_laps/season=2026/round=17/session=sprint_qualifying/"
+        "session_laps.parquet"
+    )
+    assert not store.exists(
+        "bronze/table=session_laps/season=2026/round=17/session=race/session_laps.parquet"
+    )

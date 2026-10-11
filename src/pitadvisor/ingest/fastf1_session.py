@@ -1,6 +1,6 @@
 import json
 from collections.abc import Callable, Iterable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -269,6 +269,53 @@ def held_events(events: list[dict[str, Any]], cutoff: date) -> dict[int, str]:
     return held
 
 
+# a session's laps are asked for this long after it started. the watch only starts a run once
+# the timing archive calls the session complete, so this is a floor, not the signal
+RUN_LENGTH = timedelta(hours=2)
+SCHEDULE_NAMES: dict[str, SessionKind] = {name: kind for kind, name in IDENTIFIERS.items()}
+SCHEDULE_NAMES.update(
+    {"Practice 1": SessionKind.FP1, "Practice 2": SessionKind.FP2, "Practice 3": SessionKind.FP3}
+)
+
+
+def running_events(
+    events: list[dict[str, Any]], now: datetime
+) -> dict[int, tuple[str, frozenset[SessionKind]]]:
+    """A weekend whose race is still ahead but whose friday or saturday has been run. The
+    sprint grid comes from sprint qualifying, which is no use once the race is over."""
+    running: dict[int, tuple[str, frozenset[SessionKind]]] = {}
+    for event in events:
+        when = event["EventDate"]
+        if hasattr(when, "date"):
+            when = when.date()
+        if when <= now.date():
+            continue
+        run: set[SessionKind] = set()
+        for slot in range(1, 6):
+            kind = SCHEDULE_NAMES.get(str(event.get(f"Session{slot}")))
+            started = event.get(f"Session{slot}DateUtc")
+            if kind is None or started is None or started != started:
+                continue
+            started_at = started.to_pydatetime() if hasattr(started, "to_pydatetime") else started
+            if started_at.replace(tzinfo=UTC) + RUN_LENGTH <= now:
+                run.add(kind)
+        if run:
+            running[int(event["RoundNumber"])] = (str(event["EventFormat"]), frozenset(run))
+    return running
+
+
+def weekend_in_progress(
+    season: int, cache_dir: Path, now: datetime | None = None
+) -> dict[int, tuple[str, frozenset[SessionKind]]]:
+    import fastf1  # pyright: ignore[reportMissingImports]
+
+    api: Any = fastf1
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    api.Cache.enable_cache(str(cache_dir))
+    schedule: Any = api.get_event_schedule(season, include_testing=False)
+    return running_events(schedule.to_dict("records"), now or datetime.now(UTC))
+
+
 def backfill(
     store: ObjectStore,
     season: int,
@@ -279,12 +326,18 @@ def backfill(
     schedule: Callable[[int, Path], dict[int, str]] = completed_events,
     sync_cache: bool = False,
     skip_present: bool = True,
+    in_progress: Callable[[int, Path], dict[int, tuple[str, frozenset[SessionKind]]]] | None = None,
 ) -> list[IngestOutcome]:
     wanted = set(kinds)
     outcomes: list[IngestOutcome] = []
-    for round_, event_format in sorted(schedule(season, cache_dir).items()):
+    events: dict[int, tuple[str, frozenset[SessionKind] | None]] = {
+        round_: (event_format, None) for round_, event_format in schedule(season, cache_dir).items()
+    }
+    if in_progress is not None:
+        events.update(in_progress(season, cache_dir))
+    for round_, (event_format, run) in sorted(events.items()):
         for kind in sessions_for(event_format):
-            if kind not in wanted:
+            if kind not in wanted or (run is not None and kind not in run):
                 continue
             key = SessionKey(season=season, round=round_, session=kind)
             if skip_present and store.exists(bronze_key("session_laps", key)):
