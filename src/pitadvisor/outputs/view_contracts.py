@@ -723,6 +723,19 @@ class RaceLoss(BaseModel, frozen=True):
     log_loss: dict[str, float]
 
 
+class MarketGain(BaseModel, frozen=True):
+    """The model against the prediction market on the races it priced, for one event. Positive
+    gain means the model's loss was lower."""
+
+    event: str
+    races: int
+    sources: dict[str, int]
+    model_log_loss: float
+    market_log_loss: float
+    log_loss_gain: Bounds
+    brier_gain: Bounds
+
+
 class CalibrationView(BaseModel, frozen=True):
     view: str = "calibration_view"
     schema_version: str = SCHEMA_VERSION
@@ -741,6 +754,8 @@ class CalibrationView(BaseModel, frozen=True):
     separated_from: list[str]
     paired: list[PairedGain]
     assumptions: list[Assumption]
+    stage: str = "race"
+    market: list[MarketGain] = []
 
 
 def calibration_view(
@@ -800,6 +815,19 @@ def calibration_view(
             for item in report.paired
         ],
         assumptions=report.assumptions,
+        stage=report.stage,
+        market=[
+            MarketGain(
+                event=item.event,
+                races=item.races,
+                sources=item.sources,
+                model_log_loss=item.model_log_loss,
+                market_log_loss=item.market_log_loss,
+                log_loss_gain=_bounds(item.log_loss_gain, item.races),
+                brier_gain=_bounds(item.brier_gain, item.races),
+            )
+            for item in report.market
+        ],
     )
 
 

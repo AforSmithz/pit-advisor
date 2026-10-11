@@ -7,6 +7,7 @@ from pitadvisor.features.assemble import (
     NoEventError,
     assemble,
     event_at,
+    last_event,
     next_event,
     session_paces,
 )
@@ -28,6 +29,15 @@ def test_the_next_event_is_the_first_one_still_ahead(seeded):
 def test_out_of_season_it_falls_back_to_the_last_race_rather_than_failing(seeded):
     found = next_event(seeded().store, today=date(2026, 1, 1))
     assert (found.season, found.round) == (2024, 6)
+
+
+def test_the_last_event_is_the_latest_race_day_not_the_coming_one(seeded):
+    built = seeded()
+    found = last_event(built.store, today=date(2024, 4, 1))
+    ahead = next_event(built.store, today=date(2024, 4, 1))
+    assert found.race_date <= date(2024, 4, 1) < ahead.race_date
+    on_the_day = last_event(built.store, today=ahead.race_date)
+    assert (on_the_day.season, on_the_day.round) == (ahead.season, ahead.round)
 
 
 def test_an_empty_lake_says_so(store):

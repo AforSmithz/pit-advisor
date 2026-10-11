@@ -65,7 +65,7 @@ class PublishedScore(BaseModel, frozen=True):
     log_loss: dict[str, float]
 
 
-def _published(store: ObjectStore) -> list[tuple[Kind, ForecastView]]:
+def standing(store: ObjectStore) -> list[tuple[Kind, ForecastView]]:
     """The last forecast issued for each session and stage, the one standing at lights out.
     Earlier reruns of the same stage stay in the history but are not scored again."""
     latest: dict[tuple[int, int, Kind, str], ForecastView] = {}
@@ -106,7 +106,7 @@ def score(store: ObjectStore, pane: backtest.Panel, sprints: pl.DataFrame) -> li
     """Every archived forecast whose session has a result, scored the way the backtest scores a
     race. The grid baseline only stands beside a forecast made once the grid was known."""
     scored: list[PublishedScore] = []
-    for kind, view in _published(store):
+    for kind, view in standing(store):
         finished, field = _field(pane, view, kind, sprints)
         drivers = [driver for driver in view.drivers if driver.driver_code in finished]
         if len(drivers) < 2:

@@ -130,6 +130,15 @@ def next_event(store: ObjectStore, today: date | None = None) -> EventContext:
     return _context(ahead.row(0, named=True))
 
 
+def last_event(store: ObjectStore, today: date | None = None) -> EventContext:
+    """The race run most recently, or today's. A debrief stays on it until the next race day."""
+    cutoff = today or datetime.now(UTC).date()
+    behind = races(store).filter(pl.col("race_date") <= cutoff).sort("race_date")
+    if not behind.height:
+        return next_event(store, today)
+    return _context(behind.row(-1, named=True))
+
+
 def event_at(store: ObjectStore, season: int, round_: int) -> EventContext:
     found = races(store).filter((pl.col("season") == season) & (pl.col("round") == round_))
     if not found.height:
