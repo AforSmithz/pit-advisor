@@ -12,6 +12,8 @@ from pitadvisor.types import Layer
 PLAN_KEY: Final = f"{Layer.CACHE}/weekend_plan.json"
 # the schedule fires on thursday, so anything up to sunday is this weekend's race
 WINDOW: Final = timedelta(days=4)
+# the monday run settles the weekend just gone. a saturday night race is two days back by then
+SETTLE: Final = timedelta(days=2)
 
 
 class NoCalendarError(RuntimeError):
@@ -40,6 +42,9 @@ class WeekendPlan(BaseModel, frozen=True):
     # the saturday-morning run only does work on a sprint weekend before the sprint starts
     sprint_morning: bool = False
     sprint_at: datetime | None = None
+    # the monday run only does work when a race was run over the weekend, so the result,
+    # the debrief and the record land days before the next race week
+    after_race: bool = False
     refresh: bool = False
 
 
@@ -58,6 +63,7 @@ def plan(
     now: datetime | None = None,
     after_qualifying: bool = False,
     sprint_morning: bool = False,
+    after_race: bool = False,
 ) -> WeekendPlan:
     now = now or datetime.now(UTC)
     races = read_table(store, Layer.BRONZE, "races")
@@ -77,7 +83,9 @@ def plan(
     sprint_at: datetime | None = upcoming.get("sprint_utc")
     if sprint_at is not None and sprint_at.tzinfo is None:
         sprint_at = sprint_at.replace(tzinfo=UTC)
-    if sprint_morning:
+    if after_race:
+        refresh = last is not None and today - last["race_date"] <= SETTLE
+    elif sprint_morning:
         refresh = race_week and sprint_at is not None and sprint_at > now
     else:
         refresh = race_week and (not after_qualifying or (qualified and not started))
@@ -98,6 +106,7 @@ def plan(
         qualified=qualified,
         sprint_morning=sprint_morning,
         sprint_at=sprint_at,
+        after_race=after_race,
         refresh=refresh,
     )
 

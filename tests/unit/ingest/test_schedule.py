@@ -188,3 +188,28 @@ def test_a_sprint_that_has_started_is_not_forecast(store):
     calendar(store, sprints=(2,))
     late = datetime(2026, 10, 10, 5, tzinfo=UTC)
     assert not plan(store, late.date(), late, sprint_morning=True).refresh
+
+
+MONDAY = datetime(2026, 10, 12, 6, tzinfo=UTC)
+
+
+def test_the_monday_after_a_race_settles_it(store):
+    calendar(store)
+    weekend = plan(store, MONDAY.date(), MONDAY, after_race=True)
+    assert weekend.after_race
+    assert not weekend.race_week
+    assert (weekend.last_round, weekend.round) == (2, 3)
+    assert weekend.refresh
+
+
+def test_the_monday_after_a_saturday_night_race_still_counts(store):
+    calendar(
+        store, rounds=((1, date(2026, 9, 27)), (2, date(2026, 10, 10)), (3, date(2026, 10, 25)))
+    )
+    assert plan(store, MONDAY.date(), MONDAY, after_race=True).refresh
+
+
+def test_a_monday_without_a_race_behind_it_does_nothing(store):
+    calendar(store)
+    later = datetime(2026, 10, 19, 6, tzinfo=UTC)
+    assert not plan(store, later.date(), later, after_race=True).refresh

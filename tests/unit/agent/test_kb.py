@@ -7,6 +7,7 @@ from pitadvisor.agent.kb import (
     KnowledgeBase,
     LocalCorpus,
     chunks,
+    find,
     start_ingestion,
 )
 
@@ -174,3 +175,22 @@ def test_a_job_that_never_finishes_times_out():
 def test_the_caller_can_start_a_job_without_waiting():
     job = start_ingestion(FakeIngest(("STARTING",)), "kb-1", "ds-1", wait=False)
     assert job.status == "STARTING"
+
+
+class Listing:
+    def list_knowledge_bases(self):
+        return {
+            "knowledgeBaseSummaries": [
+                {"name": "someone-else", "knowledgeBaseId": "KB0"},
+                {"name": "pitadvisor-corpus-dev", "knowledgeBaseId": "KB1"},
+            ]
+        }
+
+    def list_data_sources(self, knowledgeBaseId):
+        assert knowledgeBaseId == "KB1"
+        return {"dataSourceSummaries": [{"dataSourceId": "DS1"}]}
+
+
+def test_the_corpus_is_found_by_name():
+    assert find(Listing(), "pitadvisor-corpus-dev") == ("KB1", "DS1")
+    assert find(Listing(), "pitadvisor-corpus-prod") is None

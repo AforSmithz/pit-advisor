@@ -26,7 +26,7 @@ from pitadvisor.ingest import docs as doc_corpus
 from pitadvisor.ingest import fia_docs, jolpica
 from pitadvisor.ingest import schedule as weekend_schedule
 from pitadvisor.ingest.fastf1_session import backfill as session_backfill
-from pitadvisor.ingest.fastf1_session import ingest_session
+from pitadvisor.ingest.fastf1_session import ingest_session, weekend_in_progress
 from pitadvisor.ingest.ratelimit import (
     HOURLY_CAPS,
     JOLPICA_HOURLY_CAP,
@@ -433,11 +433,19 @@ def weekend_plan(
             help="The run before a sprint. Left out, saturday before noon in UTC is the morning.",
         ),
     ] = None,
+    after_race: Annotated[
+        bool | None,
+        typer.Option(
+            "--after-race/--no-after-race",
+            help="The run that settles the weekend just gone. Left out, monday in UTC is after.",
+        ),
+    ] = None,
 ) -> None:
     settings = get_settings()
     store, ledger, bucket_for = _runtime(local, settings)
     now = datetime.now(UTC)
     today = now.date()
+    settling = today.weekday() == 0 if after_race is None else after_race
     morning = today.weekday() == 5 and now.hour < 12 if sprint_morning is None else sprint_morning
     saturday = (
         today.weekday() == 5 and not morning if after_qualifying is None else after_qualifying
@@ -451,7 +459,7 @@ def weekend_plan(
         except QuotaExhaustedError as exc:
             typer.echo(f"calendar refresh stopped: {exc}. planning on what is in the lake")
     try:
-        weekend = weekend_schedule.plan(store, today, now, saturday, morning)
+        weekend = weekend_schedule.plan(store, today, now, saturday, morning, settling)
     except weekend_schedule.NoCalendarError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
@@ -465,7 +473,7 @@ def weekend_plan(
             )
         except QuotaExhaustedError as exc:
             typer.echo(f"qualifying for {coming.season}:{coming.round} stopped: {exc}")
-        weekend = weekend_schedule.plan(store, today, now, saturday, morning)
+        weekend = weekend_schedule.plan(store, today, now, saturday, morning, settling)
     if client is not None and weekend.last_season and weekend.last_round:
         # penalties amend a result days after the race, and the backfill skips what it holds
         last = EventKey(season=weekend.last_season, round=weekend.last_round)
@@ -551,7 +559,13 @@ def _backfill_sessions(
         # a cold fastf1 cache makes this hours long, so each season prints as it lands
         _render_outcomes(
             session_backfill(
-                store, season, settings.fastf1_cache, run_id, kinds, sync_cache=not local
+                store,
+                season,
+                settings.fastf1_cache,
+                run_id,
+                kinds,
+                sync_cache=not local,
+                in_progress=weekend_in_progress,
             )
         )
 
@@ -1489,6 +1503,12 @@ def _issued(value: str | None) -> date | None:
 
 
 def _reindex(settings: Settings) -> None:
+    client = _client(boto_session(settings), "bedrock-agent", settings.aws_region)
+    if not settings.knowledge_base_id or not settings.data_source_id:
+        # the pipeline task has no line to the agent stack, so it finds the corpus by name
+        found = agent_kb.find(client, f"pitadvisor-corpus-{settings.env}")
+        if found is not None:
+            settings.knowledge_base_id, settings.data_source_id = found
     if not settings.knowledge_base_id or not settings.data_source_id:
         typer.echo(
             "PITADV_KNOWLEDGE_BASE_ID and PITADV_DATA_SOURCE_ID are not set, "
@@ -1496,7 +1516,6 @@ def _reindex(settings: Settings) -> None:
             err=True,
         )
         raise typer.Exit(1)
-    client = _client(boto_session(settings), "bedrock-agent", settings.aws_region)
     try:
         job = agent_kb.start_ingestion(client, settings.knowledge_base_id, settings.data_source_id)
     except agent_kb.IngestionError as exc:

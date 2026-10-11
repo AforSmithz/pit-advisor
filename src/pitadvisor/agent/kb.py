@@ -108,6 +108,16 @@ class Ingestion(BaseModel, frozen=True):
     failed: int = 0
 
 
+def find(client: Any, name: str) -> tuple[str, str] | None:
+    for base in client.list_knowledge_bases()["knowledgeBaseSummaries"]:
+        if base["name"] != name:
+            continue
+        sources = client.list_data_sources(knowledgeBaseId=base["knowledgeBaseId"])
+        for source in sources["dataSourceSummaries"]:
+            return str(base["knowledgeBaseId"]), str(source["dataSourceId"])
+    return None
+
+
 def start_ingestion(
     client: Any,
     knowledge_base_id: str,
