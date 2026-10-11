@@ -160,6 +160,7 @@ class ObservabilityStack(Stack):
         for key, name in (
             ("Weekend", f"pitadvisor-weekend-{env_name}"),
             ("Backfill", f"pitadvisor-backfill-{env_name}"),
+            ("Light", f"pitadvisor-light-{env_name}"),
         ):
             arn = f"arn:aws:states:{self.region}:{self.account}:stateMachine:{name}"
             ended = {
@@ -194,7 +195,8 @@ class ObservabilityStack(Stack):
 
         for key, rule in (
             ("Schedule", f"pitadvisor-weekend-plan-{env_name}"),
-            ("SaturdaySchedule", f"pitadvisor-after-quali-{env_name}"),
+            ("MondaySchedule", f"pitadvisor-after-race-{env_name}"),
+            ("WatchSchedule", f"pitadvisor-watch-{env_name}"),
         ):
             cloudwatch.Alarm(
                 self,
@@ -213,6 +215,27 @@ class ObservabilityStack(Stack):
                 comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
                 treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
             ).add_alarm_action(notify)
+
+        # the watch runs every 15 minutes, so one error is noise and a run of them is a weekend
+        # that will not refresh by itself
+        watch = f"pitadvisor-watch-{env_name}"
+        cloudwatch.Alarm(
+            self,
+            "WatchFailing",
+            alarm_name=f"{watch}-failing",
+            alarm_description=f"{watch} errored on three polls in a row. Its log group says why.",
+            metric=cloudwatch.Metric(
+                namespace="AWS/Lambda",
+                metric_name="Errors",
+                dimensions_map={"FunctionName": watch},
+                statistic="Sum",
+                period=Duration.minutes(15),
+            ),
+            threshold=1,
+            evaluation_periods=3,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        ).add_alarm_action(notify)
         return topic
 
     def _dashboard(self, env_name: str) -> cloudwatch.Dashboard:
@@ -222,10 +245,12 @@ class ObservabilityStack(Stack):
         machines = {
             "weekend": f"pitadvisor-weekend-{env_name}",
             "backfill": f"pitadvisor-backfill-{env_name}",
+            "light": f"pitadvisor-light-{env_name}",
         }
         functions = {
             "ask": f"pitadvisor-ask-{env_name}",
             "race sim": f"pitadvisor-race-sim-{env_name}",
+            "watch": f"pitadvisor-watch-{env_name}",
         }
 
         def machine(metric: str, name: str, statistic: str, label: str) -> cloudwatch.Metric:

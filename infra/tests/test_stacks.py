@@ -208,8 +208,11 @@ def test_every_pipeline_run_that_does_not_finish_raises_an_alarm(
     alarms = observability_template.find_resources("AWS::CloudWatch::Alarm")
     names = sorted(alarm["Properties"]["AlarmName"] for alarm in alarms.values())
     assert names == [
-        f"pitadvisor-after-quali-{ENV_NAME}-did-not-start",
+        f"pitadvisor-after-race-{ENV_NAME}-did-not-start",
         f"pitadvisor-backfill-{ENV_NAME}-did-not-finish",
+        f"pitadvisor-light-{ENV_NAME}-did-not-finish",
+        f"pitadvisor-watch-{ENV_NAME}-did-not-start",
+        f"pitadvisor-watch-{ENV_NAME}-failing",
         f"pitadvisor-weekend-plan-{ENV_NAME}-did-not-start",
         f"pitadvisor-weekend-{ENV_NAME}-did-not-finish",
     ]
@@ -460,7 +463,8 @@ def test_nothing_in_the_transform_stack_runs_a_service(transform_template: Templ
 
 def test_every_log_group_expires(transform_template: Template) -> None:
     groups = transform_template.find_resources("AWS::Logs::LogGroup")
-    assert len(groups) == 3
+    # the task, the three machines and the watch function
+    assert len(groups) == 5
     assert all(group["Properties"].get("RetentionInDays") for group in groups.values())
 
 
@@ -579,24 +583,79 @@ def test_the_pipeline_role_cannot_reach_another_task(transform_template: Templat
     )
 
 
-def test_the_schedule_runs_thursday_morning_saturday_morning_and_saturday_night(
+def rules_by_name(template: Template) -> dict[str, Resource]:
+    rules = template.find_resources("AWS::Events::Rule")
+    return {rule["Properties"]["Name"]: rule["Properties"] for rule in rules.values()}
+
+
+def test_the_schedule_plans_thursday_settles_monday_and_watches_every_15_minutes(
     transform_template: Template,
 ) -> None:
-    rules = transform_template.find_resources("AWS::Events::Rule")
-    found = {rule["Properties"]["Name"]: rule["Properties"] for rule in rules.values()}
+    found = rules_by_name(transform_template)
+    assert sorted(found) == [
+        f"pitadvisor-after-race-{ENV_NAME}",
+        f"pitadvisor-watch-{ENV_NAME}",
+        f"pitadvisor-weekend-plan-{ENV_NAME}",
+    ]
     assert found[f"pitadvisor-weekend-plan-{ENV_NAME}"]["ScheduleExpression"] == (
         "cron(0 6 ? * THU *)"
     )
-    assert found[f"pitadvisor-after-quali-{ENV_NAME}"]["ScheduleExpression"] == (
-        "cron(30 23 ? * SAT *)"
+    assert found[f"pitadvisor-after-race-{ENV_NAME}"]["ScheduleExpression"] == (
+        "cron(0 6 ? * MON *)"
     )
-    assert found[f"pitadvisor-sprint-morning-{ENV_NAME}"]["ScheduleExpression"] == (
-        "cron(30 0 ? * SAT *)"
-    )
+    assert found[f"pitadvisor-watch-{ENV_NAME}"]["ScheduleExpression"] == "rate(15 minutes)"
     for rule in found.values():
         assert rule["State"] == "ENABLED"
-        # the plan decides the event and the day, so neither rule carries anything of its own
-        assert rule["Targets"][0]["Input"] == "{}"
+    # the plan decides the event and the day, so the weekend machine is started with nothing
+    assert found[f"pitadvisor-weekend-plan-{ENV_NAME}"]["Targets"][0]["Input"] == "{}"
+    monday = [target["Input"] for target in found[f"pitadvisor-after-race-{ENV_NAME}"]["Targets"]]
+    assert sorted(monday) == ['{"mode":"settle"}', "{}"]
+
+
+def test_the_watch_runs_the_pipeline_image_and_reaches_only_its_machines(
+    transform_template: Template,
+) -> None:
+    _, function = only(
+        transform_template, "AWS::Lambda::Function", FunctionName=f"pitadvisor-watch-{ENV_NAME}"
+    )
+    properties = function["Properties"]
+    assert properties["PackageType"] == "Image"
+    assert properties["ImageConfig"]["Command"] == ["pitadvisor.handlers.watch.handler"]
+    environment = properties["Environment"]["Variables"]
+    assert environment["PITADV_WEEKEND_MACHINE_ARN"].endswith(f":pitadvisor-weekend-{ENV_NAME}")
+    assert environment["PITADV_LIGHT_MACHINE_ARN"].endswith(f":pitadvisor-light-{ENV_NAME}")
+    assert environment["PITADV_DISPATCH_PARAMETER"] == f"/pitadvisor/{ENV_NAME}/github-dispatch"
+    assert environment["PITADV_AWS_PROFILE"] == ""
+    _, role = only(
+        transform_template, "AWS::IAM::Role", RoleName=f"pitadvisor-watch-{ENV_NAME}-role"
+    )
+    statements = role["Properties"]["Policies"][0]["PolicyDocument"]["Statement"]
+    starts = next(item for item in statements if "states:StartExecution" in actions_of(item))
+    assert sorted(starts["Resource"]) == [
+        f"arn:aws:states:{REGION}:{ACCOUNT}:stateMachine:pitadvisor-light-{ENV_NAME}",
+        f"arn:aws:states:{REGION}:{ACCOUNT}:stateMachine:pitadvisor-weekend-{ENV_NAME}",
+    ]
+    secret = next(item for item in statements if "ssm:GetParameter" in actions_of(item))
+    assert secret["Resource"] == (
+        f"arn:aws:ssm:{REGION}:{ACCOUNT}:parameter/pitadvisor/{ENV_NAME}/github-dispatch"
+    )
+
+
+def test_both_machines_publish_once_their_views_are_out(transform_template: Template) -> None:
+    weekend = weekend_definition(transform_template)
+    assert weekend.index("EmitViews") < weekend.index("PublishWeekend")
+    light = machine_definition(transform_template, f"pitadvisor-light-{ENV_NAME}")
+    for mode in ("Stewards", "Snapshot"):
+        assert light.index(f"Light{mode}") < light.index(f"PublishLight{mode}")
+    assert '\\"action\\":\\"publish\\"' in light or '"action":"publish"' in light
+
+
+def test_the_light_machine_knows_three_modes(transform_template: Template) -> None:
+    light = machine_definition(transform_template, f"pitadvisor-light-{ENV_NAME}")
+    assert "pitadv ingest --source fia_docs --season $SEASON" in light
+    assert "pitadv ingest --source open_meteo --season $SEASON --round $ROUND" in light
+    assert "pitadv markets && pitadv docs-sync --index" in light
+    assert "UnknownMode" in light
 
 
 def test_the_schedule_can_be_paused_from_context() -> None:

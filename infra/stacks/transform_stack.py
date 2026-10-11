@@ -28,10 +28,16 @@ from aws_cdk import (
     aws_iam as iam,
 )
 from aws_cdk import (
+    aws_lambda as lambda_,
+)
+from aws_cdk import (
     aws_logs as logs,
 )
 from aws_cdk import (
     aws_stepfunctions as sfn,
+)
+from aws_cdk import (
+    aws_stepfunctions_tasks as tasks,
 )
 from constructs import Construct
 
@@ -77,6 +83,32 @@ PLAIN_ENVIRONMENT = (
     "There is no secret in it: the pipeline authenticates with its task role."
 )
 
+PUBLISH_INVOKE = (
+    "The LambdaInvoke integration grants invoke on the watch function and on its qualified "
+    "versions, which is what the :* is. One function, named."
+)
+CORPUS_LISTING = (
+    "bedrock:ListKnowledgeBases takes no resource. The settle step finds the corpus by name "
+    "because the transform stack has no reference to the agent stack; the ingestion actions "
+    "that follow are scoped to knowledge bases in this account."
+)
+# the weekend watch, every 15 minutes, starts a run once a session's data is upstream
+WATCH_RATE_MINUTES = 15
+LIGHT_STEPS = {
+    # a new stewards' document can move the grid, so the forecast is emitted again behind it
+    "stewards": (
+        "pitadv ingest --source fia_docs --season $SEASON"
+        " && pitadv rebuild --source fia_docs --season $SEASON"
+        " && pitadv car-updates --season $SEASON"
+        " && pitadv emit-views --views forecast,sprint,history,stewards,upgrades,debrief,brief"
+    ),
+    "snapshot": (
+        "pitadv ingest --source open_meteo --season $SEASON --round $ROUND"
+        " && pitadv emit-views --views weekend,forecast,sprint,history,brief"
+    ),
+}
+# monday: market prices for the race just run, then wikipedia's write-up into the corpus
+SETTLE = "pitadv markets && pitadv docs-sync --index"
 PUBLIC_SUBNET = (
     "The task runs in a public subnet with a public IP and no inbound rules. The alternative "
     "is a NAT Gateway at roughly $32/month, which is more than the whole budget for everything "
@@ -215,6 +247,19 @@ class TransformStack(Stack):
                 resources=[f"arn:aws:dynamodb:{self.region}:{self.account}:table/{ledger_table}"],
             )
         )
+        self.task_role.add_to_policy(
+            iam.PolicyStatement(actions=["bedrock:ListKnowledgeBases"], resources=["*"])
+        )
+        self.task_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "bedrock:ListDataSources",
+                    "bedrock:StartIngestionJob",
+                    "bedrock:GetIngestionJob",
+                ],
+                resources=[f"arn:aws:bedrock:{self.region}:{self.account}:knowledge-base/*"],
+            )
+        )
         # the granular finding id would carry an s3 arn, whose ::: is not a legal
         # acknowledgment id, so the whole rule is acknowledged on the generated policy
         Validations.of(self.task_role).acknowledge(
@@ -224,6 +269,18 @@ class TransformStack(Stack):
                     f"{self.region}:{self.account}:table/{database_name}/*]"
                 ),
                 reason=CATALOG_WILDCARD,
+            )
+        )
+        Validations.of(self.task_role).acknowledge(
+            Acknowledgment(id="AwsSolutions-IAM5[Resource::*]", reason=CORPUS_LISTING)
+        )
+        Validations.of(self.task_role).acknowledge(
+            Acknowledgment(
+                id=(
+                    "AwsSolutions-IAM5[Resource::arn:aws:bedrock:"
+                    f"{self.region}:{self.account}:knowledge-base/*]"
+                ),
+                reason=CORPUS_LISTING,
             )
         )
 
@@ -272,9 +329,11 @@ class TransformStack(Stack):
             Acknowledgment(id="AwsSolutions-ECS2", reason=PLAIN_ENVIRONMENT)
         )
 
-        # thursday and saturday night: refresh the calendar and decide. thursday refreshes any
-        # race week, saturday only once qualifying is in. anything else ends at the choice
-        # having spent one small task
+        self.watch_function = self._watch_function(env_name, bucket_name, ledger_table, image_tag)
+
+        # thursday, monday and whatever the watch starts: refresh the calendar and decide.
+        # thursday refreshes any race week, monday a weekend just raced, the watch forces it.
+        # anything else ends at the choice having spent one small task
         no_race = sfn.Succeed(self, "NothingToRefresh")
         refresh = (
             sfn.Chain.start(
@@ -330,6 +389,7 @@ class TransformStack(Stack):
                     "calibration,history,stewards,upgrades,debrief,lineage,brief",
                 )
             )
+            .next(self._publish("PublishWeekend"))
         )
         definition = (
             sfn.Chain.start(self._run("PlanWeekend", "pitadv weekend-plan", environment=[]))
@@ -425,40 +485,81 @@ class TransformStack(Stack):
             ],
         )
 
-        # the same machine again once qualifying is done, so the race forecast stands on the
-        # real order instead of one sampled per path. 23:30 utc saturday is an hour and a half
-        # after the latest session ends (mexico, austin) and four and a half before the earliest
-        # sunday start (melbourne). the plan step reads the day, so the input is still empty
-        self.after_qualifying = events.Rule(
+        # the light machine runs one fargate step: the stewards' documents and the forecast behind
+        # them, or the weather before a session. both end by asking github to publish
+        light = sfn.Choice(self, "LightMode")
+        for mode, command in LIGHT_STEPS.items():
+            light.when(
+                sfn.Condition.string_equals("$.mode", mode),
+                sfn.Chain.start(self._step(f"Light{mode.title()}", command)).next(
+                    self._publish(f"PublishLight{mode.title()}")
+                ),
+            )
+        light.when(
+            sfn.Condition.string_equals("$.mode", "settle"),
+            self._run("Settle", SETTLE, environment=[], timeout_seconds=3600),
+        )
+        light.otherwise(sfn.Fail(self, "UnknownMode", error="UnknownMode"))
+        self.light_machine = sfn.StateMachine(
             self,
-            "SaturdaySchedule",
-            rule_name=f"pitadvisor-after-quali-{env_name}",
-            description="refreshes the forecast on the qualifying order once qualifying is in",
-            schedule=events.Schedule.cron(minute="30", hour="23", week_day="SAT"),
-            enabled=str(self.node.try_get_context("enableSchedule")).lower() != "false",
+            "LightPipeline",
+            state_machine_name=f"pitadvisor-light-{env_name}",
+            definition_body=sfn.DefinitionBody.from_chainable(light),
+            role=self._pipeline_role(env_name),
+            timeout=Duration.hours(1),
+            tracing_enabled=True,
+            logs=sfn.LogOptions(
+                destination=logs.LogGroup(
+                    self,
+                    "LightStateLogs",
+                    log_group_name=f"/pitadvisor/{env_name}/light-pipeline",
+                    retention=logs.RetentionDays.ONE_MONTH,
+                    removal_policy=RemovalPolicy.DESTROY,
+                ),
+                level=sfn.LogLevel.ALL,
+            ),
+        )
+
+        watch_id = self.get_logical_id(cast(Any, self.watch_function.node.default_child))
+        Validations.of(self._pipeline_role(env_name)).acknowledge(
+            Acknowledgment(
+                id=f"AwsSolutions-IAM5[Resource::<{watch_id}.Arn>:*]",
+                reason=PUBLISH_INVOKE,
+            )
+        )
+
+        enabled = str(self.node.try_get_context("enableSchedule")).lower() != "false"
+        # monday settles the weekend just gone: the plan refreshes when a race was run in the
+        # last two days, so amended results, the debrief and the next race's forecast land early.
+        # the settle step runs every monday, it only fetches what raw does not hold yet
+        self.after_race = events.Rule(
+            self,
+            "MondaySchedule",
+            rule_name=f"pitadvisor-after-race-{env_name}",
+            description="settles the weekend just gone: results, markets, the corpus",
+            schedule=events.Schedule.cron(minute="0", hour="6", week_day="MON"),
+            enabled=enabled,
             targets=[
                 targets.SfnStateMachine(
                     self.state_machine, input=events.RuleTargetInput.from_object({})
-                )
+                ),
+                targets.SfnStateMachine(
+                    self.light_machine,
+                    input=events.RuleTargetInput.from_object({"mode": "settle"}),
+                ),
             ],
         )
 
-        # and once more on saturday morning for the sprint, after sprint qualifying has landed.
-        # 00:30 utc is two hours after the latest friday session ends (austin) and two and a
-        # half before the earliest sprint (shanghai). on a weekend without a sprint the plan
-        # stops at NothingToRefresh, so about six runs a year do work
-        self.sprint_morning = events.Rule(
+        # neither jolpica nor f1's timing archive can say when something new lands, so the watch
+        # asks. outside a race weekend it reads the calendar and stops without a request
+        self.watch = events.Rule(
             self,
-            "SprintMorningSchedule",
-            rule_name=f"pitadvisor-sprint-morning-{env_name}",
-            description="forecasts the sprint once sprint qualifying is in",
-            schedule=events.Schedule.cron(minute="30", hour="0", week_day="SAT"),
-            enabled=str(self.node.try_get_context("enableSchedule")).lower() != "false",
-            targets=[
-                targets.SfnStateMachine(
-                    self.state_machine, input=events.RuleTargetInput.from_object({})
-                )
-            ],
+            "WatchSchedule",
+            rule_name=f"pitadvisor-watch-{env_name}",
+            description="starts a run once a session's data is upstream",
+            schedule=events.Schedule.rate(Duration.minutes(WATCH_RATE_MINUTES)),
+            enabled=enabled,
+            targets=[targets.LambdaFunction(self.watch_function, retry_attempts=0)],
         )
 
         Validations.of(self.state_machine.role).acknowledge(
@@ -627,6 +728,102 @@ class TransformStack(Stack):
                 "ResultSelector": {"plan.$": "States.StringToJson($.Body)"},
                 "ResultPath": "$.planned",
             },
+        )
+
+    def _publish(self, task_id: str) -> tasks.LambdaInvoke:
+        return tasks.LambdaInvoke(
+            self,
+            task_id,
+            lambda_function=self.watch_function,
+            payload=sfn.TaskInput.from_object({"action": "publish"}),
+            result_path=sfn.JsonPath.DISCARD,
+        )
+
+    def _watch_function(
+        self, env_name: str, bucket_name: str, ledger_table: str, image_tag: str
+    ) -> lambda_.DockerImageFunction:
+        name = f"pitadvisor-watch-{env_name}"
+        # literal arns: the machines invoke this function to publish, so a reference back to
+        # them would be a cycle
+        machines = [
+            f"arn:aws:states:{self.region}:{self.account}:stateMachine:pitadvisor-{kind}-{env_name}"
+            for kind in ("weekend", "light")
+        ]
+        parameter = f"/pitadvisor/{env_name}/github-dispatch"
+        log_group = logs.LogGroup(
+            self,
+            "WatchLogs",
+            log_group_name=f"/aws/lambda/{name}",
+            retention=logs.RetentionDays.TWO_WEEKS,
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+        role = iam.Role(
+            self,
+            "WatchRole",
+            role_name=f"{name}-role",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_managed_policy_name(
+                    self, "WatchLakeAccess", f"pitadvisor-pipeline-lake-{env_name}"
+                )
+            ],
+            inline_policies={
+                "Watch": iam.PolicyDocument(
+                    statements=[
+                        iam.PolicyStatement(
+                            actions=["logs:CreateLogStream", "logs:PutLogEvents"],
+                            resources=[log_group.log_group_arn],
+                        ),
+                        iam.PolicyStatement(
+                            actions=["states:StartExecution", "states:ListExecutions"],
+                            resources=machines,
+                        ),
+                        iam.PolicyStatement(
+                            actions=["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"],
+                            resources=[
+                                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{ledger_table}"
+                            ],
+                        ),
+                        # a securestring under the aws/ssm key, which the key policy already
+                        # opens to this account through ssm, so no kms grant is needed
+                        iam.PolicyStatement(
+                            actions=["ssm:GetParameter"],
+                            resources=[
+                                f"arn:aws:ssm:{self.region}:{self.account}:parameter{parameter}"
+                            ],
+                        ),
+                    ]
+                )
+            },
+        )
+        return lambda_.DockerImageFunction(
+            self,
+            "Watch",
+            function_name=name,
+            code=lambda_.DockerImageCode.from_ecr(
+                self.repository,
+                tag_or_digest=image_tag,
+                entrypoint=["/opt/venv/bin/python", "-m", "awslambdaric"],
+                cmd=["pitadvisor.handlers.watch.handler"],
+            ),
+            architecture=lambda_.Architecture.ARM_64,
+            memory_size=min(512, int(self.node.try_get_context("lambdaMemoryCap") or 512)),
+            # fia.com's crawl delay alone is thirty seconds on a first look at an event
+            timeout=Duration.minutes(3),
+            environment={
+                "PITADV_ENV": env_name,
+                "PITADV_DATA_BUCKET": bucket_name,
+                "PITADV_AWS_PROFILE": "",
+                "PITADV_LEDGER_TABLE": ledger_table,
+                "PITADV_WEEKEND_MACHINE_ARN": machines[0],
+                "PITADV_LIGHT_MACHINE_ARN": machines[1],
+                "PITADV_DISPATCH_PARAMETER": parameter,
+                "PITADV_GITHUB_REPO": self.node.try_get_context("githubRepo") or "OWNER/REPO",
+                "POWERTOOLS_SERVICE_NAME": name,
+                "POWERTOOLS_LOG_LEVEL": "INFO",
+            },
+            role=role,
+            log_group=log_group,
         )
 
     def _step(self, task_id: str, command: str) -> sfn.CustomState:
