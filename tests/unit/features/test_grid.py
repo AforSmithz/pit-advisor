@@ -79,6 +79,48 @@ def test_a_sanction_is_resolved_to_the_driver_in_that_seasons_car():
     assert found["next_event"].to_list() == [False]
 
 
+def test_a_drop_before_the_race_is_run_finds_the_car_from_the_last_round_raced():
+    sanctions, incidents = frames(
+        [
+            {
+                "season": 2024,
+                "round": 2,
+                "kind": "grid_drop",
+                "positions": 40,
+                "car": 4,
+                "session": None,
+            }
+        ]
+    )
+    found = grid.penalties(sanctions, incidents, RESULTS)
+    assert found["driver_code"].to_list() == ["DDD"]
+    assert found["round"].to_list() == [2]
+
+
+def test_a_number_that_changed_hands_later_in_the_season_is_not_borrowed_back():
+    results = pl.concat(
+        [
+            RESULTS,
+            pl.DataFrame(
+                {"season": [2024], "round": [3], "car_number": [4], "driver_code": ["NEW"]}
+            ),
+        ]
+    )
+    sanctions, incidents = frames(
+        [
+            {
+                "season": 2024,
+                "round": 2,
+                "kind": "grid_drop",
+                "positions": 5,
+                "car": 4,
+                "session": "Qualifying",
+            }
+        ]
+    )
+    assert grid.penalties(sanctions, incidents, results)["driver_code"].to_list() == ["DDD"]
+
+
 def test_a_race_offence_is_carried_whatever_the_wording():
     sanctions, incidents = frames(
         [

@@ -42,6 +42,34 @@ def empty() -> pl.DataFrame:
     return pl.DataFrame(schema=SCHEMA)
 
 
+def seated(frame: pl.DataFrame, results: pl.DataFrame) -> pl.DataFrame:
+    """Adds driver_code to rows that name a car. The race being forecast has no result yet, so
+    its car numbers come from the latest round of the same season that has one."""
+    seats = (
+        results.select(
+            pl.col("season").cast(pl.Int64),
+            pl.col("round").cast(pl.Int64),
+            pl.col("car_number").cast(pl.Int64).alias("car"),
+            "driver_code",
+        )
+        .drop_nulls()
+        .unique(subset=["season", "round", "car"])
+        .sort("round")
+    )
+    cars = (
+        frame.with_columns(
+            pl.col("season").cast(pl.Int64),
+            pl.col("round").cast(pl.Int64),
+            pl.col("car").cast(pl.Int64, strict=False),
+        )
+        .drop_nulls("car")
+        .sort("round")
+    )
+    return cars.join_asof(
+        seats, on="round", by=["season", "car"], strategy="backward", check_sortedness=False
+    )
+
+
 def penalties(
     sanctions: pl.DataFrame | None, incidents: pl.DataFrame | None, results: pl.DataFrame
 ) -> pl.DataFrame:
@@ -49,8 +77,7 @@ def penalties(
     stewards name the car, and the car number is only unique inside one season's entry list."""
     if sanctions is None or incidents is None or not sanctions.height:
         return empty()
-    seats = results.select("season", "round", "car_number", "driver_code").drop_nulls()
-    found = (
+    charged = (
         sanctions.filter(pl.col("kind").is_in(KINDS))
         .select("season", "round", "document", "entry", "kind", "positions")
         .join(
@@ -60,23 +87,24 @@ def penalties(
             on=["season", "round", "document", "entry"],
             how="inner",
         )
-        .join(
-            seats,
-            left_on=["season", "round", "car"],
-            right_on=["season", "round", "car_number"],
-            how="inner",
-        )
+    )
+    found = (
+        seated(charged, results)
+        .drop_nulls("driver_code")
         .with_columns(
             # "the next Race in which the driver participates" is this Sunday's race when the
             # offence came in practice, qualifying or the sprint. only a race offence carries
-            next_event=pl.col("session") == "Race",
+            # a power unit change is filed with no session at all
+            next_event=(pl.col("session") == "Race").fill_null(False),
             # from 2023 the sprint has its own qualifying, and what happens there is served on
             # the sprint grid. in 2021 "sprint qualifying" was the sprint, which set sunday's grid
-            sprint_only=pl.col("outcome").str.contains(r"(?i)\bfor the sprint\b")
-            | (
-                pl.col("session").is_in(["Sprint Shootout", "Sprint Qualifying"])
-                & (pl.col("season") >= SPRINT_GRID_FROM)
-            ),
+            sprint_only=(
+                pl.col("outcome").str.contains(r"(?i)\bfor the sprint\b")
+                | (
+                    pl.col("session").is_in(["Sprint Shootout", "Sprint Qualifying"])
+                    & (pl.col("season") >= SPRINT_GRID_FROM)
+                )
+            ).fill_null(False),
         )
         .unique(subset=["season", "round", "driver_code", "kind", "positions", "issued"])
     )
