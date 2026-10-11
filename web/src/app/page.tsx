@@ -1,271 +1,127 @@
-import { Key, Reliability, Series } from "@/components/curve";
-import { Engraved, Plate } from "@/components/plate";
-import { gain, label } from "@/lib/format";
-import { loadCalibration } from "@/lib/load";
+import Link from "next/link";
+import { Board } from "@/components/race/board";
+import { Drift } from "@/components/race/drift";
+import { PageHead } from "@/components/tile";
+import { BASELINES, snapshotLabel, stamp } from "@/lib/format";
+import { loadForecast, loadHistory, loadSprint, loadStewards } from "@/lib/load";
+import type { ForecastView } from "@/lib/schemas";
+import { circuitName } from "@/lib/teams";
 
-export const metadata = { title: "Calibration · Pit Advisor" };
+const STAGE: Record<string, string> = {
+  before_qualifying: "before qualifying",
+  after_qualifying: "after qualifying",
+  after_sprint: "after the sprint",
+};
 
-export default async function CalibrationPage() {
-  const view = await loadCalibration();
-  const names = view.scored.map((item) => item.name);
-  const ours = view.scored.find((item) => item.name === view.model_name);
-  const separated = view.separated_from;
+function Trust({ evidence }: { evidence: NonNullable<ForecastView["evidence"]> }) {
+  const baselines = Object.keys(BASELINES).filter((name) => name in evidence.log_loss);
+  const beaten = baselines.filter((name) => evidence.separated_from.includes(name));
+  const tied = baselines.filter((name) => !evidence.separated_from.includes(name));
+  const list = (names: string[]) => names.map((name) => BASELINES[name]).join(" and ");
+  return (
+    <Link href="/record/" className="inset press flex items-center gap-3.5 rounded-[18px] px-4 py-3">
+      <span className="flex flex-1 flex-col gap-1.5">
+        <span className="text-xs text-ink-3">Tested on {evidence.races} past races</span>
+        <span className="flex gap-1.5">
+          {baselines.map((name) => {
+            const separated = evidence.separated_from.includes(name);
+            return (
+              <span
+                key={name}
+                title={BASELINES[name]}
+                className="h-1.5 flex-1 rounded-full"
+                style={
+                  separated
+                    ? { background: "var(--warm)", boxShadow: "0 0 8px rgb(255 95 109 / 0.6)" }
+                    : { background: "#3a3c42" }
+                }
+              />
+            );
+          })}
+        </span>
+        <span className="text-[11px] text-mute">
+          {beaten.length > 0 ? `clearly better than ${list(beaten)}` : "not clearly better than any simple guess"}
+          {tied.length > 0 && beaten.length > 0 ? `, level with ${list(tied)}` : ""}
+        </span>
+      </span>
+      <span aria-hidden="true" className="text-lg text-signal">
+        →
+      </span>
+    </Link>
+  );
+}
+
+export default async function RaceWeek() {
+  const [forecast, history, sprint, stewards] = await Promise.all([
+    loadForecast(),
+    loadHistory(),
+    loadSprint(),
+    loadStewards(),
+  ]);
+  const snapshots = history?.snapshots.filter((snapshot) => !snapshot.repeat) ?? [];
+  const current = history?.snapshots.find((snapshot) => snapshot.run_id === forecast.run_id);
+  const drops = (stewards?.rulings ?? []).filter(
+    (ruling) =>
+      ruling.sanction.outcome === "grid" &&
+      forecast.drivers.some((driver) => driver.driver_code === ruling.driver_code),
+  );
+  const stage = current ? STAGE[current.stage] : undefined;
 
   return (
-    <div className="pt-2">
-      <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-4 border-b border-engrave-lit pb-5">
-        <div>
-          <h1 className="legend text-4xl text-lume sm:text-5xl">Calibration</h1>
-          <p className="engraved mt-2">
-            {ours?.races ?? 0} time-forward races from {view.from_season} ·{" "}
-            {ours?.rows.toLocaleString("en-GB") ?? 0} driver-races ·{" "}
-            {view.paths.toLocaleString("en-GB")} paths a race
-          </p>
-        </div>
-        <dl className="flex flex-wrap gap-x-8 gap-y-2 text-right">
-          <div>
-            <dt className="engraved">seed</dt>
-            <dd className="figure text-sm text-lume">{view.seed}</dd>
-          </div>
-          <div>
-            <dt className="engraved">classes</dt>
-            <dd className="figure text-sm text-lume">{view.field}</dd>
-          </div>
-        </dl>
-      </div>
-
-      <p className="mt-6 max-w-[74ch] text-sm leading-relaxed text-lume-dim">
-        The holdout is the last {view.holdout} races run, of which the{" "}
-        {ours?.races ?? 0} at circuits in the taxonomy are scored, one at a
-        time, with every fit behind the forecast seeing only what had happened
-        when it was made. Intervals are bootstrapped over races rather than
-        drivers, because the cars in one race share a track, a strategy and a
-        safety car, and resampling them independently reports a spread several
-        times tighter than the evidence supports.{" "}
-        {separated.length
-          ? `This holdout separates the simulation from ${separated
-              .map((name: string) => name.replace(/_/g, " "))
-              .join(
-                " and ",
-              )}; anything not on that list sits inside bootstrap noise.`
-          : "This holdout separates the simulation from none of the baselines, which is the honest reading of it."}
-      </p>
-
-      <div className="mt-10 grid gap-10 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="flex flex-col gap-10">
-          <Plate
-            title="Reliability"
-            note="A probability that means what it says lands on the diagonal. Above it the forecast was shy, below it the forecast was bold."
-            footer={
-              <div className="mt-4">
-                <Key models={names} />
-              </div>
-            }
-          >
-            <div className="grid gap-6 border-t border-engrave pt-4 sm:grid-cols-3">
-              {view.events.map((event) => (
-                <Reliability
-                  key={event}
-                  event={event}
-                  scored={view.scored}
-                  highlight={view.model_name}
-                />
-              ))}
-            </div>
-          </Plate>
-
-          <Plate
-            title="Scores"
-            note="Multiclass over the classified finishing position, so a retirement is a class like any other. Lower is better on both."
-          >
-            <div className="grid grid-cols-[7.5rem_1fr_1fr] items-baseline gap-x-4 pb-1">
-              <span className="engraved">model</span>
-              <span className="engraved">log loss</span>
-              <span className="engraved">brier</span>
-            </div>
-            {view.scored.map((model) => (
-              <div
-                key={model.name}
-                className="grid grid-cols-[7.5rem_1fr_1fr] items-baseline gap-x-4 border-t border-engrave py-2.5"
+    <>
+      <PageHead
+        title={forecast.event.race_name}
+        sub={`${circuitName(forecast.event.circuit_id)}, ${forecast.laps} laps. Forecast ${stage ? `published ${stage}, ` : "published "}${stamp(forecast.generated_at)}.`}
+      >
+        <div className="flex flex-wrap items-center gap-2.5">
+          {drops.map((ruling) => {
+            const grid = forecast.drivers.find((driver) => driver.driver_code === ruling.driver_code)?.grid;
+            return (
+              <Link
+                key={`${ruling.document}-${ruling.entry}`}
+                href="/stewards/"
+                className="glass press flex items-center gap-2.5 rounded-full border-magenta/40 px-3.5 py-2 text-[12.5px]"
               >
-                <span
-                  className={`text-sm tracking-plate ${
-                    model.name === view.model_name ? "text-lume" : "text-steel"
-                  }`}
-                >
-                  {label(model.name)}
-                </span>
-                {([model.log_loss, model.brier] as const).map(
-                  (score, index) => (
-                    <span key={index}>
-                      <span className="figure block text-sm text-lume">
-                        {score.value.toFixed(4)}
-                      </span>
-                      <span className="engraved block tabular-nums text-lume-dim">
-                        {score.low === null || score.high === null
-                          ? "not resampled"
-                          : `${score.low.toFixed(4)} to ${score.high.toFixed(4)}`}
-                      </span>
+                <span className="h-2 w-2 rounded-full bg-magenta shadow-[0_0_8px_#c03fd0]" />
+                {ruling.driver_code}: {ruling.sanction.text.toLowerCase()}
+                {grid ? `. The forecast starts ${ruling.driver_code} from P${grid}` : ""}
+              </Link>
+            );
+          })}
+          {snapshots.length > 0 && (
+            <ol aria-label="Forecasts published this week" className="inset-sm flex items-center gap-0.5 rounded-full px-2 py-1.5">
+              {snapshots.map((snapshot) => {
+                const now = snapshot.run_id === forecast.run_id;
+                return (
+                  <li key={snapshot.run_id} className="flex flex-col items-center gap-[3px] px-[7px]">
+                    <span
+                      className="h-[9px] w-[9px] rounded-full"
+                      style={
+                        now
+                          ? { background: "#7ea2ff", boxShadow: "0 0 10px rgb(126 162 255 / 0.9)" }
+                          : { background: "#5c5e66" }
+                      }
+                    />
+                    <span className={`text-[10px] whitespace-nowrap ${now ? "text-ink" : "text-mute"}`}>
+                      {snapshot.stage === "after_qualifying" ? "Quali" : snapshotLabel(snapshot).slice(0, 3)}
                     </span>
-                  ),
-                )}
-              </div>
-            ))}
-          </Plate>
-
-          {ours && Object.keys(ours.events).length > 0 && (
-            <Plate
-              title="By event"
-              note="The place distribution summed to a win, a podium and a points finish, each scored on its own. The split reads the Brier as reliability less resolution plus uncertainty: low reliability is honest, high resolution is sharp."
-            >
-              <div className="grid grid-cols-[7.5rem_4.5rem_1fr_1fr_1fr] items-baseline gap-x-4 pb-1">
-                <span className="engraved">model</span>
-                <span className="engraved">event</span>
-                <span className="engraved">log loss</span>
-                <span className="engraved">brier</span>
-                <span className="engraved">rel · res · unc</span>
-              </div>
-              {view.scored.flatMap((model) =>
-                view.events.flatMap((event) => {
-                  const split = model.events[event];
-                  if (!split) return [];
-                  return [
-                    <div
-                      key={`${model.name}-${event}`}
-                      className="grid grid-cols-[7.5rem_4.5rem_1fr_1fr_1fr] items-baseline gap-x-4 border-t border-engrave py-2"
-                    >
-                      <span
-                        className={`text-sm tracking-plate ${
-                          model.name === view.model_name
-                            ? "text-lume"
-                            : "text-steel"
-                        }`}
-                      >
-                        {label(model.name)}
-                      </span>
-                      <span className="engraved">{event}</span>
-                      {([split.log_loss, split.brier] as const).map(
-                        (score, index) => (
-                          <span key={index}>
-                            <span className="figure block text-sm text-lume">
-                              {score.value.toFixed(4)}
-                            </span>
-                            <span className="engraved block tabular-nums text-lume-dim">
-                              {score.low === null || score.high === null
-                                ? "not resampled"
-                                : `${score.low.toFixed(4)} to ${score.high.toFixed(4)}`}
-                            </span>
-                          </span>
-                        ),
-                      )}
-                      <span className="figure text-sm tabular-nums text-lume-dim">
-                        {split.reliability.toFixed(4)} ·{" "}
-                        {split.resolution.toFixed(4)} ·{" "}
-                        {split.uncertainty.toFixed(4)}
-                      </span>
-                    </div>,
-                  ];
-                }),
-              )}
-            </Plate>
+                  </li>
+                );
+              })}
+              <li className="flex flex-col items-center gap-[3px] px-[7px]">
+                <span className="h-[9px] w-[9px] rounded-full shadow-[inset_0_0_0_1.5px_#5c5e66]" />
+                <span className="text-[10px] text-mute">Race</span>
+              </li>
+            </ol>
           )}
-
-          <Plate
-            title="Race by race"
-            note="Log loss on each race in the holdout, in order. The spikes are the wet ones and the safety-car ones, and every model feels them together."
-            footer={
-              <div className="mt-2">
-                <Key models={names} />
-              </div>
-            }
-          >
-            <div className="border-t border-engrave pt-3">
-              <Series rows={view.per_race} models={names} />
-            </div>
-          </Plate>
         </div>
-
-        <aside className="flex flex-col gap-10">
-          <Plate
-            title="Against each baseline"
-            note="The same races, resampled together. An interval that straddles zero means this holdout did not separate them, whatever the point estimates say."
-          >
-            {view.paired.map((item) => (
-              <div key={item.baseline} className="border-t border-engrave py-3">
-                <div className="mb-1 flex items-baseline justify-between gap-4">
-                  <span className="text-sm tracking-plate text-lume">
-                    vs {label(item.baseline)}
-                  </span>
-                  <span className="engraved">
-                    {separated.includes(item.baseline)
-                      ? "separated"
-                      : "inside noise"}
-                  </span>
-                </div>
-                <dl className="flex gap-6">
-                  {(
-                    [
-                      ["log loss", item.log_loss_gain],
-                      ["brier", item.brier_gain],
-                    ] as const
-                  ).map(([name, score]) => (
-                    <div key={name}>
-                      <dt className="engraved">{name}</dt>
-                      <dd className="figure text-sm text-lume">
-                        {gain(score.value)}
-                      </dd>
-                      <dd className="engraved tabular-nums text-lume-dim">
-                        {score.low === null || score.high === null
-                          ? "—"
-                          : `${gain(score.low)} to ${gain(score.high)}`}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            ))}
-          </Plate>
-
-          <Plate
-            title="Calibration error"
-            note="The count-weighted gap between what was promised and what happened, per derived event."
-          >
-            {view.scored.map((model) => (
-              <div
-                key={model.name}
-                className="flex items-baseline justify-between gap-4 border-t border-engrave py-2"
-              >
-                <span
-                  className={`text-sm tracking-plate ${
-                    model.name === view.model_name ? "text-lume" : "text-steel"
-                  }`}
-                >
-                  {label(model.name)}
-                </span>
-                <span className="figure text-sm text-lume-dim">
-                  {view.events.map((event) => (
-                    <span key={event} className="ml-3 tabular-nums">
-                      {(model.calibration[event] ?? 0).toFixed(3)}
-                    </span>
-                  ))}
-                </span>
-              </div>
-            ))}
-            <p className="engraved mt-3 normal-case tracking-normal text-lume-dim">
-              in the order {view.events.join(", ")}
-            </p>
-          </Plate>
-
-          <Plate title="Contract">
-            <dl>
-              <Engraved term="view">{view.view}</Engraved>
-              <Engraved term="schema">{view.schema_version}</Engraved>
-              <Engraved term="run">{view.run_id}</Engraved>
-              <Engraved term="holdout">{view.holdout}</Engraved>
-            </dl>
-          </Plate>
-        </aside>
-      </div>
-    </div>
+      </PageHead>
+      <Board
+        race={forecast}
+        sprint={sprint?.state === "forecast" ? sprint.forecast : null}
+        trust={forecast.evidence ? <Trust evidence={forecast.evidence} /> : null}
+        drift={<Drift snapshots={history?.snapshots ?? []} />}
+      />
+    </>
   );
 }
