@@ -1,123 +1,210 @@
 @import "tailwindcss";
 
 @theme {
-  --color-plate: #0e0f11;
-  --color-subplate: #141619;
-  --color-engrave: #22262b;
-  --color-engrave-lit: #363c44;
-  --color-steel: #868d96;
-  --color-lume: #ece6d6;
-  --color-lume-dim: #a49e90;
-  --color-split: #c8202a;
-  --color-split-lit: #e5776d;
-  --color-wet: #6f97a8;
+  --color-ground: #111113;
+  --color-well: #0d0d0f;
+  --color-rule: #1d1e22;
+  --color-rule-lit: #2e2f35;
+  --color-ink: #ececef;
+  --color-ink-2: #c9cbd2;
+  --color-ink-3: #a2a3ab;
+  --color-mute: #7f818a;
+  --color-faint: #55575f;
 
-  --font-plate: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
-  --font-figure: var(--font-chivo-mono), ui-monospace, "SF Mono", monospace;
-  --font-legend: var(--font-saira-condensed), "Archivo Narrow", sans-serif;
+  --color-signal: #ff8a4c;
+  --color-signal-hi: #ffb35c;
+  --color-coral: #ff5f6d;
+  --color-magenta: #c03fd0;
+  --color-violet: #8a5cff;
+  --color-aqua: #2ee6c5;
+  --color-blue: #3a8bff;
+  --color-sky: #7ea2ff;
 
-  --text-engraved: 0.6875rem;
-  --text-engraved--line-height: 1rem;
-  --text-engraved--letter-spacing: 0.14em;
+  --font-sans: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-chivo-mono), ui-monospace, "SF Mono", monospace;
+  --font-display: var(--font-saira-condensed), "Archivo Narrow", sans-serif;
 
-  --tracking-plate: -0.02em;
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-move: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-swing: cubic-bezier(0.34, 1.2, 0.64, 1);
 }
 
 :root {
   color-scheme: dark;
+  --raised: linear-gradient(145deg, #18181b, #0f0f11);
+  --raised-shadow: -7px -7px 16px rgb(255 255 255 / 0.028), 10px 12px 28px rgb(0 0 0 / 0.8);
+  --raised-sm: linear-gradient(145deg, #1b1b1f, #111113);
+  --raised-sm-shadow: -3px -3px 7px rgb(255 255 255 / 0.035), 4px 5px 10px rgb(0 0 0 / 0.75);
+  --inset-shadow: inset 6px 6px 14px rgb(0 0 0 / 0.75), inset -5px -5px 12px rgb(255 255 255 / 0.028);
+  --inset-sm-shadow: inset 2px 2px 5px rgb(0 0 0 / 0.8), inset -2px -2px 5px rgb(255 255 255 / 0.03);
+  --warm: linear-gradient(135deg, #ffb35c, #ff6a5c);
+  --cool: linear-gradient(135deg, #2ee6c5, #3a8bff);
 }
 
-html {
-  background: var(--color-plate);
-}
-
+html,
 body {
-  background: var(--color-plate);
-  color: var(--color-lume);
-  font-family: var(--font-plate);
-  font-feature-settings: "ss01", "cv01";
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-/* the parts of the dial we did not draw */
 ::selection {
-  background: var(--color-split);
-  color: var(--color-lume);
+  background: var(--color-signal);
+  color: var(--color-ground);
 }
 
 :focus-visible {
-  outline: 1px solid var(--color-split-lit);
+  outline: 2px solid var(--color-signal);
   outline-offset: 2px;
 }
 
 * {
-  scrollbar-color: var(--color-engrave-lit) var(--color-plate);
+  scrollbar-color: var(--color-rule-lit) var(--color-ground);
   scrollbar-width: thin;
 }
 
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+.raised {
+  background: var(--raised);
+  box-shadow: var(--raised-shadow);
 }
 
-::-webkit-scrollbar-track {
-  background: var(--color-plate);
+.raised-sm {
+  background: var(--raised-sm);
+  box-shadow: var(--raised-sm-shadow);
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--color-engrave-lit);
-  border: 3px solid var(--color-plate);
+.inset {
+  background: var(--color-well);
+  box-shadow: var(--inset-shadow);
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-steel);
+.inset-sm {
+  background: var(--color-well);
+  box-shadow: var(--inset-sm-shadow);
 }
 
-.figure {
-  font-family: var(--font-figure);
-  font-variant-numeric: tabular-nums;
+.glass {
+  background: rgb(28 28 34 / 0.45);
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 20px 44px rgb(0 0 0 / 0.45);
 }
 
-/* the legend stamped across the top of a plate. condensed because a grand prix name is long
-   and it has to hold one line next to the round numeral */
-.legend {
-  font-family: var(--font-legend);
-  font-weight: 500;
-  line-height: 1.05;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.engraved {
-  font-size: var(--text-engraved);
-  line-height: var(--text-engraved--line-height);
-  letter-spacing: var(--text-engraved--letter-spacing);
-  text-transform: uppercase;
-  color: var(--color-steel);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: #1a1a1e;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 
-/* a missing fit is a cut face, not a dash */
-.cut-face {
-  border: 1px solid var(--color-engrave-lit);
-  background-image: repeating-linear-gradient(
-    -45deg,
-    transparent 0 5px,
-    var(--color-engrave) 5px 6px
-  );
+.press {
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms var(--ease-out-strong);
 }
 
-/* the chapter ring runs out of room for numerals long before it runs out of room for ticks */
-@media (max-width: 640px) {
-  .tick[data-odd] .numeral {
-    display: none;
+.press:active {
+  transform: scale(0.97);
+}
+
+.pill-on {
+  color: var(--color-ground);
+  background: var(--warm);
+  box-shadow: 0 0 12px rgb(255 120 80 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.35);
+}
+
+.pill-cool {
+  color: var(--color-ground);
+  background: var(--cool);
+  box-shadow: 0 0 12px rgb(46 200 220 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.35);
+}
+
+.figure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.code {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+/* the ignition: rings draw in, knobs swing to their value, cells light. once, on arrival */
+.draw {
+  animation: draw 900ms var(--ease-out-strong) both;
+}
+
+.swing {
+  animation: swing 1100ms var(--ease-swing) 350ms both;
+}
+
+.lit {
+  animation: lit 500ms var(--ease-out-strong) both;
+}
+
+.grow {
+  animation: grow 700ms var(--ease-out-strong) both;
+  transform-origin: left center;
+}
+
+.glide {
+  transition:
+    left 220ms var(--ease-out-strong),
+    transform 220ms var(--ease-out-strong),
+    width 420ms var(--ease-move);
+}
+
+@keyframes draw {
+  from {
+    stroke-dashoffset: var(--len);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes swing {
+  from {
+    transform: rotate(var(--from, 0deg));
+  }
+}
+
+@keyframes lit {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes grow {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .draw,
+  .swing,
+  .lit,
+  .grow {
+    animation: none;
+  }
+  .glide,
+  .press {
+    transition: none;
   }
 }

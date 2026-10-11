@@ -60,3 +60,44 @@ export function usd(value: number): string {
   const fixed = Math.abs(value).toFixed(2);
   return `${value < 0 && Number(fixed) !== 0 ? "\u2212" : ""}$${fixed}`;
 }
+
+export function pct(share: number, digits = 1): string {
+  return `${(share * 100).toFixed(digits)}%`;
+}
+
+export function raceShort(name: string): string {
+  return name.replace(/\s+Grand Prix$/i, "");
+}
+
+const DAY = new Intl.DateTimeFormat("en-GB", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+});
+
+export function lightsOut(startUtc: string | null): string {
+  if (!startUtc) return "start time not published";
+  const at = new Date(startUtc);
+  return `Lights out ${DAY.format(at)}, ${startUtc.slice(11, 16)} UTC`;
+}
+
+export function stamp(iso: string): string {
+  const at = new Date(iso);
+  return `${at.getUTCDate()} ${at.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}, ${iso.slice(11, 16)} UTC`;
+}
+
+export const BASELINES: Record<string, string> = {
+  grid: "the grid",
+  standings: "standings",
+  last_race: "last race",
+};
+
+const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "UTC" });
+
+export function snapshotLabel(snapshot: { stage: string; generated_at: string }): string {
+  if (snapshot.stage === "after_qualifying") return "After quali";
+  if (snapshot.stage === "after_sprint") return "After sprint";
+  const day = WEEKDAY.format(new Date(snapshot.generated_at));
+  return Number(snapshot.generated_at.slice(11, 13)) >= 18 ? `${day} night` : day;
+}

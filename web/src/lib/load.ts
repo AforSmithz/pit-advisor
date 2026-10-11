@@ -4,12 +4,15 @@ import type { ZodType } from "zod";
 import {
   briefView,
   calibrationView,
-  costView,
+  debriefView,
   driverView,
   forecastView,
-  pipelineView,
+  historyView,
+  lineageView,
   sprintView,
+  stewardsView,
   trackView,
+  upgradesView,
   weekendView,
 } from "./schemas";
 
@@ -26,14 +29,12 @@ async function read<T>(name: string, schema: ZodType<T>): Promise<T> {
   }
   const parsed = schema.safeParse(JSON.parse(raw));
   if (!parsed.success) {
-    throw new Error(
-      `${name}.json does not match the view contract: ${parsed.error.message}`,
-    );
+    throw new Error(`${name}.json does not match the view contract: ${parsed.error.message}`);
   }
   return parsed.data;
 }
 
-// the sprint view arrived after the others, so a lake that predates it builds without the plate
+// a view newer than the lake it is built against builds without its panel rather than failing
 async function optional<T>(name: string, schema: ZodType<T>): Promise<T | null> {
   try {
     await access(path.join(dataDir, `${name}.json`));
@@ -46,9 +47,12 @@ async function optional<T>(name: string, schema: ZodType<T>): Promise<T | null> 
 export const loadWeekend = () => read("weekend_view", weekendView);
 export const loadDriver = () => read("driver_view", driverView);
 export const loadTrack = () => read("track_view", trackView);
-export const loadPipeline = () => read("pipeline_view", pipelineView);
 export const loadForecast = () => read("forecast_view", forecastView);
 export const loadCalibration = () => read("calibration_view", calibrationView);
-export const loadCost = () => read("cost_view", costView);
 export const loadBrief = () => read("brief_view", briefView);
 export const loadSprint = () => optional("sprint_view", sprintView);
+export const loadHistory = () => optional("history_view", historyView);
+export const loadStewards = () => optional("stewards_view", stewardsView);
+export const loadUpgrades = () => optional("upgrades_view", upgradesView);
+export const loadDebrief = () => optional("debrief_view", debriefView);
+export const loadLineage = () => optional("lineage_view", lineageView);

@@ -309,6 +309,169 @@ export const calibrationView = z
       }),
     ),
     assumptions: z.array(assumption),
+    stage: z.string().default("race"),
+    market: z
+      .array(
+        z.object({
+          event: z.string(),
+          races: z.number().int(),
+          sources: z.record(z.string(), z.number().int()),
+          model_log_loss: z.number(),
+          market_log_loss: z.number(),
+          log_loss_gain: bounds,
+          brier_gain: bounds,
+        }),
+      )
+      .default([]),
+  })
+  .strict();
+
+const forecastDriver = forecastView.shape.drivers.element;
+
+export const historyView = z
+  .object({
+    ...viewHead,
+    event: eventContext,
+    snapshots: z.array(
+      z.object({
+        kind: z.string(),
+        stage: z.string(),
+        run_id: z.string(),
+        generated_at: z.string(),
+        repeat: z.boolean(),
+        drivers: z.array(
+          z.object({
+            driver_code: z.string(),
+            constructor_id: z.string(),
+            grid: z.number().int().nullable(),
+            win: z.number(),
+            podium: z.number(),
+            points: z.number(),
+          }),
+        ),
+      }),
+    ),
+  })
+  .strict();
+
+export const stewardsView = z
+  .object({
+    ...viewHead,
+    event: eventContext,
+    rulings: z.array(
+      z.object({
+        document: z.number().int(),
+        entry: z.number().int(),
+        kind: z.string(),
+        issued: z.string().nullable(),
+        session: z.string().nullable(),
+        car: z.number().int().nullable(),
+        driver: z.string().nullable(),
+        driver_code: z.string().nullable(),
+        competitor: z.string().nullable(),
+        fact: z.string().nullable(),
+        outcome: z.string().nullable(),
+        rule: z.string().nullable(),
+        offence: z.string().nullable(),
+        sanction: z.object({
+          kind: z.string(),
+          outcome: z.string(),
+          seconds: z.number().int().nullable(),
+          positions: z.number().int().nullable(),
+          text: z.string(),
+        }),
+      }),
+    ),
+    from_season: z.number().int().nullable(),
+    total_rulings: z.number().int(),
+    precedents: z.array(
+      z.object({
+        offence: z.string(),
+        label: z.string(),
+        rulings: z.number().int(),
+        outcomes: z.record(z.string(), z.number().int()),
+        seconds: z.record(z.string(), z.number().int()),
+      }),
+    ),
+  })
+  .strict();
+
+export const upgradesView = z
+  .object({
+    ...viewHead,
+    event: eventContext,
+    rounds: z.array(z.number().int()),
+    teams: z.array(
+      z.object({
+        constructor_id: z.string(),
+        rounds: z.array(
+          z.object({
+            round: z.number().int(),
+            read: z.boolean(),
+            parts: z.record(z.string(), z.number().int()),
+          }),
+        ),
+      }),
+    ),
+    this_event: z.array(
+      z.object({
+        constructor_id: z.string(),
+        ordinal: z.number().int(),
+        category: z.string(),
+        text: z.string(),
+      }),
+    ),
+  })
+  .strict();
+
+export const debriefView = z
+  .object({
+    ...viewHead,
+    event: eventContext,
+    called: z
+      .object({
+        stage: z.string(),
+        run_id: z.string(),
+        generated_at: z.string(),
+        drivers: z.array(forecastDriver),
+      })
+      .nullable(),
+    finish: z.array(
+      z.object({
+        driver_code: z.string(),
+        position: z.number().int().nullable(),
+        status: z.string(),
+      }),
+    ),
+    record: z.array(
+      z.object({
+        season: z.number().int(),
+        round: z.number().int(),
+        kind: z.string(),
+        stage: z.string(),
+        run_id: z.string(),
+        generated_at: z.string(),
+        drivers: z.number().int(),
+        log_loss: z.record(z.string(), z.number()),
+      }),
+    ),
+  })
+  .strict();
+
+export const lineageView = z
+  .object({
+    ...viewHead,
+    views: z.record(z.string(), z.array(z.string())),
+    tables: z.array(
+      z.object({
+        table: z.string(),
+        source: z.string().nullable(),
+        status: z.enum(["ok", "warn", "fail", "absent"]),
+        rows: z.string(),
+        freshness: z.string(),
+        raw_objects: z.number().int(),
+      }),
+    ),
   })
   .strict();
 
@@ -447,3 +610,13 @@ export type CalibrationView = z.infer<typeof calibrationView>;
 export type ScoredModel = CalibrationView["scored"][number];
 export type CurvePoint = ScoredModel["curves"][string][number];
 export type ForecastDriver = ForecastView["drivers"][number];
+export type HistoryView = z.infer<typeof historyView>;
+export type Snapshot = HistoryView["snapshots"][number];
+export type StewardsView = z.infer<typeof stewardsView>;
+export type Ruling = StewardsView["rulings"][number];
+export type Precedent = StewardsView["precedents"][number];
+export type UpgradesView = z.infer<typeof upgradesView>;
+export type DebriefView = z.infer<typeof debriefView>;
+export type LineageView = z.infer<typeof lineageView>;
+export type MarketGain = CalibrationView["market"][number];
+export type DriverHistory = DriverView["drivers"][number];
