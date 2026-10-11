@@ -2,14 +2,15 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <div className="pt-2">
-      <h1 className="legend text-4xl text-lume sm:text-5xl">No such reading</h1>
-      <p className="mt-4 max-w-prose text-lume-dim">
-        This dial only carries what the backend emitted for the current event.
+    <section className="raised flex flex-col items-start gap-4 rounded-[30px] px-7 py-8">
+      <h1 className="display text-[40px]">No such page</h1>
+      <p className="max-w-prose text-sm text-ink-3">
+        The site only carries what the pipeline published for the current weekend. A driver who has not raced in the
+        lake, or a circuit off this weekend, has no page.
       </p>
-      <Link href="/" className="engraved mt-8 inline-block text-lume hover:text-split-lit">
-        back to the weekend
+      <Link href="/" className="pill-on press rounded-full px-5 py-2.5 text-[13px] font-semibold">
+        Back to race week
       </Link>
-    </div>
+    </section>
   );
 }
