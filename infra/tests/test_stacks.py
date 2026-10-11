@@ -442,6 +442,7 @@ def test_the_pipeline_task_is_arm_and_small(transform_template: Template) -> Non
     _, task = only(transform_template, "AWS::ECS::TaskDefinition")
     assert task["Properties"]["RuntimePlatform"]["CpuArchitecture"] == "ARM64"
     assert task["Properties"]["Cpu"] == "512"
+    assert task["Properties"]["Memory"] == "2048"
     assert task["Properties"]["RequiresCompatibilities"] == ["FARGATE"]
 
 

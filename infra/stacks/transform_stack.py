@@ -298,7 +298,9 @@ class TransformStack(Stack):
             "PipelineTask",
             family=self.family,
             cpu=512,
-            memory_limit_mib=1024,
+            # a race weekend lands sprint qualifying, the sprint and the race in one process,
+            # and fastf1 holds on to each session it loads: 1 GiB was killed on the third
+            memory_limit_mib=2048,
             runtime_platform=ecs.RuntimePlatform(
                 cpu_architecture=ecs.CpuArchitecture.ARM64,
                 operating_system_family=ecs.OperatingSystemFamily.LINUX,
