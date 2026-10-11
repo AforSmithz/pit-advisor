@@ -26,18 +26,22 @@ TEAMS: Final = (
     ("williams", "williams"),
     ("haas", "haas"),
 )
-NO_UPDATES: Final = re.compile(r"No updates submitted", re.I)
-ROW: Final = re.compile(r"^\s*(\d{1,2})\s+\S", re.M)
+NO_UPDATES: Final = re.compile(r"No updates? submitted|No updates?\b", re.I)
+TITLE: Final = re.compile(r"^\s*Car Presentation\s*[\u2013-]", re.I)
+# pypdf sometimes runs the next row onto the end of the last description, two spaces after it
+ROW: Final = re.compile(r"(?:^\s*|(?<=\S\s\s))(\d{1,2})\s+[A-Z]", re.M)
 REASON: Final = re.compile(r"Performance\s*-|Circuit\s+specific\s*-|Reliability\b")
 # the header separates the date's words with non-breaking spaces, which \s covers and " " does not
 ISSUED: Final = re.compile(r"Date\s+(\d{1,2}\s\w+\s\d{4})\s*\nTime\s+(\d{1,2}:\d{2})")
 
 
-def team_of(line: str) -> str | None:
-    """A team header is a line written in capitals that names one of the teams."""
+def team_of(line: str, titled: bool = False) -> str | None:
+    """A team header names one of the teams, and is either written in capitals or is the first
+    line under a page's "Car Presentation" title. From 2025 most teams write their own name in
+    mixed case, which the capitals rule alone reads straight past."""
     stripped = line.strip()
     letters = [char for char in stripped if char.isalpha()]
-    if len(letters) < 4 or any(char.islower() for char in letters):
+    if len(letters) < 4 or (not titled and any(char.islower() for char in letters)):
         return None
     lowered = stripped.lower()
     return next((team for name, team in TEAMS if name in lowered), None)
@@ -68,10 +72,15 @@ def parse(text: str) -> list[dict[str, Any]]:
     lines = text.splitlines(keepends=True)
     starts: list[tuple[int, str, str]] = []
     offset = 0
+    titled = False
     for line in lines:
-        team = team_of(line)
+        team = team_of(line, titled)
         if team is not None:
             starts.append((offset, team, line.strip()))
+        if TITLE.match(line):
+            titled = True
+        elif line.strip():
+            titled = False
         offset += len(line)
     rows: list[dict[str, Any]] = []
     for index, (begin, team, header) in enumerate(starts):

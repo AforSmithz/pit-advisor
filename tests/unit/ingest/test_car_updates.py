@@ -37,6 +37,43 @@ def test_every_team_section_is_read_with_its_declared_updates():
     }
 
 
+# the 2026 layout: every team on its own page, titled, with the team writing its own name
+MIXED_CASE = (
+    "Car Presentation \u2013 Singapore Grand Prix \nMcLaren Mastercard F1 Team \nUpdated \n"
+    "1 Front Corner Circuit specific - \nCooling Range High Cooling Front Brake Duct \n \n"
+    "Car Presentation \u2013 2026 Singapore Grand Prix \nMercedes-AMG PETRONAS F1 Team \n \n"
+    "1 Front Wing Performance - Flow \nConditioning \n2 Front Wing \nEndplate \n"
+    "Performance - Flow \nConditioning \n \n"
+    "Car Presentation \u2013 Singapore Grand Prix \nWilliams \n \nNo Updates \n \n"
+    "Car Presentation \u2013 Singapore Grand Prix \nVisa Cash App Racing Bulls \n \n"
+    "No updates submitted for this event. \n"
+    "Car Presentation \u2013 Singapore Grand Prix \nTGR HAAS F1 TEAM \n \n"
+    "No update for this event \n"
+    "Car Presentation \u2013 Singapore Grand Prix \nOracle Red Bull Racing \n"
+    "1 Front wing Performance - \nLocal Load Revised end plate, the new wing improves load.  "
+    "2 Rear Wheel \nBodywork Reliability Enlarged exit duct \n"
+)
+
+
+def test_a_mixed_case_team_under_a_page_title_is_read():
+    rows = car_updates.parse(MIXED_CASE)
+    found = {(row["constructor_id"], row["ordinal"], row["category"]) for row in rows}
+    assert found == {
+        ("mclaren", 1, "circuit"),
+        ("mercedes", 1, "performance"),
+        ("mercedes", 2, "performance"),
+        ("williams", 0, "none"),
+        ("rb", 0, "none"),
+        ("haas", 0, "none"),
+        ("red_bull", 1, "performance"),
+        ("red_bull", 2, "reliability"),
+    }
+
+
+def test_a_mixed_case_line_away_from_a_title_is_not_a_header():
+    assert car_updates.team_of("improves cooling like the Ferrari duct did") is None
+
+
 def test_every_field_is_a_literal_substring_of_the_document():
     for row in car_updates.parse(DOCUMENT):
         for name in ("team", "reason", "text"):
