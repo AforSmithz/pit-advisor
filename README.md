@@ -44,10 +44,14 @@ marts and a regulations and race-report corpus, with citations.
 
 The lake covers 2021 to the current race of 2026. Every Thursday a state machine checks the
 calendar, and in a race week it refreshes the weather, the sessions, the marts and every view,
-including a short weekend brief. On a sprint weekend it runs
-again early on Saturday, once sprint qualifying is in, and publishes a sprint forecast. On
-Saturday night it runs a last time, and once qualifying is in it refreshes the race forecast on
-the qualifying order.
+including a short weekend brief. From then until the Tuesday after the race, a small function
+asks every fifteen minutes whether anything new is upstream. Once a session's data has landed
+(sprint qualifying, the sprint, qualifying, the race) it runs the pipeline again, so the sprint
+forecast stands on the sprint grid, the race forecast on the qualifying order, and the debrief
+lands an hour or two after the flag. A new stewards' document, such as a grid drop, re-runs the
+stewards and the forecast without the rest, and the weather is refreshed two hours before each
+session. Monday settles the weekend: amended results, market prices and the race write-up for
+the agent's corpus. Every run that changes a view ends by asking GitHub to rebuild the site.
 
 ## The honesty constraint
 
@@ -163,7 +167,12 @@ result and the baselines. That record starts with Singapore 2026.
 ## Architecture
 
 ```
-EventBridge rules (Thursday 06:00 UTC, Saturday 00:30 and 23:30 UTC)
+EventBridge rules (Thursday and Monday 06:00 UTC, every 15 minutes for the watch)
+  |
+  +-- Lambda  watch       race weekends only: the f1 timing archive, jolpica, fia.com
+  |     |                 starts one of the two machines below when something lands
+  |
+  +-- Step Functions  light-pipeline         stewards and forecast, or weather before a session
   |
   +-- Step Functions  weekend-pipeline        one Fargate task definition, one image
         |
@@ -178,7 +187,8 @@ EventBridge rules (Thursday 06:00 UTC, Saturday 00:30 and 23:30 UTC)
         +-- catalog sync         glue bronze tables from the contracts
         +-- dbt build            silver and gold, Iceberg MERGE
         +-- lineage check        every gold model traced back to raw
-        +-- emit views           weekend, driver, track, forecast, sprint, brief, pipeline
+        +-- emit views           every view the dashboard reads
+        +-- publish              repository_dispatch: github rebuilds the static site
 
 S3 (one bucket, prefix separated)
   raw/  bronze/  silver/  gold/  views/  quarantine/  docs/  cache/
@@ -329,6 +339,18 @@ in the lake, the state machine reads it back through its S3 integration, and a w
 race ends there. The alternative was a Lambda whose only job is a date comparison, or a list of
 race dates copied into EventBridge Scheduler, which would put the calendar in two places. The
 plan file also means any past Thursday's decision can be read back after the fact.
+
+Inside a race weekend the trigger is a poll, because nothing upstream can push. Jolpica is a
+plain REST API, FastF1 reads F1's static timing archive, and fia.com is a page of PDFs, none with
+a webhook. The watch asks the timing archive for the session clock and its `ArchiveStatus`, asks
+Jolpica whether the classification is in, and asks fia.com for the event's document list, about
+two hundred small requests over a weekend through the same per-source rate limits as the
+ingest. It waits for the archive to say complete rather than for the clock, because a session
+lands in bronze once and is never refetched, so pulling it half written would be permanent. Its
+requests skip the request ledger on purpose: recording a probe's ETag would turn the pipeline's
+real fetch of the same URL into a 304 for a payload `raw/` never received. The site is a static
+export, so a refreshed view only reaches it when GitHub rebuilds it; the pipeline's last step asks
+for that with a `repository_dispatch`, using a fine-grained token kept as an SSM SecureString.
 
 Some of this is deliberately over-engineered for the data volume. A medallion lake and a dbt
 project for two hundred megabytes is more machinery than the problem needs, which is the point:
