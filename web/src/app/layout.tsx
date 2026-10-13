@@ -67,7 +67,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           stamps={stamps}
           share={{ title, race: `${forecast.event.season}-${forecast.event.round}` }}
         >
-          <div className="relative min-h-dvh overflow-x-clip">
+          <div className="relative min-h-dvh overflow-clip">
             <div
               aria-hidden="true"
               className="pointer-events-none absolute -top-60 left-44 h-[620px] w-[820px] rounded-full bg-[radial-gradient(closest-side,rgba(79,125,255,0.18),transparent)]"
