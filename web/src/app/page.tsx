@@ -120,7 +120,7 @@ export default async function RaceWeek() {
         race={forecast}
         sprint={sprint?.state === "forecast" ? sprint.forecast : null}
         trust={forecast.evidence ? <Trust evidence={forecast.evidence} /> : null}
-        drift={<Drift snapshots={history?.snapshots ?? []} />}
+        drift={<Drift snapshots={history?.snapshots ?? []} start={history?.event.start_utc ?? null} />}
       />
     </>
   );
