@@ -19,6 +19,9 @@
   --color-aqua: #2ee6c5;
   --color-blue: #3a8bff;
   --color-sky: #7ea2ff;
+  --color-gold: #ffd25a;
+  --color-blush: #ff9fcf;
+  --color-orchid: #df7bff;
 
   --font-sans: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
   --font-mono: var(--font-chivo-mono), ui-monospace, "SF Mono", monospace;
@@ -39,6 +42,8 @@
   --inset-sm-shadow: inset 2px 2px 5px rgb(0 0 0 / 0.8), inset -2px -2px 5px rgb(255 255 255 / 0.03);
   --warm: linear-gradient(135deg, #ffb35c, #ff6a5c);
   --cool: linear-gradient(135deg, #2ee6c5, #3a8bff);
+  --mosaic: var(--color-signal), var(--color-coral), var(--color-magenta), var(--color-violet);
+  --mosaic-caps: var(--color-gold), var(--color-signal-hi), var(--color-blush), var(--color-orchid), var(--color-signal);
 }
 
 html,
@@ -206,5 +211,16 @@ body {
   .glide,
   .press {
     transition: none;
+  }
+}
+
+/* ignition waits behind the curtain so it plays as each card is revealed */
+html:has([data-curtain]) :is(.draw, .swing, .lit, .grow) {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-curtain] {
+    display: none;
   }
 }
