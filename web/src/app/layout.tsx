@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Archivo, Chivo_Mono, Saira_Condensed } from "next/font/google";
+import { Curtain } from "@/components/shell/curtain";
 import { Overlays, type ViewStamp } from "@/components/shell/overlays";
 import { Sidebar } from "@/components/shell/sidebar";
 import { lightsOut, raceShort, stamp } from "@/lib/format";
@@ -86,6 +87,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </div>
           </div>
         </Overlays>
+        <Curtain label={`R${forecast.event.round} ${raceShort(forecast.event.race_name)}  ·  ${lightsOut(forecast.event.start_utc)}`} />
+        <noscript>
+          <style>{"[data-curtain]{display:none}html .draw,html .swing,html .lit,html .grow{animation-play-state:running!important}"}</style>
+        </noscript>
       </body>
     </html>
   );

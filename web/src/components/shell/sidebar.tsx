@@ -40,6 +40,7 @@ export function Sidebar({
   return (
     <>
       <nav
+        data-split
         aria-label="Pit Advisor"
         className="raised sticky top-4 hidden h-[calc(100dvh-2rem)] min-h-[620px] w-[232px] shrink-0 flex-col gap-5 rounded-[30px] px-4 pt-5 pb-4 lg:flex"
       >
@@ -133,6 +134,7 @@ export function Sidebar({
       </nav>
 
       <nav
+        data-split
         aria-label="Pages"
         className="glass fixed inset-x-3 bottom-4 z-30 grid grid-cols-5 gap-1 rounded-3xl p-2 lg:hidden"
         style={{ background: "rgb(20 20 24 / 0.82)" }}
