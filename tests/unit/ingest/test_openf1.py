@@ -1,6 +1,7 @@
 import json
 from datetime import UTC, date, datetime
 
+import polars as pl
 import pytest
 
 from pitadvisor.ingest import http
@@ -17,7 +18,9 @@ from pitadvisor.ingest.openf1 import (
     url,
 )
 from pitadvisor.ingest.raw_store import RawStore
-from pitadvisor.types import SessionKey, SessionKind
+from pitadvisor.ingest.rebuild import rebuild_bronze
+from pitadvisor.quality.lineage import raw_count
+from pitadvisor.types import SessionKey, SessionKind, Source
 
 KEY = SessionKey(season=2026, round=18, session=SessionKind.RACE)
 BRONZE = "bronze/table=session_laps/season=2026/round=18/session=race/session_laps.parquet"
@@ -412,6 +415,22 @@ def test_backfill_without_a_calendar_asks_nothing(store, pauses):
 def test_the_season_listing_lands_in_raw_too(store, pauses):
     client_for(store, Upstream(), pauses).sessions(2026)
     assert [item.key for item in store.list("raw/source=openf1/season=2026/sessions-")]
+
+
+def test_bronze_is_rebuildable_from_the_openf1_raw(store, pauses):
+    ingest_session(client_for(store, Upstream(), pauses), store, KEY, 11396)
+    before = pl.read_parquet(store.get(BRONZE))
+    store.clear("bronze/")
+    rebuilt = rebuild_bronze(store, "run-2", source=Source.OPENF1)
+    assert [(o.source, o.round, o.rows) for o in rebuilt] == [(Source.OPENF1, 18, 7)]
+    after = pl.read_parquet(store.get(BRONZE))
+    columns = [name for name in before.columns if name not in ("run_id", "ingested_at")]
+    assert before.select(columns).equals(after.select(columns))
+
+
+def test_lineage_counts_the_openf1_laps_as_session_laps(store, pauses):
+    ingest_session(client_for(store, Upstream(), pauses), store, KEY, 11396)
+    assert raw_count(store, "session_laps") == 1
 
 
 def test_a_stint_starts_on_the_out_lap_even_when_openf1_starts_it_on_the_in_lap():

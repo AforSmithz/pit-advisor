@@ -312,7 +312,7 @@ def panel(store: ObjectStore, layer: Layer = Layer.BRONZE) -> Panel:
     paces, _ = session_paces(store, layer=layer)
     pace = pace_frame(paces, results, events)
     if not pace.height:
-        raise NoEventError("no clean pace to stand on, run 'pitadv backfill --source fastf1'")
+        raise NoEventError("no clean pace to stand on, run 'pitadv backfill --source openf1'")
 
     quali = quali_frame(qualifying, events)
     stacked = quali_events(quali, paces)

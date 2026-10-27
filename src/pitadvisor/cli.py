@@ -23,7 +23,7 @@ from pitadvisor.incidents import lake as incident_lake
 from pitadvisor.incidents.extract import extract as extract_decision
 from pitadvisor.incidents.parse import parse as parse_decision
 from pitadvisor.ingest import docs as doc_corpus
-from pitadvisor.ingest import fia_docs, jolpica
+from pitadvisor.ingest import fia_docs, jolpica, openf1
 from pitadvisor.ingest import schedule as weekend_schedule
 from pitadvisor.ingest.fastf1_session import backfill as session_backfill
 from pitadvisor.ingest.fastf1_session import ingest_session, weekend_in_progress
@@ -524,12 +524,15 @@ def backfill(
     ] = False,
     sessions: Annotated[
         list[SessionKind] | None,
-        typer.Option("--session", help="Session to pull, repeatable, fastf1 only."),
+        typer.Option("--session", help="Session to pull, repeatable, fastf1 and openf1 only."),
     ] = None,
 ) -> None:
     settings = get_settings()
     if source is Source.FASTF1:
         _backfill_sessions(from_, to, local, settings, sessions)
+        return
+    if source is Source.OPENF1:
+        _backfill_openf1(from_, to, local, settings, sessions)
         return
     if source is not Source.JOLPICA:
         raise typer.BadParameter(f"{source} has no backfill path yet")
@@ -568,6 +571,31 @@ def _backfill_sessions(
                 in_progress=weekend_in_progress,
             )
         )
+
+
+def _backfill_openf1(
+    from_: int, to: int, local: bool, settings: Settings, sessions: list[SessionKind] | None
+) -> None:
+    from pitadvisor.quality.checks import read_table
+
+    store, ledger, bucket_for = _runtime(local, settings)
+    races = read_table(store, Layer.BRONZE, "races")
+    if races is None:
+        typer.echo("races must be in bronze first, openf1 has no round numbers", err=True)
+        raise typer.Exit(1)
+    calendar: list[dict[str, Any]] = races.to_dicts()
+    client = openf1.OpenF1Client(
+        RawStore(store), ledger, RateLimiter(bucket_for("openf1")), _run_id()
+    )
+    kinds = tuple(sessions) if sessions else (SessionKind.RACE,)
+    for season in range(from_, to + 1):
+        typer.echo(f"season {season}")
+        held = {int(row["round"]): row["race_date"] for row in calendar if row["season"] == season}
+        try:
+            _render_outcomes(openf1.backfill(client, store, season, held, kinds))
+        except QuotaExhaustedError as exc:
+            typer.echo(f"stopped in {season}: {exc}. rerun to resume, raw and bronze are kept")
+            raise typer.Exit(0) from exc
 
 
 @app.command(name="markets", help="Prediction-market prices for past races, raw then bronze.")

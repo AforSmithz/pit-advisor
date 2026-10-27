@@ -29,7 +29,7 @@ TABLE_SOURCE: dict[str, Source] = {
     "laps": Source.JOLPICA,
     "pitstops": Source.JOLPICA,
     "weather": Source.OPEN_METEO,
-    "session_laps": Source.FASTF1,
+    "session_laps": Source.OPENF1,
 }
 
 

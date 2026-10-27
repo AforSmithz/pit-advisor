@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from pitadvisor.incidents import lake
 from pitadvisor.incidents.parse import parse as parse_decision
+from pitadvisor.ingest import openf1
 from pitadvisor.ingest.docs import pdf_text
 from pitadvisor.ingest.fastf1_session import to_records
 from pitadvisor.ingest.jolpica import materialize
@@ -221,6 +222,38 @@ def rebuild_sessions(
     return outcomes
 
 
+def rebuild_openf1(
+    store: ObjectStore, run_id: str, objects: list[RawObject], stamp: dict[str, Any]
+) -> list[IngestOutcome]:
+    parts: dict[SessionKey, dict[str, RawObject]] = {}
+    for found in objects:
+        if found.session is None or found.name not in openf1.PARTS:
+            continue
+        key = SessionKey(season=found.season, round=found.round, session=found.session)
+        parts.setdefault(key, {})[found.name] = found
+    outcomes: list[IngestOutcome] = []
+    for key, landed in sorted(parts.items(), key=lambda item: str(item[0])):
+        if set(landed) != set(openf1.PARTS):
+            continue
+        bundle = {name: _payload(store, found) for name, found in landed.items()}
+        records = openf1.to_records(bundle, key, stamp)
+        kept, dropped = contracts.validate("session_laps", contracts.SessionLapRow, records)
+        write_quarantine(store, "session_laps", key, run_id, dropped)
+        outcomes.append(
+            IngestOutcome(
+                source=Source.OPENF1,
+                table="session_laps",
+                season=key.season,
+                round=key.round,
+                rows=len(kept),
+                quarantined=len(dropped),
+                raw_objects=sorted(found.key for found in landed.values()),
+                bronze_objects=[write_bronze(store, "session_laps", key, kept)] if kept else [],
+            )
+        )
+    return outcomes
+
+
 def read_document(store: ObjectStore, found: RawObject) -> lake.Reading | None:
     """Parses one stewards' document, falling back to what a model already read for the prose
     ones. A prose document with nothing cached is not read here: rebuild costs no money."""
@@ -313,6 +346,8 @@ def rebuild_bronze(
     return [
         *rebuild_jolpica(store, run_id, by_source.get(Source.JOLPICA, []), stamp),
         *rebuild_weather(store, run_id, by_source.get(Source.OPEN_METEO, []), stamp),
+        # fastf1 replays after openf1, so a session both sources hold keeps the fastf1 laps
+        *rebuild_openf1(store, run_id, by_source.get(Source.OPENF1, []), stamp),
         *rebuild_sessions(store, run_id, by_source.get(Source.FASTF1, []), stamp),
         *rebuild_incidents(store, run_id, by_source.get(Source.FIA_DOCS, []), stamp),
     ]

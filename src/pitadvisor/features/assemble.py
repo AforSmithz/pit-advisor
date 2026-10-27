@@ -278,8 +278,8 @@ def assemble(
     pace = pace_frame(paces, results, events)
     if not pace.height:
         raise NoEventError(
-            "no clean pace to stand on: bronze has no fastf1 session_laps, "
-            "run 'pitadv backfill --source fastf1' first"
+            "no clean pace to stand on: bronze has no session_laps, "
+            "run 'pitadv backfill --source openf1' first"
         )
     quali = quali_frame(qualifying, events)
     stacked = quali_events(quali.filter(pl.col("race_date") < cutoff), paces)

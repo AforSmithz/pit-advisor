@@ -651,7 +651,7 @@ def test_metrics_says_what_is_missing_when_the_lake_has_no_session_laps(lake, of
     assert result.exit_code == 0, result.stdout
     result = CliRunner().invoke(cli.app, ["metrics", "--local"])
     assert result.exit_code == 1
-    assert "no fastf1 session_laps" in plain(result.stderr)
+    assert "bronze has no session_laps" in plain(result.stderr)
 
 
 def test_backtest_scores_the_simulation_and_writes_the_report(lake, seed_lake, tmp_path):

@@ -368,8 +368,9 @@ class TransformStack(Stack):
             .next(
                 self._run(
                     "IngestSessions",
-                    # sprint qualifying sets the sprint grid and the sprint feeds race pace
-                    "pitadv backfill --source fastf1 --from $FROM --to $SEASON --session race"
+                    # sprint qualifying sets the sprint grid and the sprint feeds race pace.
+                    # openf1 since f1's timing archive started asking for an f1 tv login
+                    "pitadv backfill --source openf1 --from $FROM --to $SEASON --session race"
                     " --session sprint_qualifying --session sprint",
                     environment=[
                         {"Name": "FROM", "Value.$": "States.Format('{}', $.walk_from)"},

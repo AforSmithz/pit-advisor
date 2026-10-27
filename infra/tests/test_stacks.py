@@ -513,7 +513,7 @@ def test_the_pipeline_builds_bronze_then_silver_then_views(transform_template: T
     assert "dbt build --project-dir transform --target athena_task" in definition
     # sessions walk from the plan, so a season's finale lands at the next season's first race
     assert (
-        "pitadv backfill --source fastf1 --from $FROM --to $SEASON --session race"
+        "pitadv backfill --source openf1 --from $FROM --to $SEASON --session race"
         " --session sprint_qualifying --session sprint"
     ) in definition
 

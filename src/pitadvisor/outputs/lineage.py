@@ -80,7 +80,7 @@ def lineage_view(
         traces.append(
             TableTrace(
                 table=table,
-                source=str(origin[0]) if origin else None,
+                source=" + ".join(str(source) for source, _ in origin) if origin else None,
                 status=_worst(statuses),
                 rows=rows[1] if rows else "",
                 freshness=fresh[1] if fresh else "",
