@@ -10,8 +10,9 @@ from pitadvisor.quality.contracts import (
     Quarantined,
     Reason,
     ResultRow,
+    SessionLapRow,
 )
-from pitadvisor.types import EventKey, Layer
+from pitadvisor.types import EventKey, Layer, SessionKey, SessionKind
 
 KEY = EventKey(season=2024, round=5)
 NOW = datetime(2024, 5, 6, 12, tzinfo=UTC)
@@ -218,3 +219,37 @@ def test_every_bronze_table_has_a_natural_key():
     assert set(TABLES) <= set(NATURAL_KEYS)
     for table, row in TABLES.items():
         assert set(NATURAL_KEYS[table]) <= set(row.model_fields), table
+
+
+def race_lap(round=5):
+    return SessionLapRow(
+        run_id="run-1",
+        ingested_at=NOW,
+        season=2024,
+        round=round,
+        session=SessionKind.RACE,
+        driver_code="NOR",
+        driver_number=4,
+        lap=1,
+        lap_time_millis=93401,
+    )
+
+
+def test_a_raced_round_without_race_laps_warns_and_still_passes(store):
+    for round_ in (5, 6):
+        write_bronze(store, "results", EventKey(season=2024, round=round_), [result(round=round_)])
+    race = SessionKey(season=2024, round=5, session=SessionKind.RACE)
+    write_bronze(store, "session_laps", race, [race_lap()])
+    found = report(store, Layer.BRONZE, now=NOW)
+    coverage = outcome_for(found, "session_coverage", "session_laps")
+    assert coverage.status is Status.WARN
+    assert coverage.detail.endswith("2024:6")
+    assert found.ok
+
+
+def test_full_session_coverage_is_ok(store):
+    write_bronze(store, "results", KEY, [result()])
+    race = SessionKey(season=2024, round=5, session=SessionKind.RACE)
+    write_bronze(store, "session_laps", race, [race_lap()])
+    found = report(store, Layer.BRONZE, now=NOW)
+    assert outcome_for(found, "session_coverage", "session_laps").status is Status.OK

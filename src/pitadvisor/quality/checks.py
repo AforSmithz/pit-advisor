@@ -270,6 +270,40 @@ def check_references(connection: duckdb.DuckDBPyConnection, present: set[str]) -
     return outcomes
 
 
+def check_session_coverage(
+    connection: duckdb.DuckDBPyConnection, present: set[str]
+) -> list[Outcome]:
+    """A race with a result and no laps behind it. A warning, not a failure: the run carries on
+    without that round's pace, and the gap is said out loud instead of found in a backtest."""
+    if "session_laps" not in present or "results" not in present:
+        return []
+    missing = connection.execute(
+        """
+        select distinct r.season, r.round from results r
+        where r.season >= (select min(season) from session_laps)
+          and not exists (
+              select 1 from session_laps s
+              where s.season = r.season and s.round = r.round and s.session = 'race'
+          )
+        order by 1, 2
+        """
+    ).fetchall()
+    rounds = ", ".join(f"{season}:{round_}" for season, round_ in missing)
+    return [
+        Outcome(
+            check="session_coverage",
+            table="session_laps",
+            status=Status.WARN if missing else Status.OK,
+            detail=(
+                f"{len(missing)} raced round{'' if len(missing) == 1 else 's'} without race laps: "
+                f"{rounds}"
+                if missing
+                else "every raced round has its race laps"
+            ),
+        )
+    ]
+
+
 def count_did_not_start(
     connection: duckdb.DuckDBPyConnection, present: set[str]
 ) -> list[Diagnostic]:
@@ -319,6 +353,7 @@ def report(
             outcomes.append(check_duplicates(connection, table, columns))
             outcomes.extend(check_nulls(connection, table, columns))
         outcomes.extend(check_references(connection, present))
+        outcomes.extend(check_session_coverage(connection, present))
         diagnostics = count_did_not_start(connection, present)
         if not present:
             outcomes.append(
