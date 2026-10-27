@@ -35,6 +35,7 @@ def test_source_values():
     assert {s.value for s in Source} == {
         "jolpica",
         "fastf1",
+        "openf1",
         "open_meteo",
         "fia_docs",
         "wikipedia",

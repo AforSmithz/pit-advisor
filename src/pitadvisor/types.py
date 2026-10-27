@@ -18,6 +18,7 @@ class Layer(StrEnum):
 class Source(StrEnum):
     JOLPICA = "jolpica"
     FASTF1 = "fastf1"
+    OPENF1 = "openf1"
     OPEN_METEO = "open_meteo"
     FIA_DOCS = "fia_docs"
     WIKIPEDIA = "wikipedia"
