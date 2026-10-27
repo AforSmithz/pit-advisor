@@ -655,7 +655,9 @@ def test_the_light_machine_knows_three_modes(transform_template: Template) -> No
     light = machine_definition(transform_template, f"pitadvisor-light-{ENV_NAME}")
     assert "pitadv ingest --source fia_docs --season $SEASON" in light
     assert "pitadv ingest --source open_meteo --season $SEASON --round $ROUND" in light
-    assert "pitadv markets && pitadv docs-sync --index" in light
+    assert "pitadv markets" in light
+    assert "pitadv docs-sync --index" in light
+    assert light.index("SettleMarkets") < light.index("SettleCorpus")
     assert "UnknownMode" in light
 
 

@@ -397,7 +397,11 @@ class AgentStack(Stack):
                     resources=[self.knowledge_base.attr_knowledge_base_arn],
                 ),
                 iam.PolicyStatement(
-                    actions=["bedrock:StartIngestionJob", "bedrock:GetIngestionJob"],
+                    actions=[
+                        "bedrock:StartIngestionJob",
+                        "bedrock:GetIngestionJob",
+                        "bedrock:ListIngestionJobs",
+                    ],
                     resources=[self.knowledge_base.attr_knowledge_base_arn],
                 ),
                 iam.PolicyStatement(

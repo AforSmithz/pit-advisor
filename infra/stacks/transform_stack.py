@@ -107,8 +107,10 @@ LIGHT_STEPS = {
         " && pitadv emit-views --views weekend,forecast,sprint,history,brief"
     ),
 }
-# monday: market prices for the race just run, then wikipedia's write-up into the corpus
-SETTLE = "pitadv markets && pitadv docs-sync --index"
+# monday: market prices for the race just run, then wikipedia's write-up into the corpus. two
+# tasks, so a corpus step that fails and is retried does not fetch the markets again
+SETTLE_MARKETS = "pitadv markets"
+SETTLE_CORPUS = "pitadv docs-sync --index"
 PUBLIC_SUBNET = (
     "The task runs in a public subnet with a public IP and no inbound rules. The alternative "
     "is a NAT Gateway at roughly $32/month, which is more than the whole budget for everything "
@@ -256,6 +258,7 @@ class TransformStack(Stack):
                     "bedrock:ListDataSources",
                     "bedrock:StartIngestionJob",
                     "bedrock:GetIngestionJob",
+                    "bedrock:ListIngestionJobs",
                 ],
                 resources=[f"arn:aws:bedrock:{self.region}:{self.account}:knowledge-base/*"],
             )
@@ -499,7 +502,9 @@ class TransformStack(Stack):
             )
         light.when(
             sfn.Condition.string_equals("$.mode", "settle"),
-            self._run("Settle", SETTLE, environment=[], timeout_seconds=3600),
+            sfn.Chain.start(
+                self._run("SettleMarkets", SETTLE_MARKETS, environment=[], timeout_seconds=3600)
+            ).next(self._run("SettleCorpus", SETTLE_CORPUS, environment=[], timeout_seconds=3600)),
         )
         light.otherwise(sfn.Fail(self, "UnknownMode", error="UnknownMode"))
         self.light_machine = sfn.StateMachine(
@@ -508,7 +513,8 @@ class TransformStack(Stack):
             state_machine_name=f"pitadvisor-light-{env_name}",
             definition_body=sfn.DefinitionBody.from_chainable(light),
             role=self._pipeline_role(env_name),
-            timeout=Duration.hours(1),
+            # settle is two tasks that may take an hour each
+            timeout=Duration.hours(2),
             tracing_enabled=True,
             logs=sfn.LogOptions(
                 destination=logs.LogGroup(
