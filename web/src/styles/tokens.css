@@ -42,6 +42,7 @@
   --inset-sm-shadow: inset 2px 2px 5px rgb(0 0 0 / 0.8), inset -2px -2px 5px rgb(255 255 255 / 0.03);
   --warm: linear-gradient(135deg, #ffb35c, #ff6a5c);
   --cool: linear-gradient(135deg, #2ee6c5, #3a8bff);
+  --slab: #141416;
   --mosaic: var(--color-signal), var(--color-coral), var(--color-magenta), var(--color-violet);
   --mosaic-caps: var(--color-gold), var(--color-signal-hi), var(--color-blush), var(--color-orchid), var(--color-signal);
 }
@@ -212,6 +213,11 @@ body {
   .press {
     transition: none;
   }
+}
+
+/* the cards stay hidden while the slab splits over where they will be */
+html[data-veil] main > :not(header) {
+  visibility: hidden;
 }
 
 /* ignition waits behind the curtain so it plays as each card is revealed */
