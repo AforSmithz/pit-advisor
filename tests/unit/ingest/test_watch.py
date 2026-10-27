@@ -26,67 +26,33 @@ from pitadvisor.ingest.watch import (
 WEEKEND = Weekend(
     season=2026, round=17, race_name="Singapore Grand Prix", race_date=date(2026, 10, 11)
 )
-FOLDER = "2026/2026-10-11_Singapore_Grand_Prix"
 
-INDEX = {
-    "Year": 2026,
-    "Meetings": [
-        {
-            "Name": "Miami Grand Prix",
-            "Sessions": [
-                {
-                    "Name": "Race",
-                    "StartDate": "2026-05-03T13:00:00",
-                    "EndDate": "2026-05-03T15:00:00",
-                    "GmtOffset": "-04:00:00",
-                    "Path": "2026/2026-05-03_Miami_Grand_Prix/2026-05-03_Race/",
-                }
-            ],
-        },
-        {
-            "Name": "Singapore Grand Prix",
-            "Sessions": [
-                {
-                    "Name": "Practice 1",
-                    "StartDate": "2026-10-09T16:30:00",
-                    "EndDate": "2026-10-09T17:30:00",
-                    "GmtOffset": "08:00:00",
-                    "Path": f"{FOLDER}/2026-10-09_Practice_1/",
-                },
-                {
-                    "Name": "Sprint Qualifying",
-                    "StartDate": "2026-10-09T20:30:00",
-                    "EndDate": "2026-10-09T21:14:00",
-                    "GmtOffset": "08:00:00",
-                    "Path": f"{FOLDER}/2026-10-09_Sprint_Qualifying/",
-                },
-                {
-                    "Name": "Sprint",
-                    "StartDate": "2026-10-10T17:00:00",
-                    "EndDate": "2026-10-10T18:00:00",
-                    "GmtOffset": "08:00:00",
-                    "Path": f"{FOLDER}/2026-10-10_Sprint/",
-                },
-                {
-                    "Name": "Qualifying",
-                    "StartDate": "2026-10-10T21:30:00",
-                    "EndDate": "2026-10-10T22:30:00",
-                    "GmtOffset": "08:00:00",
-                    "Path": f"{FOLDER}/2026-10-10_Qualifying/",
-                },
-                {
-                    "Name": "Race",
-                    "StartDate": "2026-10-11T20:00:00",
-                    "EndDate": "2026-10-11T22:00:00",
-                    "GmtOffset": "08:00:00",
-                    "Path": f"{FOLDER}/2026-10-11_Race/",
-                },
-            ],
-        },
-    ],
-}
 
-CLOCK = sessions(INDEX, WEEKEND.race_date)
+def listed(key, meeting, name, start, end, cancelled=False):
+    return {
+        "session_key": key,
+        "meeting_key": meeting,
+        "session_name": name,
+        "date_start": start,
+        "date_end": end,
+        "is_cancelled": cancelled,
+    }
+
+
+LISTING = [
+    listed(11100, 1280, "Race", "2026-05-03T20:00:00+00:00", "2026-05-03T22:00:00+00:00"),
+    listed(11380, 1296, "Practice 1", "2026-10-09T08:30:00+00:00", "2026-10-09T09:30:00+00:00"),
+    listed(
+        11382, 1296, "Sprint Qualifying", "2026-10-09T12:30:00+00:00", "2026-10-09T13:14:00+00:00"
+    ),
+    listed(11384, 1296, "Sprint", "2026-10-10T09:00:00+00:00", "2026-10-10T10:00:00+00:00"),
+    listed(11386, 1296, "Qualifying", "2026-10-10T13:30:00+00:00", "2026-10-10T14:30:00+00:00"),
+    listed(11388, 1296, "Race", "2026-10-11T12:00:00+00:00", "2026-10-11T14:00:00+00:00"),
+    # las vegas starts saturday night local, which is sunday in utc
+    listed(11420, 1300, "Race", "2026-11-22T04:00:00+00:00", "2026-11-22T06:00:00+00:00"),
+]
+
+CLOCK = sessions(LISTING, WEEKEND.race_date)
 AT = {session.kind: session for session in CLOCK}
 
 
@@ -110,13 +76,18 @@ def test_the_session_clock_is_read_in_utc_and_skips_practice():
     assert AT["race"].ends_at == datetime(2026, 10, 11, 14, tzinfo=UTC)
 
 
-def test_a_negative_offset_moves_the_clock_forward():
-    miami = sessions(INDEX, date(2026, 5, 3))
-    assert miami[0].starts_at == datetime(2026, 5, 3, 17, tzinfo=UTC)
+def test_a_night_race_past_midnight_utc_still_finds_its_weekend():
+    vegas = sessions(LISTING, date(2026, 11, 21))
+    assert [session.session_key for session in vegas] == [11420]
 
 
-def test_a_race_the_archive_does_not_list_has_no_clock():
-    assert sessions(INDEX, date(2026, 10, 25)) == []
+def test_a_race_openf1_does_not_list_has_no_clock():
+    assert sessions(LISTING, date(2026, 10, 25)) == []
+
+
+def test_a_cancelled_session_is_not_on_the_clock():
+    cancelled = [*LISTING[:-2], {**LISTING[-2], "is_cancelled": True}]
+    assert "race" not in {session.kind for session in sessions(cancelled, WEEKEND.race_date)}
 
 
 RACES = [
@@ -305,13 +276,16 @@ def fake_fetch(pages: dict[str, object], seen: list[str]):
     return fetch
 
 
-def test_live_probes_read_the_timing_archive_and_jolpica(store):
+def test_live_probes_read_openf1_and_jolpica(store):
     seen: list[str] = []
     pages = {
-        "https://livetiming.formula1.com/static/2026/Index.json": INDEX,
-        f"https://livetiming.formula1.com/static/{FOLDER}/2026-10-11_Race/ArchiveStatus.json": {
-            "Status": "Complete"
-        },
+        "https://api.openf1.org/v1/sessions?year=2026": LISTING,
+        "https://api.openf1.org/v1/race_control?session_key=11388": [
+            {"category": "Flag", "flag": "CHEQUERED", "message": "CHEQUERED FLAG"}
+        ],
+        "https://api.openf1.org/v1/race_control?session_key=11382": [
+            {"category": "Flag", "flag": "GREEN", "message": "GREEN LIGHT - PIT EXIT OPEN"}
+        ],
         "https://api.jolpi.ca/ergast/f1/2026/17/results.json": {
             "MRData": {"RaceTable": {"Races": [{"Results": [{"position": "1"}]}]}}
         },
@@ -405,7 +379,7 @@ def test_session_model_round_trips():
         kind="race",
         starts_at=datetime(2026, 1, 1, tzinfo=UTC),
         ends_at=datetime(2026, 1, 1, 2, tzinfo=UTC),
-        path="p/",
+        session_key=11388,
     )
     assert Session.model_validate_json(session.model_dump_json()) == session
 

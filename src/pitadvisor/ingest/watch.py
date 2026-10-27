@@ -8,14 +8,13 @@ from urllib.parse import quote
 
 from pydantic import BaseModel
 
-from pitadvisor.ingest import fia_docs, http
+from pitadvisor.ingest import fia_docs, http, openf1
 from pitadvisor.ingest.jolpica import endpoint, races_of
 from pitadvisor.ingest.ratelimit import LedgerEntry, RateLimiter
 from pitadvisor.ingest.raw_store import ObjectStore, RawStore
 from pitadvisor.types import Layer
 
 STATE_KEY: Final = f"{Layer.CACHE}/watch.json"
-TIMING: Final = "https://livetiming.formula1.com/static"
 WORKFLOW: Final = "publish.yml"
 
 # a weekend is watched from the thursday before its race to the tuesday after it
@@ -36,8 +35,8 @@ NAMES: Final = {
 }
 # what jolpica calls each classification. sprint qualifying has none, fastf1 is its only source
 CLASSIFICATION: Final = {"sprint": "sprint", "qualifying": "qualifying", "race": "results"}
-# the sessions whose laps the pipeline ingests through fastf1, so the timing archive has to be
-# complete first: a session lands in bronze once and is never refetched
+# the sessions whose laps the pipeline ingests through openf1, so race control has to have shown
+# the flag first: a session lands in bronze once and is never refetched
 ARCHIVED: Final = frozenset({"sprint_qualifying", "sprint", "race"})
 SNAPSHOT_BEFORE: Final = frozenset({"sprint", "qualifying", "race"})
 
@@ -46,7 +45,7 @@ class Session(BaseModel, frozen=True):
     kind: str
     starts_at: datetime
     ends_at: datetime
-    path: str
+    session_key: int
 
 
 class Weekend(BaseModel, frozen=True):
@@ -97,48 +96,32 @@ def watched(races: list[dict[str, Any]], today: date) -> Weekend | None:
     )
 
 
-def _offset(text: str) -> timedelta:
-    negative = text.startswith("-")
-    hours, minutes, seconds = (int(part) for part in text.lstrip("-").split(":"))
-    span = timedelta(hours=hours, minutes=minutes, seconds=seconds)
-    return -span if negative else span
+def _utc(stamp: str) -> datetime:
+    return datetime.fromisoformat(stamp).astimezone(UTC)
 
 
-def _utc(local: str, offset: str) -> datetime:
-    return (datetime.fromisoformat(local) - _offset(offset)).replace(tzinfo=UTC)
-
-
-def sessions(index: dict[str, Any], race_date: date) -> list[Session]:
-    """The timing archive names each meeting's folder after its race day, which is the one
-    thing it shares with jolpica: the two spell three race names differently."""
-    for meeting in index.get("Meetings", []):
-        found: list[Session] = []
-        for item in meeting.get("Sessions", []):
-            path = str(item.get("Path") or "")
-            parts = path.split("/")
-            if len(parts) < 2 or not parts[1][:10]:
-                continue
-            try:
-                day = date.fromisoformat(parts[1][:10])
-            except ValueError:
-                continue
-            if abs((day - race_date).days) > 1:
-                break
-            kind = NAMES.get(str(item.get("Name")))
-            if kind is None:
-                continue
-            offset = str(item.get("GmtOffset") or "00:00:00")
-            found.append(
-                Session(
-                    kind=kind,
-                    starts_at=_utc(str(item["StartDate"]), offset),
-                    ends_at=_utc(str(item["EndDate"]), offset),
-                    path=path,
-                )
-            )
-        if found:
-            return sorted(found, key=lambda session: session.starts_at)
-    return []
+def sessions(listing: list[dict[str, Any]], race_date: date) -> list[Session]:
+    """openf1 groups a weekend by meeting, and the race's day is the one thing it shares with
+    jolpica's calendar: the two spell race names differently."""
+    meetings = {
+        item.get("meeting_key")
+        for item in listing
+        if item.get("session_name") == "Race"
+        and abs((_utc(str(item["date_start"])).date() - race_date).days) <= 1
+    }
+    found = [
+        Session(
+            kind=NAMES[str(item["session_name"])],
+            starts_at=_utc(str(item["date_start"])),
+            ends_at=_utc(str(item["date_end"])),
+            session_key=int(item["session_key"]),
+        )
+        for item in listing
+        if item.get("meeting_key") in meetings
+        and str(item.get("session_name")) in NAMES
+        and not item.get("is_cancelled")
+    ]
+    return sorted(found, key=lambda session: session.starts_at)
 
 
 def due(now: datetime, weekend: Weekend, state: WatchState, probes: Probes) -> Action | None:
@@ -219,9 +202,8 @@ class Unrecorded:
         return None
 
 
-def _json(response: http.Response) -> dict[str, Any]:
-    # the timing archive writes a byte order mark ahead of every file
-    return json.loads(response.body.decode("utf-8-sig") or "{}")
+def _json(response: http.Response) -> Any:
+    return json.loads(response.body.decode("utf-8-sig") or "null")
 
 
 def live_probes(
@@ -254,12 +236,12 @@ def live_probes(
         return found.body.decode("utf-8", "replace") if found else None
 
     def clock(weekend: Weekend) -> list[Session]:
-        found = get(f"{TIMING}/{weekend.season}/Index.json", timing)
-        return sessions(_json(found), weekend.race_date) if found else []
+        found = get(openf1.url("sessions", year=weekend.season), timing)
+        return sessions(_json(found) or [], weekend.race_date) if found else []
 
     def archived(session: Session) -> bool:
-        found = get(f"{TIMING}/{session.path}ArchiveStatus.json", timing)
-        return bool(found) and _json(found).get("Status") == "Complete"
+        found = get(openf1.url("race_control", session_key=session.session_key), timing)
+        return bool(found) and openf1.finished(_json(found) or [])
 
     def classified(weekend: Weekend, resource: str) -> bool:
         found = get(endpoint(weekend.season, weekend.round, resource), jolpica)

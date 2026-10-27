@@ -52,7 +52,7 @@ def poll(settings: Settings) -> dict[str, Any]:
 
     probes = watch.live_probes(
         store,
-        _limiter(settings, dynamo, "f1_timing"),
+        _limiter(settings, dynamo, "openf1"),
         _limiter(settings, dynamo, "jolpica"),
         _limiter(settings, dynamo, "fia_docs"),
     )
