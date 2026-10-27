@@ -1,27 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { ease, hash, inset, lit, rgba, skyline } from "./mosaic";
+import { bounds, clip, dissolve, flat, grown, hash, pulled, seams } from "./mosaic";
+
+const left = { left: 0, top: 0, right: 600, bottom: 400 };
+const right = { left: 616, top: 0, right: 1000, bottom: 900 };
+const under = { left: 0, top: 416, right: 600, bottom: 900 };
 
 describe("mosaic", () => {
-  it("lights nothing at the start and every row at the end, whatever the lag", () => {
-    for (const lag of [0, 0.3, 1]) {
-      expect(lit(40, 0, lag)).toBe(0);
-      expect(lit(40, 1, lag)).toBe(40);
-    }
-  });
-
-  it("only ever adds rows as the sweep moves", () => {
-    let last = 0;
-    for (let p = 0; p <= 1; p += 0.01) {
-      const rows = lit(40, p, 0.7);
-      expect(rows).toBeGreaterThanOrEqual(last);
-      last = rows;
-    }
-  });
-
-  it("keeps the skyline and the hash inside the unit interval", () => {
-    for (const lag of skyline(200, 0.42)) {
-      expect(lag).toBeGreaterThanOrEqual(0);
-      expect(lag).toBeLessThanOrEqual(1);
+  it("keeps the dissolve and the hash inside the unit interval", () => {
+    for (const at of dissolve(80, 50, 0.42)) {
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(at).toBeLessThanOrEqual(1);
     }
     for (let i = 0; i < 500; i++) {
       const value = hash(i, i * 7, 3);
@@ -30,21 +18,53 @@ describe("mosaic", () => {
     }
   });
 
-  it("pins the easing to its ends", () => {
-    expect(ease(-1)).toBe(0);
-    expect(ease(0)).toBe(0);
-    expect(ease(0.5)).toBeCloseTo(0.5);
-    expect(ease(1)).toBe(1);
-    expect(ease(2)).toBe(1);
+  it("lets the left of the screen go before the right", () => {
+    const cols = 80;
+    const rows = 50;
+    const at = dissolve(cols, rows, 0.42);
+    const mean = (c: number) => {
+      let sum = 0;
+      for (let r = 0; r < rows; r++) sum += at[r * cols + c] ?? 0;
+      return sum / rows;
+    };
+    expect(mean(0)).toBeLessThan(mean(40));
+    expect(mean(40)).toBeLessThan(mean(79));
   });
 
-  it("writes a clip that measures from each edge of the screen", () => {
-    expect(inset({ left: 10, top: 20, right: 110, bottom: 220 }, 400, 300, 30)).toBe(
-      "inset(20px 290px 80px 10px round 30px)",
+  it("tiles the slab once every card takes its share of the gaps", () => {
+    const slab = bounds([left, right, under]);
+    expect(slab).toEqual({ left: 0, top: 0, right: 1000, bottom: 900 });
+    const tiles = [left, right, under].map((box) => grown(box, 8, slab));
+    expect(tiles[0]).toEqual({ left: 0, top: 0, right: 608, bottom: 408 });
+    expect(tiles[1]).toEqual({ left: 608, top: 0, right: 1000, bottom: 900 });
+    expect(tiles[2]).toEqual({ left: 0, top: 408, right: 608, bottom: 900 });
+  });
+
+  it("never clips a box inside out", () => {
+    const out = clip({ left: 900, top: 900, right: 1200, bottom: 1300 }, left);
+    expect(out.right).toBeGreaterThanOrEqual(out.left);
+    expect(out.bottom).toBeGreaterThanOrEqual(out.top);
+  });
+
+  it("pulls a card smaller and away from the centre", () => {
+    const out = pulled(left, { x: 500, y: 450 });
+    expect(out.right - out.left).toBeLessThan(600);
+    expect((out.left + out.right) / 2).toBeLessThan(300);
+    expect((out.top + out.bottom) / 2).toBeLessThan(200);
+  });
+
+  it("finds the cards that face each other across a gap", () => {
+    expect(seams([left, right, under])).toEqual([
+      { a: 0, b: 1, axis: "x" },
+      { a: 0, b: 2, axis: "y" },
+      { a: 2, b: 1, axis: "x" },
+    ]);
+  });
+
+  it("flattens a shadow list without touching its colours", () => {
+    expect(flat("rgba(0, 0, 0, 0.8) 10px 12px 28px 0px, rgba(255, 255, 255, 0.028) -7px -7px 16px 0px inset")).toBe(
+      "rgba(0, 0, 0, 0.8) 0px 0px 0px 0px, rgba(255, 255, 255, 0.028) 0px 0px 0px 0px inset",
     );
-  });
-
-  it("turns a token hex into rgba", () => {
-    expect(rgba("#8a5cff", 0.5)).toBe("rgba(138, 92, 255, 0.5)");
+    expect(flat("none")).toBe("none");
   });
 });
