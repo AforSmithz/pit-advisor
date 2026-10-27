@@ -1,0 +1,132 @@
+{
+  "season": 2026,
+  "rounds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17
+  ],
+  "rows": {
+    "fastf1": 22081,
+    "openf1": 22114,
+    "matched": 22072
+  },
+  "sessions": {
+    "fastf1": 23,
+    "openf1": 23
+  },
+  "lap_time_abs_diff_millis": {
+    "median": 0.0,
+    "p95": 134.0,
+    "max": 1081616.0
+  },
+  "lap_time_within_1ms": 0.9390329690944051,
+  "agreement": {
+    "compound": 0.9522924972816238,
+    "stint": 0.9985501993475897,
+    "lap_in_stint": 0.9637549836897427,
+    "tyre_life": 0.9003715114171802,
+    "pit_in": 0.997961217832548,
+    "pit_out": 0.9951522290685031,
+    "is_deleted": 0.984006886553099,
+    "is_accurate": 0.9272381297571584,
+    "position": 0.9667451975353389,
+    "green": 0.9873595505617978
+  },
+  "exclusion_agreement": 0.9048438207333636,
+  "exclusion_rate": {
+    "fastf1": 0.513427833884335,
+    "openf1": 0.5234953912886319
+  },
+  "exclusion_confusion": [
+    {
+      "exclusion": "no_lap_time",
+      "exclusion_openf1": "out_lap",
+      "len": 246
+    },
+    {
+      "exclusion": "no_lap_time",
+      "exclusion_openf1": "track_not_green",
+      "len": 178
+    },
+    {
+      "exclusion": "traffic",
+      "exclusion_openf1": null,
+      "len": 165
+    },
+    {
+      "exclusion": null,
+      "exclusion_openf1": "traffic",
+      "len": 159
+    },
+    {
+      "exclusion": null,
+      "exclusion_openf1": "deleted",
+      "len": 146
+    },
+    {
+      "exclusion": "traffic",
+      "exclusion_openf1": "no_compound",
+      "len": 127
+    },
+    {
+      "exclusion": "traffic",
+      "exclusion_openf1": "deleted",
+      "len": 107
+    },
+    {
+      "exclusion": "no_lap_time",
+      "exclusion_openf1": "off_regime",
+      "len": 105
+    },
+    {
+      "exclusion": null,
+      "exclusion_openf1": "no_compound",
+      "len": 71
+    },
+    {
+      "exclusion": "off_regime",
+      "exclusion_openf1": null,
+      "len": 64
+    },
+    {
+      "exclusion": null,
+      "exclusion_openf1": "track_not_green",
+      "len": 47
+    },
+    {
+      "exclusion": "off_regime",
+      "exclusion_openf1": "track_not_green",
+      "len": 43
+    }
+  ],
+  "fits": {
+    "fastf1": 19,
+    "openf1": 19,
+    "both": 19,
+    "driver_pace_abs_diff_millis": {
+      "median": 42.36779046515585,
+      "p95": 248.98363657719446,
+      "max": 582.4992686063633
+    },
+    "driver_pace_inside_fastf1_interval": 0.9942363112391931,
+    "tyre_slope_abs_diff_millis": {
+      "median": 1.2210727533386745,
+      "p95": 18.507023604438434,
+      "max": 18.9411021316754
+    }
+  }
+}
