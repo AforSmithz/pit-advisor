@@ -70,6 +70,11 @@ class UnknownFormatError(ValueError):
         super().__init__(f"unknown event format {event_format!r}")
 
 
+class UpstreamUnavailableError(RuntimeError):
+    def __init__(self, season: int, round_: int, session: SessionKind) -> None:
+        super().__init__(f"fastf1 has no laps for {season}:{round_} {session}")
+
+
 def sessions_for(event_format: str) -> tuple[SessionKind, ...]:
     try:
         return FORMATS[event_format]
@@ -98,7 +103,15 @@ def load_laps(season: int, round_: int, session: SessionKind, cache_dir: Path) -
     api.Cache.enable_cache(str(cache_dir))
     loaded: Any = api.get_session(season, round_, IDENTIFIERS[session])
     loaded.load(laps=True, telemetry=False, weather=False, messages=False)
-    return loaded.laps
+    # every archive fetch that fails is only logged, the error surfaces when .laps is read.
+    # since 2026-10 the archive wants an f1 tv login, so this is the normal path now
+    try:
+        laps: Any = loaded.laps
+    except api.exceptions.DataNotLoadedError as exc:
+        raise UpstreamUnavailableError(season, round_, session) from exc
+    if len(laps) == 0:
+        raise UpstreamUnavailableError(season, round_, session)
+    return laps
 
 
 def _jsonable(value: Any) -> Any:
@@ -351,5 +364,16 @@ def backfill(
                     )
                 )
                 continue
-            outcomes.append(ingest_session(store, key, cache_dir, run_id, loader, sync_cache))
+            try:
+                outcomes.append(ingest_session(store, key, cache_dir, run_id, loader, sync_cache))
+            except UpstreamUnavailableError:
+                outcomes.append(
+                    IngestOutcome(
+                        source=Source.FASTF1,
+                        table="session_laps",
+                        season=season,
+                        round=round_,
+                        skipped=f"{kind} not available upstream",
+                    )
+                )
     return outcomes

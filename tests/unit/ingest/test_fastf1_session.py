@@ -1,4 +1,6 @@
 import json
+import sys
+import types
 from datetime import UTC, date, datetime, timedelta
 
 import polars as pl
@@ -6,9 +8,11 @@ import pytest
 
 from pitadvisor.ingest.fastf1_session import (
     UnknownFormatError,
+    UpstreamUnavailableError,
     backfill,
     held_events,
     ingest_session,
+    load_laps,
     millis,
     running_events,
     serialize,
@@ -346,3 +350,72 @@ def test_backfill_takes_the_run_sessions_of_a_weekend_under_way(store):
     assert not store.exists(
         "bronze/table=session_laps/season=2026/round=17/session=race/session_laps.parquet"
     )
+
+
+def _unavailable(season, round_, session, _cache_dir):
+    if round_ == 2:
+        raise UpstreamUnavailableError(season, round_, session)
+    return Laps([lap()])
+
+
+def test_a_session_upstream_will_not_serve_is_skipped_not_fatal(store):
+    outcomes = backfill(
+        store,
+        2024,
+        cache_dir=None,
+        run_id="run-1",
+        loader=_unavailable,
+        schedule=schedule(**{"1": "conventional", "2": "conventional", "3": "conventional"}),
+    )
+    assert [(o.round, o.rows, o.skipped) for o in outcomes] == [
+        (1, 1, None),
+        (2, 0, "race not available upstream"),
+        (3, 1, None),
+    ]
+    assert not store.exists(
+        "bronze/table=session_laps/season=2024/round=02/session=race/session_laps.parquet"
+    )
+
+
+class _NotLoadedError(Exception):
+    pass
+
+
+class _Session:
+    def __init__(self, laps):
+        self._laps = laps
+
+    def load(self, **_):
+        return None
+
+    @property
+    def laps(self):
+        if self._laps is None:
+            raise _NotLoadedError("The data you are trying to access has not been loaded yet.")
+        return self._laps
+
+
+def _fake_fastf1(monkeypatch, laps):
+    fake = types.SimpleNamespace(
+        Cache=types.SimpleNamespace(enable_cache=lambda _: None),
+        exceptions=types.SimpleNamespace(DataNotLoadedError=_NotLoadedError),
+        get_session=lambda *_: _Session(laps),
+    )
+    monkeypatch.setitem(sys.modules, "fastf1", fake)
+
+
+def test_load_laps_names_an_archive_that_refused_every_file(monkeypatch, tmp_path):
+    _fake_fastf1(monkeypatch, None)
+    with pytest.raises(UpstreamUnavailableError, match="2026:18 race"):
+        load_laps(2026, 18, SessionKind.RACE, tmp_path)
+
+
+def test_load_laps_treats_an_empty_session_as_unavailable(monkeypatch, tmp_path):
+    _fake_fastf1(monkeypatch, [])
+    with pytest.raises(UpstreamUnavailableError):
+        load_laps(2026, 18, SessionKind.RACE, tmp_path)
+
+
+def test_load_laps_passes_real_laps_through(monkeypatch, tmp_path):
+    _fake_fastf1(monkeypatch, [lap()])
+    assert load_laps(2026, 18, SessionKind.RACE, tmp_path) == [lap()]
