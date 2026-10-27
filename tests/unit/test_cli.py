@@ -1002,3 +1002,65 @@ def test_compare_refuses_a_knob_the_model_does_not_have(lake, seed_lake, tmp_pat
     )
     assert result.exit_code != 0
     assert "no_such_knob" in plain(result.stderr)
+
+
+class Corpus:
+    def __init__(self, indexed_at, refuse=None):
+        self.indexed_at = indexed_at
+        self.refuse = refuse
+        self.started = 0
+
+    def list_ingestion_jobs(self, **_):
+        found = [{"startedAt": self.indexed_at}] if self.indexed_at else []
+        return {"ingestionJobSummaries": found}
+
+    def start_ingestion_job(self, **_):
+        self.started += 1
+        if self.refuse:
+            raise ClientError(
+                {"Error": {"Code": "ValidationException", "Message": self.refuse}},
+                "StartIngestionJob",
+            )
+        return {"ingestionJob": {"ingestionJobId": "job-1", "status": "COMPLETE", "statistics": {}}}
+
+
+@pytest.fixture
+def reindexing(monkeypatch, tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    store = LocalObjectStore(tmp_path / "lake")
+    store.put("docs/source=wikipedia/kind=race/monza.txt", b"Monza rewards low drag.")
+    monkeypatch.setattr(cli, "boto_session", lambda *_: None)
+    configured = Settings(knowledge_base_id="KB1", data_source_id="DS1")
+
+    def run(client):
+        monkeypatch.setattr(cli, "_client", lambda *_: client)
+        cli._reindex(configured, store)
+        return client
+
+    return run, datetime.now(UTC), timedelta(hours=1)
+
+
+def test_reindex_leaves_an_unchanged_corpus_alone(reindexing, capsys):
+    run, now, hour = reindexing
+    client = run(Corpus(now + hour))
+    assert client.started == 0
+    assert "nothing in the corpus changed" in capsys.readouterr().out
+
+
+def test_reindex_starts_a_job_for_a_changed_corpus(reindexing):
+    run, now, hour = reindexing
+    assert run(Corpus(now - hour)).started == 1
+
+
+def test_an_embedding_quota_defers_the_index_without_failing(reindexing, capsys):
+    run, now, hour = reindexing
+    client = run(Corpus(now - hour, refuse="Too many tokens (Status Code: 429)"))
+    assert client.started == 1
+    assert "index deferred, 1 corpus objects pending" in capsys.readouterr().err
+
+
+def test_any_other_refusal_still_fails_the_index(reindexing):
+    run, now, hour = reindexing
+    with pytest.raises(ClientError):
+        run(Corpus(now - hour, refuse="no such data source"))

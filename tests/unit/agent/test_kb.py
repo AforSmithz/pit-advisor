@@ -1,13 +1,18 @@
 import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
+from botocore.exceptions import ClientError
 
 from pitadvisor.agent.kb import (
+    EmbeddingThrottledError,
     IngestionError,
     KnowledgeBase,
     LocalCorpus,
+    changed_since,
     chunks,
     find,
+    last_indexed,
     start_ingestion,
 )
 
@@ -194,3 +199,63 @@ class Listing:
 def test_the_corpus_is_found_by_name():
     assert find(Listing(), "pitadvisor-corpus-dev") == ("KB1", "DS1")
     assert find(Listing(), "pitadvisor-corpus-prod") is None
+
+
+QUOTA = (
+    "Knowledge base role arn:aws:iam::123456789012:role/kb is not able to call specified bedrock "
+    "embedding model: Too many tokens, please wait before trying again. (Service: "
+    "BedrockRuntime, Status Code: 429)"
+)
+
+
+class Refusing(FakeIngest):
+    def __init__(self, message):
+        super().__init__()
+        self.message = message
+
+    def start_ingestion_job(self, **kwargs):
+        raise ClientError(
+            {"Error": {"Code": "ValidationException", "Message": self.message}},
+            "StartIngestionJob",
+        )
+
+
+def test_an_embedding_quota_of_zero_is_its_own_error():
+    with pytest.raises(EmbeddingThrottledError):
+        start_ingestion(Refusing(QUOTA), "kb-1", "ds-1", sleep=lambda _: None)
+
+
+def test_any_other_refusal_is_raised_as_it_came():
+    with pytest.raises(ClientError):
+        start_ingestion(Refusing("data source not found"), "kb-1", "ds-1", sleep=lambda _: None)
+
+
+class Jobs:
+    def __init__(self, summaries):
+        self.summaries = summaries
+        self.asked = {}
+
+    def list_ingestion_jobs(self, **kwargs):
+        self.asked = kwargs
+        return {"ingestionJobSummaries": self.summaries}
+
+
+def test_the_last_index_is_the_newest_complete_job():
+    when = datetime(2026, 10, 12, 6, tzinfo=UTC)
+    client = Jobs([{"startedAt": when, "status": "COMPLETE"}])
+    assert last_indexed(client, "kb-1", "ds-1") == when
+    assert client.asked["filters"][0]["values"] == ["COMPLETE"]
+    assert client.asked["sortBy"]["order"] == "DESCENDING"
+
+
+def test_a_corpus_never_indexed_has_no_last_index():
+    assert last_indexed(Jobs([]), "kb-1", "ds-1") is None
+
+
+def test_changed_since_counts_documents_and_sidecars_written_after_the_index(store):
+    corpus(store)
+    before = datetime.now(UTC) - timedelta(hours=1)
+    after = datetime.now(UTC) + timedelta(hours=1)
+    assert changed_since(store, before) == 4
+    assert changed_since(store, after) == 0
+    assert changed_since(store, None) == 4

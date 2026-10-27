@@ -1441,7 +1441,7 @@ def docs_sync(
         )
         typer.echo(doc_corpus.add_curated(store, add, item))
         if index:
-            _reindex(settings)
+            _reindex(settings, store)
         return
 
     def announce(outcome: doc_corpus.DocOutcome) -> None:
@@ -1455,7 +1455,7 @@ def docs_sync(
         written = [item for item in notes if item.key]
         typer.echo(f"{len(written)} documents, {len(doc_corpus.corpus(store))} in the corpus")
         if index:
-            _reindex(settings)
+            _reindex(settings, store)
         return
 
     if regulations:
@@ -1472,7 +1472,7 @@ def docs_sync(
         written = [item for item in outcomes if item.key]
         typer.echo(f"{len(written)} documents, {len(doc_corpus.corpus(store))} in the corpus")
         if index:
-            _reindex(settings)
+            _reindex(settings, store)
         return
 
     limiter = RateLimiter(bucket_for("wikipedia"))
@@ -1490,7 +1490,7 @@ def docs_sync(
     written = [item for item in outcomes if item.key]
     typer.echo(f"{len(written)} documents, {len(doc_corpus.corpus(store))} in the corpus")
     if index:
-        _reindex(settings)
+        _reindex(settings, store)
 
 
 def _issued(value: str | None) -> date | None:
@@ -1502,7 +1502,7 @@ def _issued(value: str | None) -> date | None:
         raise typer.BadParameter(f"{value} is not a date") from exc
 
 
-def _reindex(settings: Settings) -> None:
+def _reindex(settings: Settings, store: ObjectStore) -> None:
     client = _client(boto_session(settings), "bedrock-agent", settings.aws_region)
     if not settings.knowledge_base_id or not settings.data_source_id:
         # the pipeline task has no line to the agent stack, so it finds the corpus by name
@@ -1516,8 +1516,18 @@ def _reindex(settings: Settings) -> None:
             err=True,
         )
         raise typer.Exit(1)
+    since = agent_kb.last_indexed(client, settings.knowledge_base_id, settings.data_source_id)
+    pending = agent_kb.changed_since(store, since)
+    if since is not None and not pending:
+        typer.echo(f"nothing in the corpus changed since the index of {since:%Y-%m-%d %H:%M}")
+        return
     try:
         job = agent_kb.start_ingestion(client, settings.knowledge_base_id, settings.data_source_id)
+    except agent_kb.EmbeddingThrottledError as exc:
+        # the account's embedding quota, not this run. the corpus is in the lake already and
+        # the next settle finds the same objects pending, so failing here would only redo markets
+        typer.echo(f"index deferred, {pending} corpus objects pending: {exc}", err=True)
+        return
     except agent_kb.IngestionError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc

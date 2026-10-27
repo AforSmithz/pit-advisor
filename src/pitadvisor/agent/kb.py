@@ -5,8 +5,10 @@ import time
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Final, cast
 
+from botocore.exceptions import ClientError
 from pydantic import BaseModel
 
 from pitadvisor.ingest.docs import METADATA_SUFFIX
@@ -100,6 +102,34 @@ class IngestionError(RuntimeError):
     pass
 
 
+class EmbeddingThrottledError(IngestionError):
+    """Bedrock checks the embedding model before it accepts a job, and an account whose
+    embedding quota is zero fails that check as a validation error carrying a 429."""
+
+
+def _throttled(exc: ClientError) -> bool:
+    message = str(exc.response.get("Error", {}).get("Message", ""))
+    return "Too many tokens" in message or "Status Code: 429" in message
+
+
+def last_indexed(client: Any, knowledge_base_id: str, data_source_id: str) -> datetime | None:
+    found = client.list_ingestion_jobs(
+        knowledgeBaseId=knowledge_base_id,
+        dataSourceId=data_source_id,
+        filters=[{"attribute": "STATUS", "operator": "EQ", "values": ["COMPLETE"]}],
+        sortBy={"attribute": "STARTED_AT", "order": "DESCENDING"},
+        maxResults=1,
+    )["ingestionJobSummaries"]
+    return cast(datetime, found[0]["startedAt"]) if found else None
+
+
+def changed_since(store: ObjectStore, since: datetime | None) -> int:
+    # sidecars count too: the metadata is what the retrieval filter reads
+    return sum(
+        1 for item in store.list(f"{Layer.DOCS}/") if since is None or item.modified_at > since
+    )
+
+
 class Ingestion(BaseModel, frozen=True):
     job_id: str
     status: str
@@ -128,9 +158,14 @@ def start_ingestion(
 ) -> Ingestion:
     """Tell bedrock to reindex docs/. Nothing else does: writing a document to the lake does
     not put it in the vector index."""
-    started: dict[str, Any] = client.start_ingestion_job(
-        knowledgeBaseId=knowledge_base_id, dataSourceId=data_source_id
-    )
+    try:
+        started: dict[str, Any] = client.start_ingestion_job(
+            knowledgeBaseId=knowledge_base_id, dataSourceId=data_source_id
+        )
+    except ClientError as exc:
+        if _throttled(exc):
+            raise EmbeddingThrottledError(str(exc)) from exc
+        raise
     job = started["ingestionJob"]
     if not wait:
         return _ingestion(job)
