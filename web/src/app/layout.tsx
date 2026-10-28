@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { Archivo, Chivo_Mono, Saira_Condensed } from "next/font/google";
-import { Curtain } from "@/components/shell/curtain";
 import { Overlays, type ViewStamp } from "@/components/shell/overlays";
-import { Sidebar } from "@/components/shell/sidebar";
-import { lightsOut, raceShort, stamp } from "@/lib/format";
 import {
   loadCalibration,
   loadDebrief,
@@ -68,26 +65,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           stamps={stamps}
           share={{ title, race: `${forecast.event.season}-${forecast.event.round}` }}
         >
-          <div className="relative min-h-dvh overflow-clip">
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute -top-60 left-44 h-[620px] w-[820px] rounded-full bg-[radial-gradient(closest-side,rgba(79,125,255,0.18),transparent)]"
-            />
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute top-72 -right-52 h-[700px] w-[760px] rounded-full bg-[radial-gradient(closest-side,rgba(255,95,109,0.13),transparent)]"
-            />
-            <div className="relative flex gap-4 p-4 pb-28 lg:pb-4">
-              <Sidebar
-                race={`R${forecast.event.round} ${raceShort(forecast.event.race_name)}`}
-                lightsOut={lightsOut(forecast.event.start_utc)}
-                asOf={stamp(forecast.generated_at)}
-              />
-              <main className="flex min-w-0 flex-1 flex-col gap-4">{children}</main>
-            </div>
-          </div>
+          {children}
         </Overlays>
-        <Curtain label={`R${forecast.event.round} ${raceShort(forecast.event.race_name)}  ·  ${lightsOut(forecast.event.start_utc)}`} />
         <noscript>
           <style>{"[data-curtain]{display:none}html .draw,html .swing,html .lit,html .grow{animation-play-state:running!important}"}</style>
         </noscript>
