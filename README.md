@@ -16,8 +16,9 @@ twenty dollar per month budget, which is a design constraint rather than an afte
 ## What exists today
 
 All of it, end to end, in one AWS account. Three sources land in the lake: Jolpica results,
-qualifying, pit stops and schedules, Open-Meteo weather snapshots per event, and FastF1 race
-session laps. They all go through the same path: a conditional HTTP GET under a token bucket, the
+qualifying, pit stops and schedules, Open-Meteo weather snapshots per event, and race session
+laps from OpenF1, with FastF1 behind everything up to the 2026 Singapore Grand Prix. They all go
+through the same path: a conditional HTTP GET under a token bucket, the
 response written to `raw/` verbatim with its request metadata, a parse into typed rows, a pydantic
 contract per table, and Parquet in `bronze/` partitioned by season and round. Rows that fail their
 contract land in `quarantine/` with the reason attached instead of failing the load. The FIA's
@@ -169,7 +170,7 @@ result and the baselines. That record starts with Singapore 2026.
 ```
 EventBridge rules (Thursday and Monday 06:00 UTC, every 15 minutes for the watch)
   |
-  +-- Lambda  watch       race weekends only: the f1 timing archive, jolpica, fia.com
+  +-- Lambda  watch       race weekends only: openf1, jolpica, fia.com
   |     |                 starts one of the two machines below when something lands
   |
   +-- Step Functions  light-pipeline         stewards and forecast, or weather before a session
@@ -182,7 +183,7 @@ EventBridge rules (Thursday and Monday 06:00 UTC, every 15 minutes for the watch
         +-- ingest open-meteo    forecast for the coming race
         +-- stewards             crawl the season's FIA documents, rebuild grid drops
         +-- car updates          parse the declared car updates
-        +-- ingest fastf1        race, sprint and sprint qualifying sessions, S3-backed cache
+        +-- ingest openf1        race, sprint and sprint qualifying sessions, once flagged
         +-- quality gate         contracts, freshness, keys, references
         +-- catalog sync         glue bronze tables from the contracts
         +-- dbt build            silver and gold, Iceberg MERGE
@@ -240,11 +241,29 @@ Results, standings, qualifying, grids, laps, pit stops and schedules come from
 stopped receiving data in early 2025. It keeps an Ergast-compatible response shape, which is
 why the bronze schemas look conventional. Its practical limit is the request cap.
 
-Session timing, per-lap times, stints and compounds, weather and track status come from
-[FastF1](https://github.com/theOehrly/Fast-F1). It is the only free route to lap-level detail.
-It is also slow on a cold cache and heavy in dependencies, which is why it runs as a Fargate
-task with an S3-backed cache rather than as a Lambda. FastF1 output stays in a private account
-and is not republished; no timing data is committed to this repository.
+Per-lap times, stints and compounds, pit stops and track status come from
+[OpenF1](https://openf1.org/), whose historical data is free. Each session is seven requests:
+the session, its drivers, laps, stints, pit stops, race control messages and running order.
+Each response lands in `raw/` as it came, and is mapped into the same `session_laps` table
+the rest of the pipeline already read. Race control is the only place track status and
+track-limits deletions live, so the mapper rebuilds both from it: a safety car runs until the
+leader starts the lap after it comes in, and a deleted lap is matched by the time the message
+quotes rather than the lap number, because the two sources disagree on lap numbering for at
+least one race. A session is not fetched until race control has shown the chequered flag.
+
+Until October 2026 this was [FastF1](https://github.com/theOehrly/Fast-F1), and everything up to
+the 2026 Singapore Grand Prix still is. FastF1 reads F1's own timing archive, and in
+mid-October that archive started refusing anyone without an F1 TV login. Rather than put a paid
+login inside the pipeline, the source was replaced. Before it was trusted, OpenF1 was pulled for
+the 23 race and sprint sessions of 2026 that FastF1 already covered and compared lap by lap:
+22,072 of 22,081 laps matched, and 99.4% of drivers' clean-pace estimates landed inside
+FastF1's own interval, a median 42 ms apart. The comparison also found that the FastF1 data had
+never marked a lap deleted for track limits, because it was loaded without race control
+messages, so the switch quietly fixed a bias as well. The script and its numbers are in
+`scripts/openf1_overlap.py` and `results/openf1_overlap.json`. OpenF1 is unofficial and built on
+F1's live feed, so it would fail the same way if that were locked too. Jolpica's lap chart is the
+fallback of last resort, without tyres or track status. None of this timing data is republished,
+and none is committed to this repository.
 
 Weather comes from [Open-Meteo](https://open-meteo.com/), free and keyless, using circuit
 coordinates from Jolpica, snapshotted at fetch time so a past prediction can be replayed against
@@ -341,12 +360,12 @@ race dates copied into EventBridge Scheduler, which would put the calendar in tw
 plan file also means any past Thursday's decision can be read back after the fact.
 
 Inside a race weekend the trigger is a poll, because nothing upstream can push. Jolpica is a
-plain REST API, FastF1 reads F1's static timing archive, and fia.com is a page of PDFs, none with
-a webhook. The watch asks the timing archive for the session clock and its `ArchiveStatus`, asks
-Jolpica whether the classification is in, and asks fia.com for the event's document list, about
-two hundred small requests over a weekend through the same per-source rate limits as the
-ingest. It waits for the archive to say complete rather than for the clock, because a session
-lands in bronze once and is never refetched, so pulling it half written would be permanent. Its
+plain REST API, so is OpenF1, and fia.com is a page of PDFs, none with a webhook. The watch asks
+OpenF1 for the weekend's session times and whether race control has shown the chequered flag,
+asks Jolpica whether the classification is in, and asks fia.com for the event's document list,
+about two hundred small requests over a weekend through the same per-source rate limits as the
+ingest. It waits for the flag rather than for the clock, because a session lands in bronze once
+and is never refetched, so pulling it half written would be permanent. Its
 requests skip the request ledger on purpose: recording a probe's ETag would turn the pipeline's
 real fetch of the same URL into a 304 for a payload `raw/` never received. The site is a static
 export, so a refreshed view only reaches it when GitHub rebuilds it; the pipeline's last step asks
@@ -466,8 +485,9 @@ under safety car, deleted for track limits, or in and out of the pits are all re
 the fit. The count of laps dropped per reason is published as a diagnostic, because silently
 discarding most of the field's laps produces a very clean model of almost nothing.
 
-Historical coverage is limited by what FastF1 exposes, which is roughly 2018 onward for
-lap-level detail, and regulation changes in 2022 and 2026 mean older data describes cars that no
+Historical lap-level detail goes back as far as FastF1 reached, roughly 2018, and anything new
+depends on OpenF1, which starts in 2023 and is a community service rather than an official
+feed. Regulation changes in 2022 and 2026 mean older data describes cars that no
 longer exist, so time decay does most of the work of forgetting. 2026 is the hard case: it is a
 full regulation reset, and every prior the early-season numbers lean on was fitted on the
 previous generation of cars. The intervals widen as evidence thins, but they do not know about
