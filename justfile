@@ -7,6 +7,9 @@ export AWS_REGION := "ap-southeast-1"
 
 account := env_var_or_default("PITADV_ACCOUNT_ID", "229032673380")
 
+# what the pipeline image is built from. keep in step with the paths in .github/workflows/image.yml
+image_inputs := "src transform data/reference results/backtest pyproject.toml uv.lock README.md infra/docker/pipeline.Dockerfile .github/workflows/image.yml"
+
 # CI assumes a role by OIDC, so there is no profile to name there
 profile := if env_var_or_default("CI", "") == "" { "--profile pitadvisor" } else { "" }
 
@@ -34,10 +37,32 @@ synth:
 diff:
     AWS_PROFILE={{AWS_PROFILE}} uv run --directory infra cdk diff
 
-# budgets are useless without a subscriber, so the address is required to deploy
+# a stack deployed without a tag falls back to "latest", and a lambda pointed at an unchanged
+# tag string never picks up a new image, so every deploy pins the image ci built. budgets are
+# useless without a subscriber, so the address is required
+# deploy one stack, pinned to the pipeline image ci built for main
 deploy stack email:
     AWS_PROFILE={{AWS_PROFILE}} uv run --directory infra cdk deploy {{stack}} \
-      -c alertEmail={{email}} --require-approval broadening
+      -c alertEmail={{email}} -c pipelineImageTag=$(just image-tag) --require-approval broadening
+
+# the commit the image workflow tagged last: the newest one on main that changed the image
+image-tag:
+    @git fetch -q origin main && git log -1 --format=%H origin/main -- {{image_inputs}}
+
+# the two stacks that run the image, pinned to what ci built for main
+deploy-pipeline:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tag=$(just image-tag)
+    if ! aws ecr describe-images --repository-name pitadvisor-pipeline-{{env_var_or_default("PITADV_ENV", "dev")}} \
+        --image-ids imageTag="$tag" --profile {{AWS_PROFILE}} --region {{AWS_REGION}} > /dev/null 2>&1; then
+      echo "no image for $tag in ecr yet, wait for the image workflow to finish" >&2
+      exit 1
+    fi
+    AWS_PROFILE={{AWS_PROFILE}} uv run --directory infra cdk deploy \
+      pitadvisor-transform-{{env_var_or_default("PITADV_ENV", "dev")}} \
+      pitadvisor-agent-{{env_var_or_default("PITADV_ENV", "dev")}} \
+      --exclusively -c pipelineImageTag="$tag" --require-approval broadening
 
 doctor:
     uv run pitadv doctor
@@ -65,7 +90,9 @@ lineage:
 catalog-check:
     uv run pitadv catalog-sync --check
 
-# build and push the pipeline image the fargate steps run
+# ci does this on every push to main that changes the image, so this is only for one that should
+# not wait for a push. needs a running docker daemon
+# build and push the pipeline image by hand
 image tag="latest":
     aws ecr get-login-password --profile {{AWS_PROFILE}} --region {{AWS_REGION}} \
       | docker login --username AWS --password-stdin {{account}}.dkr.ecr.{{AWS_REGION}}.amazonaws.com
