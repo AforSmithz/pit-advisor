@@ -710,9 +710,16 @@ def test_a_laptop_can_push_the_image_and_start_the_pipeline(transform_template: 
     assert [actions_of(s) for s in unscoped] == [["ecr:GetAuthorizationToken"]]
 
 
-def test_the_image_repository_keeps_five_tags(transform_template: Template) -> None:
+def test_the_image_repository_keeps_twenty_tags_and_drops_untagged(
+    transform_template: Template,
+) -> None:
     _, repository = only(transform_template, "AWS::ECR::Repository")
-    assert '"countNumber":5' in repository["Properties"]["LifecyclePolicy"]["LifecyclePolicyText"]
+    rules = json.loads(repository["Properties"]["LifecyclePolicy"]["LifecyclePolicyText"])["rules"]
+    selections = [rule["selection"] for rule in sorted(rules, key=lambda r: r["rulePriority"])]
+    assert selections[0]["tagStatus"] == "untagged"
+    assert selections[0]["countType"] == "sinceImagePushed"
+    assert selections[1]["countType"] == "imageCountMoreThan"
+    assert selections[1]["countNumber"] == 20
     assert repository["Properties"]["ImageScanningConfiguration"]["ScanOnPush"] is True
 
 
@@ -762,10 +769,26 @@ def test_the_site_carries_a_content_security_policy(web_template: Template) -> N
     assert headers["StrictTransportSecurity"]["AccessControlMaxAgeSec"] == 31536000
 
 
-def test_the_publish_role_trusts_one_repo_and_one_branch(web_template: Template) -> None:
-    roles = web_template.find_resources("AWS::IAM::Role")
-    assert len(roles) == 1
-    trust = next(iter(roles.values()))["Properties"]["AssumeRolePolicyDocument"]["Statement"][0]
+def github_roles(template: Template) -> dict[str, Resource]:
+    return {
+        role["Properties"]["RoleName"]: role
+        for role in template.find_resources("AWS::IAM::Role").values()
+        if "sts:AssumeRoleWithWebIdentity"
+        in json.dumps(role["Properties"]["AssumeRolePolicyDocument"])
+    }
+
+
+def test_github_can_assume_the_publish_and_image_roles_only(web_template: Template) -> None:
+    assert sorted(github_roles(web_template)) == [
+        f"pitadvisor-image-push-{ENV_NAME}",
+        f"pitadvisor-web-publish-{ENV_NAME}",
+    ]
+
+
+@pytest.mark.parametrize("name", ["web-publish", "image-push"])
+def test_each_github_role_trusts_one_repo_and_one_branch(web_template: Template, name: str) -> None:
+    role = github_roles(web_template)[f"pitadvisor-{name}-{ENV_NAME}"]
+    trust = role["Properties"]["AssumeRolePolicyDocument"]["Statement"][0]
     assert trust["Action"] == "sts:AssumeRoleWithWebIdentity"
     conditions = trust["Condition"]["StringEquals"]
     assert conditions["token.actions.githubusercontent.com:aud"] == "sts.amazonaws.com"
@@ -788,12 +811,35 @@ def test_the_publish_role_trusts_the_immutable_subject_too(web_template: Templat
     )
     stack = WebStack(app, "web", env_name="dev")
     template = Template.from_stack(stack)
-    trust = next(iter(template.find_resources("AWS::IAM::Role").values()))
+    trust = github_roles(template)["pitadvisor-web-publish-dev"]
     conditions = trust["Properties"]["AssumeRolePolicyDocument"]["Statement"][0]["Condition"]
     assert conditions["StringEquals"]["token.actions.githubusercontent.com:sub"] == [
         "repo:octocat/example:ref:refs/heads/main",
         "repo:octocat@1/example@2:ref:refs/heads/main",
     ]
+
+
+def test_the_image_role_can_push_to_the_pipeline_repository_and_nothing_else(
+    web_template: Template,
+) -> None:
+    role_id = next(
+        logical
+        for logical, role in web_template.find_resources("AWS::IAM::Role").items()
+        if role["Properties"]["RoleName"] == f"pitadvisor-image-push-{ENV_NAME}"
+    )
+    policy = next(
+        policy
+        for policy in web_template.find_resources("AWS::IAM::Policy").values()
+        if policy["Properties"]["Roles"] == [{"Ref": role_id}]
+    )
+    statements = policy["Properties"]["PolicyDocument"]["Statement"]
+    actions = {action for statement in statements for action in actions_of(statement)}
+    assert all(action.startswith("ecr:") for action in actions)
+    assert {"ecr:PutImage", "ecr:CompleteLayerUpload"} <= actions
+    unscoped = [statement for statement in statements if statement["Resource"] == "*"]
+    assert [actions_of(statement) for statement in unscoped] == [["ecr:GetAuthorizationToken"]]
+    scoped = json.dumps([s["Resource"] for s in statements if s["Resource"] != "*"])
+    assert f"repository/pitadvisor-pipeline-{ENV_NAME}" in scoped
 
 
 def test_the_publish_role_cannot_write_to_the_lake(web_template: Template) -> None:

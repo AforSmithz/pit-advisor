@@ -56,6 +56,11 @@ SITE_WILDCARD = (
     "this one bucket and cannot reach the lake."
 )
 
+ECR_TOKEN = (
+    "ecr:GetAuthorizationToken takes no resource. The token is only useful with the repository "
+    "actions in the next statement, which name the one pipeline repository."
+)
+
 DEFAULT_CERT = (
     "The distribution serves on its own cloudfront.net domain with the default certificate, "
     "which pins TLSv1 as the minimum protocol version and cannot be raised without a custom "
@@ -270,14 +275,16 @@ class WebStack(Stack):
             )
         )
 
-        self._publisher(env_name)
+        repo, github = self._github()
+        self._publisher(env_name, repo, github)
+        self._image_builder(env_name, github)
 
         CfnOutput(self, "SiteBucketName", value=self.bucket.bucket_name)
         CfnOutput(self, "DistributionId", value=self.distribution.distribution_id)
         CfnOutput(self, "SiteUrl", value=f"https://{self.distribution.distribution_domain_name}")
 
-    def _publisher(self, env_name: str) -> None:
-        """The role GitHub Actions assumes to publish. No static key exists anywhere."""
+    def _github(self) -> tuple[str, iam.IPrincipal]:
+        """Who GitHub Actions is to IAM: this repo's main branch and nothing else."""
         repo = self.node.try_get_context("githubRepo") or PLACEHOLDER_REPO
         # github is rolling out immutable subject claims, which put the numeric owner and repo
         # ids in the sub: repo:owner@1234/name@5678:ref:refs/heads/main. the plain form is what
@@ -307,6 +314,21 @@ class WebStack(Stack):
             ).attr_arn
         )
 
+        return repo, iam.WebIdentityPrincipal(
+            provider_arn,
+            {
+                "StringEquals": {
+                    "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                    # the branch is part of the boundary: a pull request from a fork
+                    # carries a different sub and cannot assume either role
+                    # a list under StringEquals is an or, so this is still an allowlist
+                    "token.actions.githubusercontent.com:sub": subjects,
+                }
+            },
+        )
+
+    def _publisher(self, env_name: str, repo: str, github: iam.IPrincipal) -> None:
+        """The role GitHub Actions assumes to publish. No static key exists anywhere."""
         role = iam.Role(
             self,
             "PublishRole",
@@ -318,18 +340,7 @@ class WebStack(Stack):
                     self, "ViewsRead", f"pitadvisor-views-read-{env_name}"
                 )
             ],
-            assumed_by=iam.WebIdentityPrincipal(
-                provider_arn,
-                {
-                    "StringEquals": {
-                        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                        # the branch is part of the boundary: a pull request from a fork
-                        # carries a different sub and cannot assume this role
-                        # a list under StringEquals is an or, so this is still an allowlist
-                        "token.actions.githubusercontent.com:sub": subjects,
-                    }
-                },
-            ),
+            assumed_by=github,
         )
         role.add_to_policy(
             iam.PolicyStatement(
@@ -373,3 +384,42 @@ class WebStack(Stack):
 
         CfnOutput(self, "PublishRoleArn", value=role.role_arn)
         CfnOutput(self, "PublishRoleRepo", value=repo)
+
+    def _image_builder(self, env_name: str, github: iam.IPrincipal) -> None:
+        """The role the image workflow assumes to push the pipeline image. It can push to one
+        repository and read it back for the smoke run, and reach nothing else."""
+        # by name, not by reference: the repository lives in the transform stack, and a
+        # cross-stack export would pin the two deploys together for one arn
+        repository = self.format_arn(
+            service="ecr", resource="repository", resource_name=f"pitadvisor-pipeline-{env_name}"
+        )
+        role = iam.Role(
+            self,
+            "ImageRole",
+            role_name=f"pitadvisor-image-push-{env_name}",
+            description="assumed by github actions to build and push the pipeline image",
+            max_session_duration=Duration.hours(1),
+            assumed_by=github,
+        )
+        role.add_to_policy(
+            iam.PolicyStatement(actions=["ecr:GetAuthorizationToken"], resources=["*"])
+        )
+        role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:InitiateLayerUpload",
+                    "ecr:UploadLayerPart",
+                    "ecr:CompleteLayerUpload",
+                    "ecr:PutImage",
+                    "ecr:BatchGetImage",
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:DescribeImages",
+                ],
+                resources=[repository],
+            )
+        )
+        Validations.of(role).acknowledge(
+            Acknowledgment(id="AwsSolutions-IAM5[Resource::*]", reason=ECR_TOKEN)
+        )
+        CfnOutput(self, "ImageRoleArn", value=role.role_arn)
