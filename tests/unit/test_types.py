@@ -43,6 +43,8 @@ def test_source_values():
         "kalshi",
         "polymarket",
         "typesafe",
+        "osm",
+        "terrain_tiles",
     }
 
 

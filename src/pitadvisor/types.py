@@ -26,6 +26,8 @@ class Source(StrEnum):
     KALSHI = "kalshi"
     POLYMARKET = "polymarket"
     TYPESAFE = "typesafe"
+    OSM = "osm"
+    TERRAIN_TILES = "terrain_tiles"
 
 
 class SessionKind(StrEnum):
