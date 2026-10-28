@@ -842,3 +842,71 @@ def evidence_from(report: backtest.Report) -> Evidence:
         beats_baselines=report.beats_baselines,
         separated_from=report.separated_from,
     )
+
+
+class SceneryTrack(BaseModel, frozen=True):
+    length_m: float
+    step_m: float
+    sectors_m: list[float]
+    points: list[list[float]]
+
+
+class SceneryAlignment(BaseModel, frozen=True):
+    median_m: float
+    p95_m: float
+
+
+class SceneryPlinth(BaseModel, frozen=True):
+    box: list[float]
+    grid: list[int]
+    # row 0 is the south edge, column 0 the west edge
+    heights: list[float]
+
+
+class SceneryArea(BaseModel, frozen=True):
+    kind: str
+    rings: list[list[float]]
+
+
+class SceneryRoad(BaseModel, frozen=True):
+    kind: str
+    width_m: float
+    lit: bool
+    points: list[float]
+
+
+class SceneryBuilding(BaseModel, frozen=True):
+    h: float
+    base: float
+    kind: str
+    # openstreetmap rarely carries a height, so most of these are a guess from the building type
+    estimated: bool
+    points: list[float]
+
+
+class SceneryView(BaseModel, frozen=True):
+    """Coordinates are metres in the lap's own frame: x east, y north, z up."""
+
+    view: str = "scenery_view"
+    schema_version: str = SCHEMA_VERSION
+    generated_at: datetime
+    run_id: str
+    circuit_id: str
+    track: SceneryTrack
+    alignment: SceneryAlignment
+    plinth: SceneryPlinth
+    areas: list[SceneryArea]
+    roads: list[SceneryRoad]
+    buildings: list[SceneryBuilding]
+    trees: list[float]
+    sources: list[str]
+
+
+def scenery_key(circuit_id: str) -> str:
+    return f"{Layer.VIEWS}/scenery/{circuit_id}.json"
+
+
+def emit_scenery(store: ObjectStore, view: SceneryView) -> str:
+    # compact on purpose, a city's footprints are most of a megabyte with indentation
+    body = json.dumps(view.model_dump(mode="json"), separators=(",", ":"), allow_nan=False)
+    return store.put(scenery_key(view.circuit_id), body.encode())

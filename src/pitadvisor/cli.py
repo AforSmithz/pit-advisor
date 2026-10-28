@@ -23,7 +23,7 @@ from pitadvisor.incidents import lake as incident_lake
 from pitadvisor.incidents.extract import extract as extract_decision
 from pitadvisor.incidents.parse import parse as parse_decision
 from pitadvisor.ingest import docs as doc_corpus
-from pitadvisor.ingest import fia_docs, jolpica, openf1
+from pitadvisor.ingest import fia_docs, http, jolpica, openf1
 from pitadvisor.ingest import schedule as weekend_schedule
 from pitadvisor.ingest.fastf1_session import backfill as session_backfill
 from pitadvisor.ingest.fastf1_session import ingest_session, weekend_in_progress
@@ -830,6 +830,109 @@ def _event(store: ObjectStore, event: str) -> feature_assemble.EventContext:
     except ValueError as exc:
         raise typer.BadParameter("--event takes 'next' or 'season:round'") from exc
     return feature_assemble.event_at(store, season, round_)
+
+
+@app.command(help="Bake one circuit's 3D scene: lap shape, terrain plinth, map features.")
+def scenery(
+    circuit: Annotated[str, typer.Option(help="A circuit_id from the races table.")],
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+) -> None:
+    from pitadvisor.ingest import osm, terrain
+    from pitadvisor.outputs import scenery as scenery_outputs
+    from pitadvisor.outputs import track_shape
+    from pitadvisor.outputs.view_contracts import emit_scenery
+    from pitadvisor.quality.checks import read_table
+
+    settings = get_settings()
+    store, ledger, bucket_for = _runtime(local, settings)
+    races = read_table(store, Layer.BRONZE, "races")
+    if races is None:
+        typer.echo("races must be in bronze first", err=True)
+        raise typer.Exit(1)
+    held = races.filter(races["circuit_id"] == circuit).sort("season", descending=True).to_dicts()
+    if not held:
+        raise typer.BadParameter(f"{circuit} is not in the races table")
+    raw, run_id, now = RawStore(store), _run_id(), datetime.now(UTC)
+    client = openf1.OpenF1Client(raw, ledger, RateLimiter(bucket_for("openf1")), run_id)
+    profiles = track_fit.load()
+    reference_m = profiles[circuit].length_km * 1000 if circuit in profiles else None
+    best: tuple[float, SessionKey, track_shape.Track] | None = None
+    for row in held:
+        try:
+            candidate = openf1.lap_trace(
+                client, int(row["season"]), int(row["round"]), row["race_date"], now
+            )
+        except http.FetchError:
+            continue
+        if candidate is None:
+            continue
+        session, lap, trace = candidate
+        points, times = track_shape.lap_samples(trace, lap)
+        ends = [
+            float(lap["duration_sector_1"]),
+            float(lap["duration_sector_1"]) + float(lap["duration_sector_2"]),
+        ]
+        shaped = track_shape.resample(points, times, ends)
+        # newest first. a hole in the position samples on a curve makes the spline cut the
+        # corner, so the first lap within LENGTH_TOLERANCE of circuits.yml wins, else the closest
+        miss = abs(shaped.length_m - reference_m) / reference_m if reference_m else 0.0
+        if best is None or miss < best[0]:
+            best = (miss, session, shaped)
+        if miss <= track_shape.LENGTH_TOLERANCE:
+            break
+    if best is None:
+        typer.echo(f"openf1 has no qualifying lap at {circuit}", err=True)
+        raise typer.Exit(1)
+    _, session, track = best
+    key = EventKey(season=session.season, round=session.round)
+    centre = next(row for row in held if row["season"] == session.season)
+    reach = float(np.linalg.norm(np.ptp(track.points[:, :2], axis=0))) / 2 + 1000
+    raceway = json.loads(
+        osm.fetch(
+            raw,
+            key,
+            f"raceway-{circuit}",
+            osm.raceway_query(float(centre["latitude"]), float(centre["longitude"]), reach),
+            run_id,
+        )
+    )["elements"]
+    alignment = track_shape.align(track.points[:, :2], scenery_outputs.raceway_lines(raceway))
+    box = scenery_outputs.plinth_box(track.points)
+    corners = np.array([[box[0], box[1]], [box[2], box[1]], [box[0], box[3]], [box[2], box[3]]])
+    lat, lon = alignment.to_latlon(corners)
+    south, west, north, east = (
+        float(lat.min()),
+        float(lon.min()),
+        float(lat.max()),
+        float(lon.max()),
+    )
+    elements = json.loads(
+        osm.fetch(raw, key, f"area-{circuit}", osm.area_query(south, west, north, east), run_id)
+    )["elements"]
+    tiles = {
+        tile: terrain.decode(terrain.fetch(raw, key, tile[0], tile[1], run_id))
+        for tile in terrain.tiles_for(south, west, north, east)
+    }
+    view = scenery_outputs.scenery_view(
+        circuit,
+        track,
+        alignment,
+        elements,
+        terrain.Terrain(tiles),
+        [
+            "Map data © OpenStreetMap contributors",
+            terrain.credit(str(centre["country"])),
+            "Track geometry from OpenF1",
+        ],
+        run_id,
+    )
+    measured = sum(not item.estimated for item in view.buildings)
+    typer.echo(
+        f"{circuit}  {session.season} r{session.round:02d} qualifying  {track.length_m:,.0f} m  "
+        f"aligned median {alignment.median_m:.2f} m p95 {alignment.p95_m:.2f} m  "
+        f"{len(view.buildings)} buildings ({measured} measured)  {len(view.trees) // 3} trees"
+    )
+    typer.echo(emit_scenery(store, view))
 
 
 @app.command(name="emit-views", help="Write the versioned view artifacts the dashboard reads.")

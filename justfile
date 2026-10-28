@@ -152,6 +152,9 @@ web-data:
     aws s3 cp s3://pit-advisor-data-{{env_var_or_default("PITADV_ENV", "dev")}}-{{account}}/views/ \
       web/public/data/ --recursive --exclude "*" --include "*_view.json" \
       {{profile}} --region {{AWS_REGION}}
+    aws s3 cp s3://pit-advisor-data-{{env_var_or_default("PITADV_ENV", "dev")}}-{{account}}/views/scenery/ \
+      web/public/data/scenery/ --recursive --exclude "*" --include "*.json" \
+      {{profile}} --region {{AWS_REGION}}
 
 web-check:
     cd web && pnpm install --frozen-lockfile && pnpm lint && pnpm test && pnpm build
