@@ -720,6 +720,8 @@ def test_the_image_repository_keeps_twenty_tags_and_drops_untagged(
     assert selections[0]["countType"] == "sinceImagePushed"
     assert selections[1]["countType"] == "imageCountMoreThan"
     assert selections[1]["countNumber"] == 20
+    # a deploy pins a commit tag, which only means something if the tag cannot move
+    assert repository["Properties"]["ImageTagMutability"] == "IMMUTABLE"
     assert repository["Properties"]["ImageScanningConfiguration"]["ScanOnPush"] is True
 
 

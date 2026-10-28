@@ -144,12 +144,15 @@ class TransformStack(Stack):
             "PipelineImage",
             repository_name=f"pitadvisor-pipeline-{env_name}",
             image_scan_on_push=True,
+            # a tag is a commit, so once pushed it never points anywhere else and a deploy
+            # pinned to it runs exactly the image ci tested
+            image_tag_mutability=ecr.TagMutability.IMMUTABLE,
             encryption=ecr.RepositoryEncryption.AES_256,
             removal_policy=RemovalPolicy.DESTROY,
             empty_on_delete=True,
             # ci pushes one image per commit that changes what goes into it, tagged with the
-            # commit. untagged layers from a re-pushed tag go after a day, and twenty tagged
-            # images is a few weeks of work to roll back to
+            # commit. untagged leftovers go after a day, and twenty tagged images is a few
+            # weeks of work to roll back to
             lifecycle_rules=[
                 ecr.LifecycleRule(
                     rule_priority=1,

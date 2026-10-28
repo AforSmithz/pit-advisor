@@ -91,9 +91,9 @@ catalog-check:
     uv run pitadv catalog-sync --check
 
 # ci does this on every push to main that changes the image, so this is only for one that should
-# not wait for a push. needs a running docker daemon
+# not wait for a push. tags are immutable, so it needs one that is not in ecr yet, and docker
 # build and push the pipeline image by hand
-image tag="latest":
+image tag:
     aws ecr get-login-password --profile {{AWS_PROFILE}} --region {{AWS_REGION}} \
       | docker login --username AWS --password-stdin {{account}}.dkr.ecr.{{AWS_REGION}}.amazonaws.com
     # --push streams to the registry, a local copy of the image needs several gb of disk.
