@@ -147,7 +147,17 @@ class TransformStack(Stack):
             encryption=ecr.RepositoryEncryption.AES_256,
             removal_policy=RemovalPolicy.DESTROY,
             empty_on_delete=True,
-            lifecycle_rules=[ecr.LifecycleRule(max_image_count=5)],
+            # ci pushes one image per commit that changes what goes into it, tagged with the
+            # commit. untagged layers from a re-pushed tag go after a day, and twenty tagged
+            # images is a few weeks of work to roll back to
+            lifecycle_rules=[
+                ecr.LifecycleRule(
+                    rule_priority=1,
+                    tag_status=ecr.TagStatus.UNTAGGED,
+                    max_image_age=Duration.days(1),
+                ),
+                ecr.LifecycleRule(rule_priority=2, max_image_count=20),
+            ],
         )
 
         # public subnets only: a NAT gateway costs more than the rest of this project together
