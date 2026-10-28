@@ -9,8 +9,11 @@ from pitadvisor.ingest.openf1 import (
     PARTS,
     OpenF1Client,
     backfill,
+    fastest_lap,
     finished,
     ingest_session,
+    lap_trace,
+    location_url,
     scheduled,
     status_during,
     to_records,
@@ -470,3 +473,85 @@ def test_a_lap_deleted_without_a_time_falls_back_to_its_lap():
         }
     ]
     assert by_lap(to_records(bundle(race_control=control), KEY, stamped()))[4]["is_deleted"]
+
+
+SCENERY_LAPS = [
+    {
+        "driver_number": 4,
+        "lap_duration": 80.1,
+        "date_start": "2026-10-24T21:10:00+00:00",
+        "duration_sector_1": 25.0,
+        "duration_sector_2": 30.0,
+        "is_pit_out_lap": False,
+    },
+    {
+        "driver_number": 44,
+        "lap_duration": 79.5,
+        "date_start": "2026-10-24T21:20:00+00:00",
+        "duration_sector_1": 25.0,
+        "duration_sector_2": 30.0,
+        "is_pit_out_lap": True,
+    },
+    {
+        "driver_number": 16,
+        "lap_duration": None,
+        "date_start": "2026-10-24T21:30:00+00:00",
+        "duration_sector_1": None,
+        "duration_sector_2": None,
+        "is_pit_out_lap": False,
+    },
+    {
+        "driver_number": 81,
+        "lap_duration": 79.9,
+        "date_start": "2026-10-24T21:40:00+00:00",
+        "duration_sector_1": 24.9,
+        "duration_sector_2": 29.8,
+        "is_pit_out_lap": False,
+    },
+]
+
+
+def test_the_fastest_lap_skips_out_laps_and_untimed_ones():
+    assert fastest_lap(SCENERY_LAPS)["driver_number"] == 81
+    assert fastest_lap([SCENERY_LAPS[1], SCENERY_LAPS[2]]) is None
+
+
+def test_the_location_window_is_utc_and_bounded_both_ways():
+    start = datetime(2026, 10, 24, 21, 40, tzinfo=UTC)
+    target = location_url(11392, 81, start, start.replace(minute=41, second=21))
+    assert "session_key=11392&driver_number=81" in target
+    assert "date>2026-10-24T21:40:00.000000&date<2026-10-24T21:41:21.000000" in target
+
+
+class LapUpstream:
+    def __init__(self):
+        self.seen: list[str] = []
+
+    def __call__(self, target, ledger, limiter):
+        self.seen.append(target)
+        if "/sessions?" in target:
+            body = LISTING
+        elif "/laps?" in target:
+            body = SCENERY_LAPS
+        else:
+            body = [{"date": "2026-10-24T21:40:00.100000+00:00", "x": 1, "y": 2, "z": 3}]
+        return http.Response(
+            url=target, status=200, body=json.dumps(body).encode(), fetched_at=datetime.now(UTC)
+        )
+
+
+def test_a_lap_trace_lands_laps_and_location_then_reads_them_back(store, pauses):
+    upstream = LapUpstream()
+    client = client_for(store, upstream, pauses)
+    after = datetime(2026, 10, 26, tzinfo=UTC)
+    key, lap, trace = lap_trace(client, 2026, 18, RACES[18], after)
+    assert (key.round, key.session, lap["driver_number"], len(trace)) == (18, "qualifying", 81, 1)
+    landed = [item.key for item in store.list("raw/source=openf1/season=2026/round=18/")]
+    assert any("location-car81-" in name for name in landed)
+    lap_trace(client, 2026, 18, RACES[18], after)
+    assert sum("/laps?" in target or "/location?" in target for target in upstream.seen) == 2
+
+
+def test_no_lap_trace_before_the_session_has_ended(store, pauses):
+    during = datetime(2026, 10, 24, 21, 30, tzinfo=UTC)
+    assert lap_trace(client_for(store, LapUpstream(), pauses), 2026, 18, RACES[18], during) is None

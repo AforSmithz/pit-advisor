@@ -475,3 +475,62 @@ def backfill(
             continue
         outcomes.append(ingest_session(client, store, key, int(item["session_key"])))
     return outcomes
+
+
+def location_url(session_key: int, driver: int, start: datetime, end: datetime) -> str:
+    stamp = "%Y-%m-%dT%H:%M:%S.%f"
+    return (
+        f"{BASE}/location?session_key={session_key}&driver_number={driver}"
+        f"&date>{start.astimezone(UTC).strftime(stamp)}&date<{end.astimezone(UTC).strftime(stamp)}"
+    )
+
+
+def fastest_lap(laps: list[dict[str, Any]]) -> dict[str, Any] | None:
+    timed = [
+        lap
+        for lap in laps
+        if lap.get("lap_duration")
+        and lap.get("date_start")
+        and lap.get("duration_sector_1")
+        and lap.get("duration_sector_2")
+        and not lap.get("is_pit_out_lap")
+    ]
+    return min(timed, key=lambda lap: float(lap["lap_duration"])) if timed else None
+
+
+def _held_or_read(client: OpenF1Client, key: SessionKey, name: str, target: str) -> bytes:
+    held = client.raw.latest(Source.OPENF1, key, name)
+    if held is not None:
+        return held[0]
+    response = client.read(target)
+    client.land(key, name, response)
+    return response.body
+
+
+def lap_trace(
+    client: OpenF1Client, season: int, round_: int, race_date: date, now: datetime
+) -> tuple[SessionKey, dict[str, Any], list[dict[str, Any]]] | None:
+    """The fastest qualifying lap of one event and the car's position samples over it."""
+    for _, _, item in scheduled(
+        client.sessions(season), {round_: race_date}, (SessionKind.QUALIFYING,)
+    ):
+        ended = _at(item.get("date_end"))
+        if ended is None or ended > now:
+            return None
+        key = SessionKey(season=season, round=round_, session=SessionKind.QUALIFYING)
+        session_key = int(item["session_key"])
+        laps = json.loads(
+            _held_or_read(client, key, "laps", url("laps", session_key=session_key)) or b"[]"
+        )
+        best = fastest_lap(laps)
+        if best is None:
+            return None
+        driver = int(best["driver_number"])
+        start = cast(datetime, _at(best["date_start"]))
+        end = start + timedelta(seconds=float(best["lap_duration"]) + 1)
+        # two digits in the name, so car 4's prefix never picks up car 44's object
+        trace = _held_or_read(
+            client, key, f"location-car{driver:02d}", location_url(session_key, driver, start, end)
+        )
+        return key, best, json.loads(trace or b"[]")
+    return None
