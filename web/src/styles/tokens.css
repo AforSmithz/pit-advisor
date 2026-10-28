@@ -230,3 +230,76 @@ html:has([data-curtain]) :is(.draw, .swing, .lit, .grow) {
     display: none;
   }
 }
+
+/* race ops: neumorphic depth in glass, so the diorama shows through. --lift and --sink run 0 to 1 */
+:root {
+  --pane: rgb(24 26 30 / 0.46);
+  --pane-solid: #1a1c20;
+  --pane-blur: blur(22px) saturate(140%);
+}
+
+.pane {
+  --lift: 1;
+  background: var(--pane);
+  backdrop-filter: var(--pane-blur);
+  -webkit-backdrop-filter: var(--pane-blur);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / calc(0.13 * var(--lift))),
+    inset 0 -1px 0 rgb(0 0 0 / calc(0.35 * var(--lift))),
+    0 calc(22px * var(--lift)) calc(48px * var(--lift)) rgb(0 0 0 / calc(0.5 * var(--lift))),
+    calc(-8px * var(--lift)) calc(-8px * var(--lift)) calc(24px * var(--lift)) rgb(255 255 255 / calc(0.025 * var(--lift)));
+}
+
+.pane-well {
+  --sink: 1;
+  background: rgb(6 7 9 / calc(0.18 + 0.34 * var(--sink)));
+  box-shadow:
+    inset 0 calc(3px * var(--sink)) calc(9px * var(--sink)) rgb(0 0 0 / calc(0.6 * var(--sink))),
+    inset 0 -1px 0 rgb(255 255 255 / calc(0.06 * var(--sink)));
+}
+
+.pane-on {
+  background: var(--color-ink);
+  color: var(--color-ground);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.45), inset 0 -2px 0 rgb(0 0 0 / 0.15);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .pane {
+    background: var(--pane-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* until the intro runs the split cards sit flat and empty, so nothing flashes before the slab */
+[data-ops-intro] [data-split] {
+  --lift: 0;
+  opacity: 0;
+}
+[data-ops-intro] .pane-well {
+  --sink: 0;
+}
+[data-ops-intro] .ops-content {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-ops-intro] [data-split] {
+    --lift: 1;
+    opacity: 1;
+  }
+  [data-ops-intro] .pane-well {
+    --sink: 1;
+  }
+  [data-ops-intro] .ops-content {
+    opacity: 1;
+  }
+  [data-ops-title] {
+    display: none;
+  }
+}
+
+[data-ops-panels] {
+  scrollbar-width: none;
+}
