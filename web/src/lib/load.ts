@@ -9,6 +9,7 @@ import {
   forecastView,
   historyView,
   lineageView,
+  sceneryView,
   sprintView,
   stewardsView,
   trackView,
@@ -56,3 +57,4 @@ export const loadStewards = () => optional("stewards_view", stewardsView);
 export const loadUpgrades = () => optional("upgrades_view", upgradesView);
 export const loadDebrief = () => optional("debrief_view", debriefView);
 export const loadLineage = () => optional("lineage_view", lineageView);
+export const loadScenery = (circuitId: string) => optional(`scenery/${circuitId}`, sceneryView);

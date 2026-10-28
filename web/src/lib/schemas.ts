@@ -589,6 +589,37 @@ export const costView = z
   })
   .strict();
 
+const flat = z.array(z.number());
+
+export const sceneryView = z
+  .object({
+    ...viewHead,
+    circuit_id: z.string(),
+    track: z.object({
+      length_m: z.number().positive(),
+      step_m: z.number().positive(),
+      sectors_m: z.array(z.number()),
+      points: z.array(z.tuple([z.number(), z.number(), z.number()])).min(3),
+    }),
+    alignment: z.object({ median_m: z.number(), p95_m: z.number() }),
+    plinth: z.object({
+      box: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+      grid: z.tuple([z.number().int().min(2), z.number().int().min(2)]),
+      heights: flat,
+    }),
+    areas: z.array(z.object({ kind: z.string(), rings: z.array(flat) })),
+    roads: z.array(z.object({ kind: z.string(), width_m: z.number(), lit: z.boolean(), points: flat })),
+    buildings: z.array(
+      z.object({ h: z.number(), base: z.number(), kind: z.string(), estimated: z.boolean(), points: flat }),
+    ),
+    trees: flat,
+    sources: z.array(z.string()),
+  })
+  .strict()
+  .refine((v) => v.plinth.heights.length === v.plinth.grid[0] * v.plinth.grid[1], {
+    message: "plinth heights do not fill the grid",
+  });
+
 export type Estimate = z.infer<typeof estimate>;
 export type EventContext = z.infer<typeof eventContext>;
 export type Coverage = z.infer<typeof coverage>;
@@ -611,6 +642,7 @@ export type ScoredModel = CalibrationView["scored"][number];
 export type CurvePoint = ScoredModel["curves"][string][number];
 export type ForecastDriver = ForecastView["drivers"][number];
 export type HistoryView = z.infer<typeof historyView>;
+export type SceneryView = z.infer<typeof sceneryView>;
 export type Snapshot = HistoryView["snapshots"][number];
 export type StewardsView = z.infer<typeof stewardsView>;
 export type Ruling = StewardsView["rulings"][number];
