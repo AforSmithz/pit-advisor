@@ -68,7 +68,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {children}
         </Overlays>
         <noscript>
-          <style>{"[data-curtain]{display:none}html .draw,html .swing,html .lit,html .grow{animation-play-state:running!important}"}</style>
+          <style>{"[data-ops-title]{display:none}html [data-ops-intro] :is([data-split],[data-split]>*,.pane-well>*,.ops-content){opacity:1!important;--lift:1!important}html [data-ops-intro] .pane-well{--sink:1!important}html .draw,html .swing,html .lit,html .grow{animation-play-state:running!important}"}</style>
         </noscript>
       </body>
     </html>

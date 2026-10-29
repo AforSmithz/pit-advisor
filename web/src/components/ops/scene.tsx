@@ -1,6 +1,7 @@
 "use client";
 
 import gsap from "gsap";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -10,7 +11,7 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { sceneryView, type SceneryView } from "@/lib/schemas";
-import { ELEVATION, SETTLED, framing, perimeter, ribbon, sectorIndices, type Vec3, world } from "@/lib/scenery";
+import { ELEVATION, SETTLED, type Pose, framing, perimeter, poseFor, ribbon, sectorIndices, shot, type Vec3, world } from "@/lib/scenery";
 
 // drawn wider and deeper than the real tarmac so the slab still reads from the overview camera
 const HALF = 10;
@@ -277,8 +278,17 @@ export function Scene({ circuitId, children }: { circuitId: string; children: Re
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const lineRef = useRef<SVGLineElement>(null);
+  const leaderRef = useRef<SVGSVGElement>(null);
   const dotRef = useRef<SVGCircleElement>(null);
   const [missing, setMissing] = useState(false);
+  const pose = poseFor(usePathname());
+  const poseRef = useRef(pose);
+  const goRef = useRef<(pose: Pose) => void>(() => {});
+
+  useEffect(() => {
+    poseRef.current = pose;
+    goRef.current(pose);
+  }, [pose]);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -297,6 +307,7 @@ export function Scene({ circuitId, children }: { circuitId: string; children: Re
     composer.addPass(new OutputPass());
     const controls = new OrbitControls(camera, canvas);
     controls.enableDamping = true;
+    controls.autoRotateSpeed = 0.25;
     controls.maxPolarAngle = Math.PI * 0.46;
     controls.minDistance = 300;
     scene.add(new THREE.HemisphereLight(0xdfe6ff, 0x101114, 1.1));
@@ -320,6 +331,8 @@ export function Scene({ circuitId, children }: { circuitId: string; children: Re
     let settled = reduce;
     let eased = false;
     let raf = 0;
+    // every page leaves room for the panel column on the right
+    const offset = { x: 0.17 };
 
     const dispose = (root: THREE.Object3D | null) => {
       if (!root) return;
@@ -357,7 +370,7 @@ export function Scene({ circuitId, children }: { circuitId: string; children: Re
       composer.setSize(w, h);
       camera.aspect = w / h;
       const wide = innerWidth >= 1024;
-      camera.setViewOffset(w, h, wide ? Math.round(w * 0.17) : 0, Math.round(h * (wide ? 0.04 : 0.2)), w, h);
+      camera.setViewOffset(w, h, wide ? Math.round(w * offset.x) : 0, Math.round(h * (wide ? 0.04 : 0.2)), w, h);
       camera.updateProjectionMatrix();
       dirty = true;
     };
@@ -369,18 +382,43 @@ export function Scene({ circuitId, children }: { circuitId: string; children: Re
       floorMaterial.uniforms.fogNear!.value = frame.distance * 0.8;
       floorMaterial.uniforms.fogFar!.value = frame.distance * 2.4;
       controls.maxDistance = frame.distance * 1.6;
-      controls.target.set(...frame.centre);
-      camera.position.set(...(settled ? frame.rest : frame.overhead));
+      if (settled) {
+        const { position, target } = shot(poseRef.current, view.track, frame, exaggerate);
+        controls.target.set(...target);
+        camera.position.set(...position);
+      } else {
+        controls.target.set(...frame.centre);
+        camera.position.set(...frame.overhead);
+      }
       eased = settled;
       dirty = true;
+    };
+
+    const showAnchor = (on: boolean, delay: number) => {
+      const el = anchorRef.current;
+      if (!el) return;
+      el.style.pointerEvents = on ? "" : "none";
+      gsap.to([el, leaderRef.current], { opacity: on ? 1 : 0, duration: reduce ? 0 : 0.4, delay: on ? delay : 0, overwrite: true });
+    };
+
+    const fly = (to: Pose, duration: number) => {
+      if (!view) return;
+      const { position, target } = shot(to, view.track, frame, exaggerate);
+      const moved = () => { dirty = true; };
+      controls.autoRotate = to === "drift" && !reduce;
+      gsap.to(camera.position, { x: position[0], y: position[1], z: position[2], duration, ease: "power3.inOut", onUpdate: moved, overwrite: true });
+      gsap.to(controls.target, { x: target[0], y: target[1], z: target[2], duration, ease: "power3.inOut", onUpdate: moved, overwrite: true });
+      showAnchor(to === "overview", duration * 0.75);
     };
 
     const ease = () => {
       if (!view || eased) return;
       eased = true;
-      const [x, y, z] = frame.rest;
-      gsap.to(camera.position, { x, y, z, duration: 1.6, ease: "power3.inOut", onUpdate: () => { dirty = true; } });
-      if (anchorRef.current) gsap.fromTo(anchorRef.current, { opacity: 0 }, { opacity: 1, duration: 0.4, delay: 1.2 });
+      fly(poseRef.current, 1.6);
+    };
+
+    goRef.current = (to) => {
+      if (settled && eased) fly(to, reduce ? 0 : 1.4);
     };
 
     const onSettled = () => {
@@ -428,7 +466,7 @@ export function Scene({ circuitId, children }: { circuitId: string; children: Re
     addEventListener("resize", onResize);
     addEventListener(SETTLED, onSettled);
     addEventListener(ELEVATION, onElevation);
-    if (!reduce && anchorRef.current) anchorRef.current.style.opacity = "0";
+    if (!reduce || poseRef.current !== "overview") for (const el of [anchorRef.current, leaderRef.current]) el?.style.setProperty("opacity", "0");
     loop();
 
     const abort = new AbortController();
@@ -456,6 +494,8 @@ export function Scene({ circuitId, children }: { circuitId: string; children: Re
       removeEventListener("resize", onResize);
       removeEventListener(SETTLED, onSettled);
       removeEventListener(ELEVATION, onElevation);
+      goRef.current = () => {};
+      gsap.killTweensOf([camera.position, controls.target]);
       dispose(track);
       dispose(diorama);
       ground?.dispose();
@@ -474,7 +514,7 @@ export function Scene({ circuitId, children }: { circuitId: string; children: Re
       />
       {missing ? null : (
         <>
-          <svg aria-hidden="true" className="pointer-events-none fixed inset-0 hidden h-full w-full lg:block">
+          <svg ref={leaderRef} aria-hidden="true" className="pointer-events-none fixed inset-0 hidden h-full w-full lg:block">
             <line ref={lineRef} stroke="rgb(255 255 255 / 0.35)" strokeWidth="1" />
             <circle ref={dotRef} r="4" fill="var(--color-signal)" />
           </svg>

@@ -37,7 +37,7 @@ export function Rail({ startUtc }: { startUtc: string | null }) {
   }, [startUtc]);
 
   return (
-    <aside className="pointer-events-auto fixed inset-x-4 bottom-4 z-30 flex items-center gap-2.5 lg:static lg:inset-auto lg:flex-col lg:gap-4">
+    <aside className="pointer-events-auto fixed inset-x-4 bottom-4 z-30 flex items-center gap-2.5 lg:inset-x-auto lg:top-5 lg:right-5 lg:bottom-[30px] lg:w-[76px] lg:flex-col lg:gap-4">
       <div className="hidden pt-1 text-center lg:block">
         <div className="figure text-[17px] text-ink">{left || " "}</div>
         <div className="mt-0.5 text-[10px] text-mute">to lights out</div>
