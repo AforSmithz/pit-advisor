@@ -45,6 +45,7 @@ def test_source_values():
         "typesafe",
         "osm",
         "terrain_tiles",
+        "multiviewer",
     }
 
 

@@ -28,6 +28,7 @@ class Source(StrEnum):
     TYPESAFE = "typesafe"
     OSM = "osm"
     TERRAIN_TILES = "terrain_tiles"
+    MULTIVIEWER = "multiviewer"
 
 
 class SessionKind(StrEnum):
