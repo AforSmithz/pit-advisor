@@ -68,10 +68,10 @@ export function WinDial({ forecast, children }: { forecast: ForecastView; childr
   const leadColor = teamColor(lead.constructor_id);
 
   return (
-    <div className="flex flex-wrap items-center gap-6">
-      <div className="raised relative h-[300px] w-[300px] shrink-0 rounded-full">
-        <div className="inset absolute inset-[23px] rounded-full" />
-        <div className="raised absolute inset-[51px] rounded-full" />
+    <div className="flex flex-wrap items-center justify-center gap-6">
+      <div className="pane relative h-[300px] w-[300px] shrink-0 rounded-full">
+        <div className="pane-well absolute inset-[23px] rounded-full" />
+        <div className="pane absolute inset-[51px] rounded-full" />
         <div
           aria-hidden="true"
           className="absolute inset-[92px] rounded-full"
@@ -176,11 +176,11 @@ export function WinDial({ forecast, children }: { forecast: ForecastView; childr
         {options.length > 1 && (
           <div className="flex flex-col gap-2">
             <span className="text-xs text-mute">If the weather turns</span>
-            <Toggle label="Weather scenario" options={options} value={scenario} onChange={setScenario} tone="cool" />
+            <Toggle label="Weather scenario" options={options} value={scenario} onChange={setScenario} />
           </div>
         )}
         <div className="flex flex-col gap-1.5">
-          <span className="inset-sm flex h-3 gap-0.5 overflow-hidden rounded-full p-[3px]">
+          <span className="pane-well flex h-3 gap-0.5 overflow-hidden rounded-full p-[3px]">
             {forecast.scenarios
               .filter((item) => item.weight > 0)
               .map((item) => (

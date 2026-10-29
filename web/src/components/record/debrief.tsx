@@ -17,7 +17,7 @@ export function Debrief({ view }: { view: DebriefView }) {
   const brightest = Math.max(...rows.flatMap((driver) => driver.position), 0.01);
   const field = Math.max(...rows.map((driver) => driver.position.length), 1);
   return (
-    <section className="glass flex min-w-0 flex-[1_1_420px] flex-col gap-2.5 rounded-[28px] px-5 py-4">
+    <section data-split className="pane flex min-w-0 flex-[1_1_420px] flex-col gap-2.5 rounded-3xl px-5 py-4">
       <div className="flex items-baseline justify-between">
         <h2 className="display text-[17px]">{race} debrief</h2>
         <span className={`text-[11px] ${done ? "text-mute" : "text-signal"}`}>
@@ -32,7 +32,7 @@ export function Debrief({ view }: { view: DebriefView }) {
           : "No forecast was published for this race before it started, so there is nothing to grade."}
       </span>
       {called && (
-        <div className="inset flex flex-1 flex-col justify-around gap-1 rounded-[20px] px-3 py-2.5">
+        <div className="pane-well flex flex-1 flex-col justify-around gap-1 rounded-[20px] px-3 py-2.5">
           {rows.map((driver) => {
             const result = view.finish.find((item) => item.driver_code === driver.driver_code);
             const color = teamColor(driver.constructor_id);

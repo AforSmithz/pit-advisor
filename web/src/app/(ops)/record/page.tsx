@@ -1,4 +1,6 @@
 import { Gauge } from "@/components/gauge";
+import { Expand } from "@/components/ops/expand";
+import { Frame } from "@/components/ops/frame";
 import { Debrief } from "@/components/record/debrief";
 import { RaceByRace } from "@/components/record/race-by-race";
 import { Reliability } from "@/components/record/reliability";
@@ -37,8 +39,10 @@ export default async function Record() {
   const paired = view.paired.filter((item) => item.baseline in BASELINES);
   const reach =
     Math.ceil(
-      Math.max(0.05, ...paired.flatMap((item) => [Math.abs(item.log_loss_gain.low ?? 0), Math.abs(item.log_loss_gain.high ?? 0)])) *
-        20,
+      Math.max(
+        0.05,
+        ...paired.flatMap((item) => [Math.abs(item.log_loss_gain.low ?? 0), Math.abs(item.log_loss_gain.high ?? 0)]),
+      ) * 20,
     ) / 20;
   const marketReach = Math.max(
     0.01,
@@ -48,21 +52,42 @@ export default async function Record() {
   const sources = [...new Set(view.market.flatMap((item) => Object.keys(item.sources)))];
 
   return (
-    <>
-      <PageHead
-        title="Track record"
-        sub="Every call scored against what happened, and against three simple guesses anyone could make."
-      >
-        {first && last && (
-          <span className="inset-sm rounded-full px-3.5 py-2 text-xs text-ink-3">
-            {view.per_race.length} races, {first.season} {circuitName(first.circuit_id)} to {last.season}{" "}
-            {circuitName(last.circuit_id)}
-          </span>
-        )}
-      </PageHead>
-
-      <div className="flex flex-wrap gap-4">
-        <section className="raised flex min-w-0 flex-[1.6_1_620px] flex-col gap-3 rounded-[30px] px-5 py-4">
+    <Frame
+      head={
+        <PageHead
+          title="Track record"
+          sub="Every call scored against what happened, and against three simple guesses anyone could make."
+        >
+          {first && last && (
+            <span className="pane inline-flex items-center rounded-full px-4 py-2.5 text-sm text-ink-2">
+              {view.per_race.length} races, {first.season} {circuitName(first.circuit_id)} to {last.season}{" "}
+              {circuitName(last.circuit_id)}
+            </span>
+          )}
+        </PageHead>
+      }
+      strip={
+        <Expand label="Every race" height={250}>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="display text-[18px]">Race by race</h2>
+            <span className="flex gap-3.5 text-[11px] text-ink-3">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-signal" />
+                model
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-blue" />
+                grid order
+              </span>
+              <span className="text-mute">log loss, lower is up and better</span>
+            </span>
+          </div>
+          <RaceByRace races={view.per_race} model={view.model_name} baseline="grid" />
+        </Expand>
+      }
+    >
+      <div className="contents">
+        <section data-split className="pane flex min-w-0 flex-[1.6_1_620px] flex-col gap-3 rounded-3xl px-5 py-4">
           <div className="flex items-baseline justify-between">
             <h2 className="display text-[18px]">Better than guessing?</h2>
             <span className="text-[11px] text-mute">log loss gain, right of zero is better</span>
@@ -79,7 +104,7 @@ export default async function Record() {
                   estimate={asEstimate(item.log_loss_gain)}
                   span={reach}
                   colors={KNOBS[i % KNOBS.length]!}
-                  size={186}
+                  size={146}
                   left="guess better"
                   right="model better"
                   threshold={0}
@@ -106,33 +131,15 @@ export default async function Record() {
         {debrief && <Debrief view={debrief} />}
       </div>
 
-      <div className="flex flex-1 flex-wrap items-stretch gap-4">
-        <section className="raised flex min-w-0 flex-[1.6_1_620px] flex-col gap-2.5 rounded-[28px] px-5 py-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="display text-[18px]">Race by race</h2>
-            <span className="flex gap-3.5 text-[11px] text-ink-3">
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-signal" />
-                model
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-blue" />
-                grid order
-              </span>
-              <span className="text-mute">log loss, lower is up and better</span>
-            </span>
-          </div>
-          <RaceByRace races={view.per_race} model={view.model_name} baseline="grid" />
-        </section>
-
-        <div className="flex min-w-0 flex-[1_1_380px] flex-col gap-4">
+      <div className="contents">
+        <div className="contents">
           {model && (
-            <section className="raised flex flex-[1.4] flex-col gap-2 rounded-[28px] px-4 pt-3.5 pb-2.5">
+            <section data-split className="pane flex flex-[1.4] flex-col gap-2 rounded-3xl px-4 pt-3.5 pb-2.5">
               <Reliability curves={model.curves} />
             </section>
           )}
           {view.market.length > 0 && (
-            <section className="raised flex flex-1 flex-col gap-2 rounded-[28px] px-4 py-3.5">
+            <section data-split className="pane flex flex-1 flex-col gap-2 rounded-3xl px-4 py-3.5">
               <div className="flex items-baseline justify-between">
                 <h2 className="display text-[16px]">Against the betting market</h2>
                 <span className="text-[10.5px] text-mute">
@@ -142,10 +149,13 @@ export default async function Record() {
               {view.market.map((item) => {
                 const bounds = item.log_loss_gain;
                 return (
-                  <div key={item.event} className="grid grid-cols-[70px_minmax(0,1fr)_64px] items-center gap-2.5 text-xs">
+                  <div
+                    key={item.event}
+                    className="grid grid-cols-[70px_minmax(0,1fr)_64px] items-center gap-2.5 text-xs"
+                  >
                     <span className="text-ink-3">{EVENTS[item.event] ?? item.event}</span>
                     <span
-                      className="inset-sm relative block h-3.5 rounded-full"
+                      className="pane-well relative block h-3.5 rounded-full"
                       role="img"
                       aria-label={`${item.event}: gain ${gain(bounds.value, 3)}, interval ${gain(bounds.low ?? bounds.value, 3)} to ${gain(bounds.high ?? bounds.value, 3)}`}
                     >
@@ -174,6 +184,6 @@ export default async function Record() {
           )}
         </div>
       </div>
-    </>
+    </Frame>
   );
 }

@@ -24,10 +24,9 @@ export function Reliability({ curves }: { curves: Record<string, CurvePoint[]> }
           options={events.map((name) => [name, NAMES[name]!] as const)}
           value={event}
           onChange={setEvent}
-          tone="cool"
         />
       </div>
-      <div className="inset flex-1 rounded-[18px] p-1.5">
+      <div className="pane-well flex-1 rounded-[18px] p-1.5">
         <svg
           viewBox="0 0 400 252"
           role="img"

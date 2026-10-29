@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Expand } from "@/components/ops/expand";
+import { Frame } from "@/components/ops/frame";
 import { Board } from "@/components/race/board";
 import { Drift } from "@/components/race/drift";
 import { PageHead } from "@/components/tile";
@@ -19,7 +21,7 @@ function Trust({ evidence }: { evidence: NonNullable<ForecastView["evidence"]> }
   const tied = baselines.filter((name) => !evidence.separated_from.includes(name));
   const list = (names: string[]) => names.map((name) => BASELINES[name]).join(" and ");
   return (
-    <Link href="/record/" className="inset press flex items-center gap-3.5 rounded-[18px] px-4 py-3">
+    <Link href="/record/" className="pane-well press flex items-center gap-3.5 rounded-[18px] px-4 py-3">
       <span className="flex flex-1 flex-col gap-1.5">
         <span className="text-xs text-ink-3">Tested on {evidence.races} past races</span>
         <span className="flex gap-1.5">
@@ -68,19 +70,19 @@ export default async function RaceWeek() {
   const stage = current ? STAGE[current.stage] : undefined;
 
   return (
-    <>
-      <PageHead
-        title={forecast.event.race_name}
-        sub={`${circuitName(forecast.event.circuit_id)}, ${forecast.laps} laps. Forecast ${stage ? `published ${stage}, ` : "published "}${stamp(forecast.generated_at)}.`}
-      >
-        <div className="flex flex-wrap items-center gap-2.5">
+    <Frame
+      head={
+        <PageHead
+          title={forecast.event.race_name}
+          sub={`${circuitName(forecast.event.circuit_id)}, ${forecast.laps} laps. Forecast ${stage ? `published ${stage}, ` : "published "}${stamp(forecast.generated_at)}.`}
+        >
           {drops.map((ruling) => {
             const grid = forecast.drivers.find((driver) => driver.driver_code === ruling.driver_code)?.grid;
             return (
               <Link
                 key={`${ruling.document}-${ruling.entry}`}
                 href="/stewards/"
-                className="glass press flex items-center gap-2.5 rounded-full border-magenta/40 px-3.5 py-2 text-[12.5px]"
+                className="pane press flex items-center gap-2.5 rounded-full border-magenta/40 px-3.5 py-2 text-[12.5px]"
               >
                 <span className="h-2 w-2 rounded-full bg-magenta shadow-[0_0_8px_#c03fd0]" />
                 {ruling.driver_code}: {ruling.sanction.text.toLowerCase()}
@@ -89,7 +91,10 @@ export default async function RaceWeek() {
             );
           })}
           {snapshots.length > 0 && (
-            <ol aria-label="Forecasts published this week" className="inset-sm flex items-center gap-0.5 rounded-full px-2 py-1.5">
+            <ol
+              aria-label="Forecasts published this week"
+              className="pane-well flex items-center gap-0.5 rounded-full px-2 py-1.5"
+            >
               {snapshots.map((snapshot) => {
                 const now = snapshot.run_id === forecast.run_id;
                 return (
@@ -114,14 +119,23 @@ export default async function RaceWeek() {
               </li>
             </ol>
           )}
-        </div>
-      </PageHead>
+        </PageHead>
+      }
+      strip={
+        <Expand label="Open the week" height={250}>
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="display text-[17px]">How the call moved this week</h2>
+            <span className="text-[11px] text-mute">chance to win at each published forecast</span>
+          </div>
+          <Drift snapshots={history?.snapshots ?? []} start={history?.event.start_utc ?? null} />
+        </Expand>
+      }
+    >
       <Board
         race={forecast}
         sprint={sprint?.state === "forecast" ? sprint.forecast : null}
         trust={forecast.evidence ? <Trust evidence={forecast.evidence} /> : null}
-        drift={<Drift snapshots={history?.snapshots ?? []} start={history?.event.start_utc ?? null} />}
       />
-    </>
+    </Frame>
   );
 }

@@ -106,7 +106,7 @@ export function FinishGrid({ drivers, paths }: { drivers: ForecastDriver[]; path
         {focused && (
           <div
             role="status"
-            className="glass pointer-events-none absolute left-[70px] w-[220px] rounded-[18px] px-4 py-3.5"
+            className="pane pointer-events-none absolute left-[70px] w-[220px] rounded-[18px] px-4 py-3.5"
             style={{ top: Math.min(24 + at * ROW + 24, 24 + sorted.length * ROW - 160) }}
           >
             <div className="flex items-baseline gap-2">

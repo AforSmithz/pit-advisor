@@ -9,7 +9,7 @@ export function TeammateBars({ samples, code }: { samples: TeammateSample[]; cod
   const reach = Math.max(...samples.map((sample) => Math.abs(sample.delta)), 0.1);
   const slot = 348 / samples.length;
   return (
-    <div className="inset flex-1 rounded-2xl p-1">
+    <div className="pane-well flex-1 rounded-2xl p-1">
       <svg
         viewBox="0 0 360 120"
         role="img"

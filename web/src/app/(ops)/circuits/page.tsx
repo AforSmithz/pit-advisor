@@ -1,3 +1,4 @@
+import { Frame } from "@/components/ops/frame";
 import { PageHead } from "@/components/tile";
 import { plain, signed } from "@/lib/format";
 import { along, polar } from "@/lib/geometry";
@@ -77,14 +78,17 @@ export default async function Circuits() {
   ] as const;
 
   return (
-    <>
-      <PageHead title="Circuits" sub="What this track rewards, where else rewards the same, and which cars suit it.">
-        <span className="inset-sm rounded-full px-3.5 py-2 text-xs text-ink-3">
-          This weekend: <span className="text-ink">{name}</span>
-        </span>
-      </PageHead>
-      <div className="flex flex-1 flex-wrap items-stretch gap-4">
-        <section className="raised flex min-w-[270px] flex-[0_1_300px] flex-col gap-4 rounded-[30px] p-[22px]">
+    <Frame
+      head={
+        <PageHead title="Circuits" sub="What this track rewards, where else rewards the same, and which cars suit it.">
+          <span className="pane inline-flex items-center rounded-full px-4 py-2.5 text-sm text-ink-2">
+            This weekend: <span className="text-ink">{name}</span>
+          </span>
+        </PageHead>
+      }
+    >
+      <div className="contents">
+        <section data-split className="pane flex min-w-[270px] flex-[0_1_300px] flex-col gap-4 rounded-3xl p-[22px]">
           <div>
             <h2 className="display text-[46px] leading-[0.95] font-semibold">{name}</h2>
             <span className="text-[13px] text-ink-3">
@@ -94,13 +98,13 @@ export default async function Circuits() {
           </div>
           <dl className="grid grid-cols-2 gap-2.5">
             {facts.map(([label, value, mono]) => (
-              <div key={label} className="inset-sm rounded-2xl px-3 py-2.5">
+              <div key={label} className="pane-well rounded-2xl px-3 py-2.5">
                 <dt className="text-[11px] text-mute">{label}</dt>
                 <dd className={`mt-0.5 text-[19px] ${mono ? "figure" : ""}`}>{value}</dd>
               </div>
             ))}
           </dl>
-          <div className="inset flex flex-1 flex-col justify-between gap-2.5 rounded-[22px] p-4">
+          <div className="pane-well flex flex-1 flex-col justify-between gap-2.5 rounded-[22px] p-4">
             <span className="display text-sm">What it asks of a car</span>
             {DEMANDS.map(([key, label], row) => {
               const level = profile.demand[key] ?? 0;
@@ -111,12 +115,12 @@ export default async function Circuits() {
                     {PIPS.map((color, k) => (
                       <span
                         key={color}
-                        className={k < level ? "lit h-[13px] rounded-full" : "inset-sm h-[13px] rounded-full"}
+                        className={k < level ? "lit h-[13px] rounded-full" : "pane-well h-[13px] rounded-full"}
                         style={
                           k < level
                             ? {
                                 background: color,
-                                boxShadow: `0 0 8px ${color}, inset 0 1px 0 rgb(255 255 255 / 0.3)`,
+                                boxShadow: `0 0 8px ${color}, pane-well 0 1px 0 rgb(255 255 255 / 0.3)`,
                                 animationDelay: `${200 + row * 60 + k * 30}ms`,
                               }
                             : undefined
@@ -131,12 +135,15 @@ export default async function Circuits() {
           </div>
         </section>
 
-        <section className="raised flex min-w-0 flex-[1.1_1_360px] flex-col gap-2.5 rounded-[30px] px-5 py-[18px]">
+        <section
+          data-split
+          className="pane flex min-w-0 flex-[1.1_1_360px] flex-col gap-2.5 rounded-3xl px-5 py-[18px]"
+        >
           <div className="flex items-baseline justify-between">
             <h2 className="display text-[18px]">Circuits that ask the same</h2>
             <span className="text-[11px] text-mute">closer is more alike</span>
           </div>
-          <div className="inset relative min-h-[320px] flex-1 overflow-hidden rounded-[26px]">
+          <div className="pane-well relative min-h-[320px] flex-1 overflow-hidden rounded-3xl">
             <svg
               viewBox="0 0 560 560"
               role="img"
@@ -167,7 +174,15 @@ export default async function Circuits() {
               ))}
               {nodes.map((node) => (
                 <g key={node.circuit_id} className="lit">
-                  <line x1="280" y1="280" x2={node.nx} y2={node.ny} stroke={node.color} strokeOpacity="0.35" strokeWidth="1.5" />
+                  <line
+                    x1="280"
+                    y1="280"
+                    x2={node.nx}
+                    y2={node.ny}
+                    stroke={node.color}
+                    strokeOpacity="0.35"
+                    strokeWidth="1.5"
+                  />
                   <circle cx={node.nx} cy={node.ny} r={14 + node.similarity * 16} fill={node.color} opacity="0.16" />
                   <circle
                     cx={node.nx}
@@ -199,15 +214,32 @@ export default async function Circuits() {
                   </text>
                 </g>
               ))}
-              <circle cx="280" cy="280" r="12" fill="#ffffff" style={{ filter: "drop-shadow(0 0 10px rgb(255 140 110 / 0.8))" }} />
-              <text x="280" y="318" textAnchor="middle" fill="#ececef" fontFamily="var(--font-display)" fontSize="15" letterSpacing="1.2">
+              <circle
+                cx="280"
+                cy="280"
+                r="12"
+                fill="#ffffff"
+                style={{ filter: "drop-shadow(0 0 10px rgb(255 140 110 / 0.8))" }}
+              />
+              <text
+                x="280"
+                y="318"
+                textAnchor="middle"
+                fill="#ececef"
+                fontFamily="var(--font-display)"
+                fontSize="15"
+                letterSpacing="1.2"
+              >
                 {name.toUpperCase()}
               </text>
             </svg>
           </div>
         </section>
 
-        <section className="raised flex min-w-0 flex-[1.2_1_420px] flex-col gap-2.5 rounded-[30px] px-5 py-[18px]">
+        <section
+          data-split
+          className="pane flex min-w-0 flex-[1.2_1_420px] flex-col gap-2.5 rounded-3xl px-5 py-[18px]"
+        >
           <div className="flex items-baseline justify-between">
             <h2 className="display text-[18px]">Which cars suit it</h2>
             <span className="text-[11px] text-mute">% off benchmark, left is quicker</span>
@@ -227,13 +259,19 @@ export default async function Circuits() {
             {teams.map((team) => {
               const color = teamColor(team.constructor_id);
               return (
-                <div key={team.constructor_id} className="grid grid-cols-[96px_minmax(0,1fr)_90px] items-center gap-2.5">
+                <div
+                  key={team.constructor_id}
+                  className="grid grid-cols-[96px_minmax(0,1fr)_90px] items-center gap-2.5"
+                >
                   <span className="flex items-center gap-[7px] text-xs">
-                    <span className="h-3.5 w-[3px] rounded-sm" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
+                    <span
+                      className="h-3.5 w-[3px] rounded-sm"
+                      style={{ background: color, boxShadow: `0 0 6px ${color}` }}
+                    />
                     {teamName(team.constructor_id)}
                   </span>
                   <span
-                    className="inset-sm relative block h-[26px] rounded-[11px]"
+                    className="pane-well relative block h-[26px] rounded-[11px]"
                     title={
                       team.disagree
                         ? "The two estimates disagree here"
@@ -286,6 +324,6 @@ export default async function Circuits() {
           </div>
         </section>
       </div>
-    </>
+    </Frame>
   );
 }

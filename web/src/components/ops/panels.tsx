@@ -208,7 +208,7 @@ export function Order({ drivers }: { drivers: ForecastDriver[] }) {
   const sorted = [...drivers].sort((a, b) => a.expected_position - b.expected_position);
   const peak = Math.max(...drivers.map((d) => d.podium), 0.01);
   return (
-    <div data-split className="pane hidden rounded-3xl px-5 pt-4 pb-3.5 lg:mr-2 lg:block">
+    <div data-split className="pane hidden rounded-3xl px-5 pt-4 pb-3.5 lg:block">
       <div className="ops-content flex items-baseline justify-between">
         <h3 className="text-[15px] font-normal text-ink-2">Expected finishing order</h3>
         <span className="text-xs text-mute">bar height is podium chance</span>

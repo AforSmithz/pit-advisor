@@ -55,8 +55,8 @@ export function Explorer({
   const chosen = precedents.find((precedent) => precedent.offence === offence);
 
   return (
-    <div className="flex flex-1 flex-wrap items-stretch gap-4">
-      <section className="raised flex min-w-0 flex-[1.15_1_560px] flex-col gap-3 rounded-[30px] px-5 py-[18px]">
+    <>
+      <section data-split className="pane flex flex-col gap-3 rounded-3xl px-5 py-[18px]">
         <div className="flex items-baseline justify-between">
           <h2 className="display text-[19px]">This weekend, {rulings.length} rulings</h2>
           <span className="text-[11.5px] text-mute">tap one to see what usually happens</span>
@@ -80,12 +80,15 @@ export function Explorer({
                   if (ruling.offence) setOffence(ruling.offence);
                 }}
                 className={`press flex min-h-[128px] cursor-pointer flex-col gap-1.5 rounded-[20px] px-3.5 py-3 text-left ${
-                  on ? "inset shadow-[0_0_0_1px_rgb(192_63_208_/_0.5)]" : "raised-sm"
+                  on ? "pane-well shadow-[0_0_0_1px_rgb(192_63_208_/_0.5)]" : "pane"
                 }`}
               >
                 <span className="flex items-center justify-between gap-2">
                   <span className="flex items-center gap-2">
-                    <span className="h-[15px] w-[3px] rounded-sm" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
+                    <span
+                      className="h-[15px] w-[3px] rounded-sm"
+                      style={{ background: color, boxShadow: `0 0 6px ${color}` }}
+                    />
                     <span className="code text-[17px]">{ruling.driver_code ?? ruling.competitor ?? "Team"}</span>
                   </span>
                   <span className="text-[10.5px] text-mute">
@@ -112,12 +115,12 @@ export function Explorer({
         </div>
       </section>
 
-      <section className="raised flex min-w-0 flex-[1_1_480px] flex-col gap-3 rounded-[30px] px-5 py-[18px]">
+      <section data-split className="pane flex flex-col gap-3 rounded-3xl px-5 py-[18px]">
         <div className="flex items-baseline justify-between">
           <h2 className="display text-[19px]">What usually happens</h2>
           <span className="text-[11.5px] text-mute">driver rulings{since ? `, ${since} to now` : ""}</span>
         </div>
-        <div className="inset overflow-x-auto rounded-[22px] px-3 pt-3.5 pb-2.5">
+        <div className="pane-well overflow-x-auto rounded-[22px] px-3 pt-3.5 pb-2.5">
           <div className="min-w-[460px]">
             <div className="grid grid-cols-[150px_repeat(6,minmax(0,1fr))] items-center gap-1">
               <span />
@@ -139,7 +142,7 @@ export function Explorer({
                     setCard(null);
                   }}
                   className={`press mt-1 grid h-[54px] w-full cursor-pointer grid-cols-[150px_repeat(6,minmax(0,1fr))] items-center gap-1 rounded-[14px] text-left ${
-                    on ? "raised-sm" : ""
+                    on ? "pane" : ""
                   }`}
                 >
                   <span className="flex flex-col pl-2.5">
@@ -173,10 +176,10 @@ export function Explorer({
           </div>
         </div>
         {chosen && (
-          <div className="glass flex flex-col gap-2 rounded-[22px] px-[18px] py-4">
+          <div className="pane flex flex-col gap-2 rounded-[22px] px-[18px] py-4">
             <span className="display text-base">{chosen.label}</span>
             <span className="text-[13px] leading-normal text-ink-2">{describe(chosen)}</span>
-            <span className="inset-sm flex h-3 gap-0.5 overflow-hidden rounded-full p-0.5">
+            <span className="pane-well flex h-3 gap-0.5 overflow-hidden rounded-full p-0.5">
               {OUTCOMES.filter(([key]) => (chosen.outcomes[key] ?? 0) > 0).map(([key, , color]) => (
                 <span
                   key={key}
@@ -188,10 +191,10 @@ export function Explorer({
           </div>
         )}
         <p className="text-[11px] leading-snug text-mute">
-          Stewards decisions are not binding precedent. This only counts what happened, matched by the
-          article cited or, failing that, by the wording of the finding.
+          Stewards decisions are not binding precedent. This only counts what happened, matched by the article cited or,
+          failing that, by the wording of the finding.
         </p>
       </section>
-    </div>
+    </>
   );
 }

@@ -25,7 +25,7 @@ export function Roster({ drivers, current }: { drivers: DriverHistory[]; current
               aria-current={on ? "page" : undefined}
               aria-label={`${driver.driver_code}: ${form ? `form ${signed(form.value)}, ${form.samples} races` : "no form estimate"}`}
               className={`press grid h-[27px] grid-cols-[3px_34px_minmax(0,1fr)_44px] items-center gap-2 rounded-[10px] px-1.5 ${
-                on ? "raised-sm" : "hover:bg-white/[0.03]"
+                on ? "pane" : "hover:bg-white/[0.03]"
               }`}
             >
               <span className="h-[13px] w-[3px] rounded-sm" style={{ background: color, boxShadow: `0 0 5px ${color}` }} />

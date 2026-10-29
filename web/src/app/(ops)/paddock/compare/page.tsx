@@ -17,11 +17,15 @@ export default async function HeadToHead() {
     ranked[1]?.driver_code ?? drivers[1]!.driver_code,
   ];
   return (
-    <>
-      <PageHead title="Paddock" sub="Any two drivers, every instrument mirrored.">
-        <PaddockTabs on="compare" />
-      </PageHead>
-      <Compare drivers={drivers} field={forecast.drivers} initial={initial} />
-    </>
+    <Compare
+      head={
+        <PageHead title="Paddock" sub="Any two drivers, every instrument mirrored.">
+          <PaddockTabs on="compare" />
+        </PageHead>
+      }
+      drivers={drivers}
+      field={forecast.drivers}
+      initial={initial}
+    />
   );
 }

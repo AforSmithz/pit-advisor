@@ -45,9 +45,9 @@ export function Gauge({
   const length = arcLength(84, from, to);
   return (
     <figure className="flex flex-col items-center gap-2">
-      <div className="raised relative shrink-0 rounded-full" style={{ width: size, height: size }}>
-        <div className="inset absolute rounded-full" style={{ inset: size * 0.098 }} />
-        <div className="raised-sm absolute rounded-full" style={{ inset: size * 0.235 }} />
+      <div className="pane relative shrink-0 rounded-full" style={{ width: size, height: size }}>
+        <div className="pane-well absolute rounded-full" style={{ inset: size * 0.098 }} />
+        <div className="pane absolute rounded-full" style={{ inset: size * 0.235 }} />
         <svg
           viewBox="0 0 250 250"
           role="img"

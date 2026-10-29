@@ -60,7 +60,7 @@ export function Upgrades({ view, team }: { view: UpgradesView; team: string }) {
       {declared.length > 0 && (
         <ul className="mt-1.5 flex flex-col gap-1.5">
           {declared.map((item) => (
-            <li key={item.ordinal} className="inset-sm rounded-xl px-3 py-2 text-[11.5px] leading-snug text-ink-2">
+            <li key={item.ordinal} className="pane-well rounded-xl px-3 py-2 text-[11.5px] leading-snug text-ink-2">
               <span className="mr-2 text-[10px] tracking-[0.08em] text-mute uppercase">{item.category}</span>
               {item.text.replace(/\s*Car Presentation\s*[–-].*$/i, "")}
             </li>
