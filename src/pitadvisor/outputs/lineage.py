@@ -29,7 +29,14 @@ INPUTS: Final[dict[str, tuple[str, ...]]] = {
     "track_view": ("races", "results", "session_laps"),
     "calibration_view": ("races", "results", "qualifying", "session_laps", "market_odds"),
     "debrief_view": ("races", "results"),
-    "stewards_view": ("incidents", "incident_sanctions", "incident_articles", "results"),
+    "stewards_view": (
+        "incidents",
+        "incident_sanctions",
+        "incident_articles",
+        "results",
+        "race_control",
+        "races",
+    ),
     "upgrades_view": ("car_updates", "races"),
 }
 
