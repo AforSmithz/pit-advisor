@@ -43,9 +43,12 @@ def _open(request: urllib.request.Request, timeout: float) -> Any:
 
 
 def raceway_query(lat: float, lon: float, radius_m: float) -> str:
+    around = f"(around:{radius_m:.0f},{lat:.6f},{lon:.6f})"
+    # a street circuit is public road, so only its pit lane is highway=raceway. the lap is
+    # a type=circuit relation over the ordinary streets
     return (
-        f'[out:json][timeout:60];way["highway"="raceway"]'
-        f"(around:{radius_m:.0f},{lat:.6f},{lon:.6f});out geom;"
+        f'[out:json][timeout:90];(way["highway"="raceway"]{around};'
+        f'rel["type"="circuit"]{around};);out geom;'
     )
 
 

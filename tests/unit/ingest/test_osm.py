@@ -49,6 +49,12 @@ def test_the_raceway_query_is_a_circle_around_the_circuit():
     assert "(around:2500,19.404200,-99.090700)" in osm.raceway_query(19.4042, -99.0907, 2500)
 
 
+def test_the_raceway_query_also_takes_circuit_relations_for_street_tracks():
+    query = osm.raceway_query(36.1147, -115.173, 4000)
+    assert 'rel["type"="circuit"](around:4000,36.114700,-115.173000)' in query
+    assert query.endswith("out geom;")
+
+
 def test_a_busy_server_is_retried_with_a_growing_wait():
     waits = []
     opener = Scripted(failure(504), b"<html>at capacity</html>", failure(429), JSON)
