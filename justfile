@@ -64,6 +64,15 @@ deploy-pipeline:
       pitadvisor-agent-{{env_var_or_default("PITADV_ENV", "dev")}} \
       --exclusively -c pipelineImageTag="$tag" --require-approval broadening
 
+
+# bakes the 3d scene of every circuit on a season's calendar, skipping the ones already baked.
+# the light machine publishes the site behind it
+scenery-backfill season:
+    aws stepfunctions start-execution \
+      --state-machine-arn arn:aws:states:{{AWS_REGION}}:{{account}}:stateMachine:pitadvisor-light-{{env_var_or_default("PITADV_ENV", "dev")}} \
+      --input '{"mode": "scenery", "season": {{season}}, "round": 0}' \
+      {{profile}} --region {{AWS_REGION}}
+
 doctor:
     uv run pitadv doctor
 

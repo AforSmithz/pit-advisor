@@ -560,7 +560,7 @@ def test_the_pipeline_emits_every_view_the_dashboard_reads(transform_template: T
 
 def test_a_step_cannot_overwrite_the_season_and_round(transform_template: Template) -> None:
     definition = weekend_definition(transform_template)
-    assert definition.count('"ResultPath":"$.lastTask"') == 11
+    assert definition.count('"ResultPath":"$.lastTask"') == 12
     assert "$.season" in definition
 
 
@@ -1136,3 +1136,20 @@ def test_the_dashboard_finds_resources_by_name_not_by_reference(
     # a cross-stack import would make the observability stack wait on the others, and it is
     # the one that has to deploy first so the budgets exist before anything can spend
     assert "Fn::ImportValue" not in dashboard_body(observability_template)
+
+
+def test_the_weekend_bakes_the_scene_without_ever_holding_the_forecast(
+    transform_template: Template,
+) -> None:
+    weekend = weekend_definition(transform_template)
+    assert "pitadv scenery --season $SEASON --round $ROUND --if-missing" in weekend
+    assert weekend.index("CheckLineage") < weekend.index("BakeScenery") < weekend.index("EmitViews")
+    # a failed bake goes round to the emit through the catch
+    assert "SceneryDeferred" in weekend
+    assert "States.ALL" in weekend
+
+
+def test_the_light_machine_can_backfill_every_scene(transform_template: Template) -> None:
+    light = machine_definition(transform_template, f"pitadvisor-light-{ENV_NAME}")
+    assert "pitadv scenery --all --season $SEASON --if-missing" in light
+    assert light.index("LightScenery") < light.index("PublishLightScenery")

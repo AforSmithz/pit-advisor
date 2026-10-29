@@ -110,6 +110,10 @@ LIGHT_STEPS = {
 # monday: market prices for the race just run, then wikipedia's write-up into the corpus. two
 # tasks, so a corpus step that fails and is retried does not fetch the markets again
 SETTLE_MARKETS = "pitadv markets"
+# the 3d scene for the dashboard, once per circuit: the weekend run bakes this week's circuit if
+# it is missing, the light machine's scenery mode bakes the whole calendar in one go
+BAKE_SCENERY = "pitadv scenery --season $SEASON --round $ROUND --if-missing"
+BACKFILL_SCENERY = "pitadv scenery --all --season $SEASON --if-missing"
 SETTLE_CORPUS = "pitadv docs-sync --index"
 PUBLIC_SUBNET = (
     "The task runs in a public subnet with a public IP and no inbound rules. The alternative "
@@ -353,6 +357,21 @@ class TransformStack(Stack):
         # thursday refreshes any race week, monday a weekend just raced, the watch forces it.
         # anything else ends at the choice having spent one small task
         no_race = sfn.Succeed(self, "NothingToRefresh")
+        emit = self._step(
+            "EmitViews",
+            # history and debrief read the forecasts kept above, so the emitter runs
+            # them after forecast and sprint whatever order they are listed in
+            "pitadv emit-views --views pipeline,weekend,driver,track,forecast,sprint,"
+            "calibration,history,stewards,upgrades,debrief,lineage,brief",
+        )
+        scenery = self._step("BakeScenery", BAKE_SCENERY)
+        # the scene is decoration: an overpass outage ships the weekend without it, never holds
+        # the forecast back
+        scenery.add_catch(
+            sfn.Pass(self, "SceneryDeferred").next(emit),
+            errors=["States.ALL"],
+            result_path=sfn.JsonPath.DISCARD,
+        )
         refresh = (
             sfn.Chain.start(
                 sfn.Pass(
@@ -399,15 +418,8 @@ class TransformStack(Stack):
                 )
             )
             .next(self._step("CheckLineage", "pitadv lineage --check"))
-            .next(
-                self._step(
-                    "EmitViews",
-                    # history and debrief read the forecasts kept above, so the emitter runs
-                    # them after forecast and sprint whatever order they are listed in
-                    "pitadv emit-views --views pipeline,weekend,driver,track,forecast,sprint,"
-                    "calibration,history,stewards,upgrades,debrief,lineage,brief",
-                )
-            )
+            .next(scenery)
+            .next(emit)
             .next(self._publish("PublishWeekend"))
         )
         definition = (
@@ -514,6 +526,12 @@ class TransformStack(Stack):
                     self._publish(f"PublishLight{mode.title()}")
                 ),
             )
+        light.when(
+            sfn.Condition.string_equals("$.mode", "scenery"),
+            sfn.Chain.start(self._run("LightScenery", BACKFILL_SCENERY, timeout_seconds=3600)).next(
+                self._publish("PublishLightScenery")
+            ),
+        )
         light.when(
             sfn.Condition.string_equals("$.mode", "settle"),
             sfn.Chain.start(
