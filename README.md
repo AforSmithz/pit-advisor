@@ -42,7 +42,8 @@ Each of these is published as a versioned JSON view that passed the quality gate
 Next.js dashboard renders the views. The home page is Race Ops: the next circuit as an
 interactive 3D model, with the verdict, the favourite, the contenders and the predicted order
 floating over it in glass panels. Race week in full, the paddock, circuits, the stewards and the
-track record sit behind it as their own pages. A Bedrock agent answers questions over the same
+track record are their own pages on the same scene: the model stays loaded, the camera moves to a
+view that suits each page, and the panels keep to a column beside the track. A Bedrock agent answers questions over the same
 views, the marts and a regulations and race-report corpus, with citations.
 
 The circuit model is built by the pipeline, not drawn by hand and not fetched by the browser. The
