@@ -183,3 +183,22 @@ def test_raceway_lines_skip_karting_and_single_nodes():
 @pytest.mark.parametrize("element", [{"type": "node"}, {"type": "relation", "members": []}])
 def test_shapes_without_geometry_give_no_rings(element):
     assert scenery.rings(element, scenery.track_frame(ALIGNMENT)) == []
+
+
+def test_a_forest_spanning_the_region_only_scatters_over_the_plinth():
+    forest = {"type": "way", "tags": {"natural": "wood"}, "geometry": box(0.0, 0.0, half=20_000.0)}
+    plinth = (-300.0, -300.0, 300.0, 300.0)
+    found = scenery.tree_candidates(
+        [forest], scenery.track_frame(ALIGNMENT), np.random.default_rng(1), plinth
+    )
+    # 600 m square at one tree per 220 m2, not the 1,600 km2 the ring spans
+    assert 1500 < len(found) < 1700
+    assert np.abs(found).max() <= 300.0
+
+
+def test_a_forest_off_the_plinth_scatters_nothing():
+    forest = {"type": "way", "tags": {"natural": "wood"}, "geometry": box(5000.0, 5000.0)}
+    found = scenery.tree_candidates(
+        [forest], scenery.track_frame(ALIGNMENT), np.random.default_rng(1), (0.0, 0.0, 100.0, 100.0)
+    )
+    assert len(found) == 0

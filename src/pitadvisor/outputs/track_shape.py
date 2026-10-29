@@ -21,6 +21,9 @@ BLEND_M: Final = 200.0
 UNDER_TRACK_M: Final = 3.0
 # share of the published circuit length a baked lap may miss by before an older one is tried
 LENGTH_TOLERANCE: Final = 0.005
+INSIDE_BUDGET: Final = 2_000_000
+# a street circuit the raceway query misses fits onto the wrong lines, tens of metres out
+ALIGN_LIMIT_M: Final = 15.0
 
 Array = npt.NDArray[np.float64]
 
@@ -156,7 +159,16 @@ def flatten_under(
 
 
 def inside(points: Array, ring: Array) -> npt.NDArray[np.bool_]:
-    """Even-odd rule, vectorised over the points."""
+    # points by edges is the working set, and a forest ring has thousands of edges, so the
+    # points go through in chunks or a forested plinth runs the task out of memory
+    rows = max(1, INSIDE_BUDGET // max(len(ring), 1))
+    found = np.zeros(len(points), dtype=bool)
+    for start in range(0, len(points), rows):
+        found[start : start + rows] = _inside(points[start : start + rows], ring)
+    return found
+
+
+def _inside(points: Array, ring: Array) -> npt.NDArray[np.bool_]:
     x, y = points[:, 0][:, None], points[:, 1][:, None]
     ax, ay = ring[:, 0][None, :], ring[:, 1][None, :]
     bx, by = np.roll(ring[:, 0], -1)[None, :], np.roll(ring[:, 1], -1)[None, :]

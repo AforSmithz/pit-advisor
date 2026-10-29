@@ -254,7 +254,7 @@ def buildings(
 
 
 def tree_candidates(
-    elements: list[dict[str, Any]], project: ToTrack, rng: np.random.Generator
+    elements: list[dict[str, Any]], project: ToTrack, rng: np.random.Generator, box: Box
 ) -> Array:
     picked: list[Array] = []
     for element in elements:
@@ -272,7 +272,11 @@ def tree_candidates(
             for ring in rings(element, project):
                 if len(ring) < 4:
                     continue
-                low, high = ring.min(axis=0), ring.max(axis=0)
+                # a forest relation can span the region, so only the part over the plinth
+                low = np.maximum(ring.min(axis=0), (box[0], box[1]))
+                high = np.minimum(ring.max(axis=0), (box[2], box[3]))
+                if (high <= low).any():
+                    continue
                 count = int(np.prod(high - low) / TREE_AREA_M2)
                 scatter = low + rng.random((count, 2)) * (high - low)
                 picked.append(scatter[inside(scatter, ring)])
@@ -345,7 +349,7 @@ def scenery_view(
     gx, gy, heights = plinth(box, points, alignment, terrain)
     ground = ground_at(box, heights)
     found, footprints = buildings(elements, project, box, ground)
-    trees = place_trees(tree_candidates(elements, project, rng), box, points, footprints, rng)
+    trees = place_trees(tree_candidates(elements, project, rng, box), box, points, footprints, rng)
     tree_rows = np.c_[trees, ground(trees)] if len(trees) else np.empty((0, 3))
     return SceneryView(
         generated_at=datetime.now(UTC),

@@ -97,3 +97,13 @@ def test_points_in_a_polygon_follow_the_even_odd_rule():
     ring = np.array([[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [5.0, 4.0], [0.0, 10.0]])
     points = np.array([[2.0, 2.0], [5.0, 8.0], [-1.0, 5.0], [9.5, 9.0], [11.0, 1.0]])
     assert track_shape.inside(points, ring).tolist() == [True, False, False, True, False]
+
+
+def test_inside_gives_the_same_answer_in_chunks(monkeypatch):
+    angle = np.linspace(0, 2 * np.pi, 400, endpoint=False)
+    ring = np.c_[np.cos(angle) * 100, np.sin(angle) * 100]
+    points = np.random.default_rng(3).uniform(-150, 150, (5000, 2))
+    whole = track_shape.inside(points, ring)
+    monkeypatch.setattr(track_shape, "INSIDE_BUDGET", 1000)
+    assert (track_shape.inside(points, ring) == whole).all()
+    assert whole.tolist() == (np.hypot(points[:, 0], points[:, 1]) < 100).tolist()
