@@ -526,11 +526,19 @@ class TransformStack(Stack):
                     self._publish(f"PublishLight{mode.title()}")
                 ),
             )
+        backfill = self._run("LightScenery", BACKFILL_SCENERY, timeout_seconds=3600)
+        # a street circuit the map cannot place fails the step, but the circuits that did bake
+        # still go out, and the run still ends failed so the misses are seen
+        backfill.add_catch(
+            sfn.Chain.start(self._publish("PublishPartialScenery")).next(
+                sfn.Fail(self, "ScenesMissing", error="ScenesMissing")
+            ),
+            errors=["States.ALL"],
+            result_path=sfn.JsonPath.DISCARD,
+        )
         light.when(
             sfn.Condition.string_equals("$.mode", "scenery"),
-            sfn.Chain.start(self._run("LightScenery", BACKFILL_SCENERY, timeout_seconds=3600)).next(
-                self._publish("PublishLightScenery")
-            ),
+            sfn.Chain.start(backfill).next(self._publish("PublishLightScenery")),
         )
         light.when(
             sfn.Condition.string_equals("$.mode", "settle"),

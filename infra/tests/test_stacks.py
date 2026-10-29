@@ -1153,3 +1153,6 @@ def test_the_light_machine_can_backfill_every_scene(transform_template: Template
     light = machine_definition(transform_template, f"pitadvisor-light-{ENV_NAME}")
     assert "pitadv scenery --all --season $SEASON --if-missing" in light
     assert light.index("LightScenery") < light.index("PublishLightScenery")
+    # circuits that baked still publish when a street circuit is refused
+    assert "PublishPartialScenery" in light
+    assert "ScenesMissing" in light
