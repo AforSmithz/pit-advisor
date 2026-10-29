@@ -55,6 +55,7 @@ def test_every_table_has_a_contract():
         "pitstops",
         "weather",
         "session_laps",
+        "race_control",
         "incidents",
         "incident_articles",
         "incident_sanctions",

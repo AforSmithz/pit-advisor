@@ -28,6 +28,7 @@ NATURAL_KEYS: dict[str, tuple[str, ...]] = {
     "pitstops": ("season", "round", "driver_id", "stop"),
     "weather": ("season", "round", "circuit_id", "observed_at", "is_forecast"),
     "session_laps": ("season", "round", "session", "driver_code", "lap"),
+    "race_control": ("season", "round", "session", "ordinal"),
     "incidents": ("season", "round", "document_name", "entry"),
     "incident_articles": ("season", "round", "document_name", "entry", "code"),
     "incident_sanctions": ("season", "round", "document_name", "entry", "ordinal"),

@@ -134,6 +134,22 @@ class SessionLapRow(BronzeRow):
     session_time_millis: int | None = Field(default=None, gt=0)
 
 
+class RaceControlRow(BronzeRow):
+    session: SessionKind
+    # position in the session's messages by time, two can share a timestamp
+    ordinal: int = Field(ge=0)
+    at: datetime
+    # 2026 sessions file everything before the start under lap 0
+    lap: int | None = Field(default=None, ge=0, le=200)
+    category: str
+    flag: str | None = None
+    scope: str | None = None
+    # a marshal sector, not one of the three timing sectors
+    sector: int | None = Field(default=None, ge=1)
+    driver_number: int | None = None
+    message: str
+
+
 class IncidentRow(BronzeRow):
     # five documents in the corpus print no document number, so the published name is the key
     document_name: str
@@ -231,6 +247,7 @@ TABLES: dict[str, type[BronzeRow]] = {
     "pitstops": PitStopRow,
     "weather": WeatherRow,
     "session_laps": SessionLapRow,
+    "race_control": RaceControlRow,
     "incidents": IncidentRow,
     "incident_articles": IncidentArticleRow,
     "incident_sanctions": IncidentSanctionRow,

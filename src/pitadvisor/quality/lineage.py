@@ -21,6 +21,7 @@ RAW_ORIGIN: dict[str, tuple[tuple[Source, str | None], ...]] = {
     "weather": ((Source.OPEN_METEO, "weather"),),
     # fastf1 up to 2026 round 17, openf1 since the timing archive wanted a login
     "session_laps": ((Source.FASTF1, "session_laps"), (Source.OPENF1, "laps")),
+    "race_control": ((Source.OPENF1, "race_control"),),
     "incidents": ((Source.FIA_DOCS, None),),
     "incident_articles": ((Source.FIA_DOCS, None),),
     "incident_sanctions": ((Source.FIA_DOCS, None),),

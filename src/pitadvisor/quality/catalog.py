@@ -13,7 +13,7 @@ from pitadvisor.types import Layer, SessionKind
 SEASON_RANGE = (2018, 2035)
 ROUND_RANGE = (1, 30)
 
-PARTITIONED_BY_SESSION = ("session_laps",)
+PARTITIONED_BY_SESSION = ("session_laps", "race_control")
 
 HIVE_TYPES: dict[type, str] = {
     bool: "boolean",
