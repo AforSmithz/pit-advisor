@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useFitHeight } from "@/lib/fit";
 import { signed } from "@/lib/format";
 import { smoothPath } from "@/lib/geometry";
 import { circuitName } from "@/lib/teams";
@@ -9,10 +10,11 @@ import type { PaceSample } from "@/lib/schemas";
 const X0 = 48;
 const X1 = 628;
 const Y0 = 16;
-const Y1 = 222;
 
 export function PaceTrace({ samples, code }: { samples: PaceSample[]; code: string }) {
   const [hover, setHover] = useState(samples.length - 1);
+  const [box, H] = useFitHeight(640, 250, 200, 520);
+  const Y1 = H - 28;
   if (samples.length === 0) {
     return <p className="text-sm text-ink-3">No fitted race for {code} yet.</p>;
   }
@@ -30,12 +32,12 @@ export function PaceTrace({ samples, code }: { samples: PaceSample[]; code: stri
   const at = samples[hover]!;
   const left = (x(hover) / 640) * 100;
   return (
-    <div className="inset relative flex-1 rounded-[20px] px-1.5 pt-1.5 pb-0.5">
+    <div ref={box} className="pane-well relative min-h-[150px] flex-1 rounded-[20px]">
       <svg
-        viewBox="0 0 640 250"
+        viewBox={`0 0 640 ${H}`}
         role="img"
         aria-label={`${code} race pace over the last ${samples.length} fitted races, as percent off the session benchmark`}
-        className="block h-full min-h-[220px] w-full"
+        className="absolute inset-0 block h-full w-full"
       >
         <defs>
           <linearGradient id="pace-stroke" x1="0" y1="0" x2="1" y2="0">
@@ -53,7 +55,7 @@ export function PaceTrace({ samples, code }: { samples: PaceSample[]; code: stri
             <stop offset="1" stopColor="#fff" stopOpacity="0" />
           </linearGradient>
           <mask id="pace-mask">
-            <rect x="0" y="0" width="640" height="250" fill="url(#pace-fade)" />
+            <rect x="0" y="0" width="640" height={H} fill="url(#pace-fade)" />
           </mask>
         </defs>
         {grid.map((value) => (
@@ -88,7 +90,7 @@ export function PaceTrace({ samples, code }: { samples: PaceSample[]; code: stri
             } as React.CSSProperties
           }
         />
-        <line x1={x(hover)} x2={x(hover)} y1="10" y2="226" stroke="rgb(236 236 239 / 0.2)" />
+        <line x1={x(hover)} x2={x(hover)} y1="10" y2={Y1 + 4} stroke="rgb(236 236 239 / 0.2)" />
         {samples.map((sample, i) => (
           <g key={`${sample.season}-${sample.round}-${sample.regime}`}>
             <circle
@@ -100,7 +102,7 @@ export function PaceTrace({ samples, code }: { samples: PaceSample[]; code: stri
               strokeWidth="1.8"
             />
             {(i % 3 === 0 || i === samples.length - 1) && (
-              <text x={x(i)} y="244" textAnchor="middle" fill={i === hover ? "#ececef" : "#55575f"} fontSize="8.5">
+              <text x={x(i)} y={H - 6} textAnchor="middle" fill={i === hover ? "#ececef" : "#55575f"} fontSize="8.5">
                 {circuitName(sample.circuit_id).slice(0, 6)}
               </text>
             )}
@@ -108,7 +110,7 @@ export function PaceTrace({ samples, code }: { samples: PaceSample[]; code: stri
               x={x(i) - width / 2}
               y="10"
               width={width}
-              height="216"
+              height={Y1 - 6}
               fill="transparent"
               onMouseEnter={() => setHover(i)}
             />
@@ -117,7 +119,7 @@ export function PaceTrace({ samples, code }: { samples: PaceSample[]; code: stri
       </svg>
       <div
         role="status"
-        className="glass pointer-events-none absolute top-3 w-[150px] rounded-2xl px-3.5 py-2.5"
+        className="pane pointer-events-none absolute top-3 w-[150px] rounded-2xl px-3.5 py-2.5"
         style={{ left: `${left}%`, transform: left > 55 ? "translateX(calc(-100% - 14px))" : "translateX(14px)" }}
       >
         <div className="text-[12.5px] font-medium">{circuitName(at.circuit_id)}</div>

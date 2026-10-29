@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { useFitHeight } from "@/lib/fit";
 import { pct, snapshotLabel } from "@/lib/format";
 import { teamColor } from "@/lib/teams";
 import type { Snapshot } from "@/lib/schemas";
@@ -35,19 +36,7 @@ function stamp(iso: string): string {
 export function Drift({ snapshots, start }: { snapshots: Snapshot[]; start: string | null }) {
   const shown = snapshots.filter((snapshot) => !snapshot.repeat);
   const [hover, setHover] = useState<number | null>(null);
-  const [height, setHeight] = useState(300);
-  const box = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const node = box.current;
-    if (!node) return;
-    const observer = new ResizeObserver(([entry]) => {
-      const { width, height: tall } = entry!.contentRect;
-      if (width > 0) setHeight(Math.min(520, Math.max(260, Math.round((W * tall) / width))));
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+  const [box, height] = useFitHeight(W, 300, 260, 520);
 
   if (shown.length === 0) {
     return <p className="text-sm text-ink-3">No forecast has been published for this race yet.</p>;
@@ -105,7 +94,7 @@ export function Drift({ snapshots, start }: { snapshots: Snapshot[]; start: stri
       : leaders.map((code) => `${code} goes from ${pct(winAt(first, code))} to ${pct(winAt(last, code))}`).join("; ");
 
   return (
-    <div ref={box} className="inset relative min-h-[260px] flex-1 rounded-[22px] px-1.5 pt-2 pb-0.5">
+    <div ref={box} className="pane-well relative min-h-[170px] flex-1 rounded-[22px] px-1.5 pt-2 pb-0.5">
       <svg
         viewBox={`0 0 ${W} ${height}`}
         role="img"
@@ -228,7 +217,7 @@ export function Drift({ snapshots, start }: { snapshots: Snapshot[]; start: stri
       {at && (
         <div
           role="status"
-          className="glass pointer-events-none absolute top-3 hidden w-[168px] rounded-2xl px-3.5 py-3 sm:block"
+          className="pane pointer-events-none absolute top-3 hidden w-[168px] rounded-2xl px-3.5 py-3 sm:block"
           style={{ left: `${left}%`, transform: left > 55 ? "translateX(calc(-100% - 16px))" : "translateX(16px)" }}
         >
           <div className="text-[12.5px] font-medium">{snapshotLabel(at)}</div>

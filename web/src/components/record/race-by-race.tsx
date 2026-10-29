@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useFitHeight } from "@/lib/fit";
 import { plain } from "@/lib/format";
 import { along } from "@/lib/geometry";
 import { circuitName } from "@/lib/teams";
@@ -9,7 +10,6 @@ import type { CalibrationView } from "@/lib/schemas";
 const X0 = 52;
 const X1 = 744;
 const Y0 = 34;
-const Y1 = 296;
 
 export function RaceByRace({
   races,
@@ -21,6 +21,8 @@ export function RaceByRace({
   baseline: string;
 }) {
   const [hover, setHover] = useState(races.length - 1);
+  const [box, H] = useFitHeight(760, 330, 240, 560);
+  const Y1 = H - 34;
   const scored = races.filter((race) => model in race.log_loss && baseline in race.log_loss);
   if (scored.length === 0) return <p className="text-sm text-ink-3">No race has been scored yet.</p>;
   const losses = scored.flatMap((race) => [race.log_loss[model]!, race.log_loss[baseline]!]);
@@ -40,12 +42,12 @@ export function RaceByRace({
   const left = (x(Math.min(hover, scored.length - 1)) / 760) * 100;
 
   return (
-    <div className="inset relative flex-1 rounded-[22px] px-1.5 pt-2 pb-0.5">
+    <div ref={box} className="pane-well relative min-h-[150px] flex-1 rounded-[22px]">
       <svg
-        viewBox="0 0 760 330"
+        viewBox={`0 0 760 ${H}`}
         role="img"
         aria-label={`Log loss per race for the model and ${baseline.replace("_", " ")} over ${scored.length} races, lower is better`}
-        className="block h-full min-h-[260px] w-full"
+        className="absolute inset-0 block h-full w-full"
       >
         {ticks.map((value) => (
           <g key={value}>
@@ -94,7 +96,7 @@ export function RaceByRace({
       </svg>
       <div
         role="status"
-        className="glass pointer-events-none absolute top-3 w-[170px] rounded-2xl px-3.5 py-2.5"
+        className="pane pointer-events-none absolute top-3 w-[170px] rounded-2xl px-3.5 py-2.5"
         style={{ left: `${left}%`, transform: left > 55 ? "translateX(calc(-100% - 14px))" : "translateX(14px)" }}
       >
         <div className="text-[12.5px] font-medium">
