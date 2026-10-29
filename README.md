@@ -39,9 +39,22 @@ race delta, two independent track-fit estimators that are shown side by side and
 a weather scenario mix, and a pooled retirement hazard. A Monte Carlo race simulation turns them
 into a finishing-position distribution for the next race, and a time-forward backtest judges it.
 Each of these is published as a versioned JSON view that passed the quality gate, and a static
-Next.js dashboard renders the views across five pages: race week, the paddock, circuits, the
-stewards and the track record. A Bedrock agent answers questions over the same views, the
-marts and a regulations and race-report corpus, with citations.
+Next.js dashboard renders the views. The home page is Race Ops: the next circuit as an
+interactive 3D model, with the verdict, the favourite, the contenders and the predicted order
+floating over it in glass panels. Race week in full, the paddock, circuits, the stewards and the
+track record sit behind it as their own pages. A Bedrock agent answers questions over the same
+views, the marts and a regulations and race-report corpus, with citations.
+
+The circuit model is built by the pipeline, not drawn by hand and not fetched by the browser. The
+shape of the track is the fastest qualifying lap's car positions from OpenF1, resampled every five
+metres with the sector boundaries located by lap time. That lap is fitted onto the circuit as
+OpenStreetMap maps it, which places it on the earth; the fit is refused if the lap sits more than
+fifteen metres off, so a circuit with a bad fit shows no model rather than a wrong one. Around it
+the bake builds a plinth of real terrain from AWS's open elevation tiles, flattened under the
+track, and paints it from OpenStreetMap land use, with building footprints extruded to their
+mapped height or a height estimated from their type, and trees scattered through mapped woods and
+parks. The result is one JSON view per circuit. Every circuit on the 2026 calendar has one, street
+circuits included, and the weekend run bakes any circuit that is missing one.
 
 The lake covers 2021 to the current race of 2026. Every Thursday a state machine checks the
 calendar, and in a race week it refreshes the weather, the sessions, the marts and every view,
@@ -188,6 +201,7 @@ EventBridge rules (Thursday and Monday 06:00 UTC, every 15 minutes for the watch
         +-- catalog sync         glue bronze tables from the contracts
         +-- dbt build            silver and gold, Iceberg MERGE
         +-- lineage check        every gold model traced back to raw
+        +-- bake scenery         3D model of the circuit if it has none; a failure skips it
         +-- emit views           every view the dashboard reads
         +-- publish              workflow dispatch: github rebuilds the static site
 
@@ -270,6 +284,14 @@ coordinates from Jolpica, snapshotted at fetch time so a past prediction can be 
 what was actually known then. The regulations corpus is FIA published documents, versioned by
 season and cited by title and date wherever the agent quotes them; the same crawl collects the
 stewards' decisions and the car presentation submissions.
+
+The circuit models use three more sources, each landed in `raw/` like the rest. Car positions
+over the fastest qualifying lap come from OpenF1's location endpoint. The raceway, buildings,
+land use, roads and trees come from [OpenStreetMap](https://www.openstreetmap.org/) through the
+Overpass API, under the ODbL, credited on the page. On a permanent circuit the track is mapped as
+`highway=raceway`; on a street circuit only the pit lane is, and the lap is a `type=circuit`
+relation over ordinary roads, so the bake reads both. Elevation comes from the
+[Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) on the AWS Open Data registry.
 
 Prediction-market prices come from the public APIs of [Kalshi](https://kalshi.com/) and
 [Polymarket](https://polymarket.com/): for each race, the last traded or mid price at least an
@@ -372,6 +394,16 @@ export, so a refreshed view only reaches it when GitHub rebuilds it; the pipelin
 for that with a workflow dispatch, using a fine-grained token that can run Actions and nothing
 else, kept as an SSM SecureString.
 
+The 3D circuits are baked once per circuit into static views rather than drawn from a map
+service in the browser. A hosted map SDK would bring an API key, per-load billing and a
+dependency on someone else's tiles for the page that loads first; a baked view is a file on
+CloudFront. It also keeps the rule that the frontend computes nothing intact, because the
+placement of the lap on the ground is a fitted quantity, and fitting it in the browser would put
+an untested alignment in TypeScript. The cost is that a circuit nobody has baked has no model
+until the weekend run reaches it, and that the scenery is as good as OpenStreetMap is at that
+spot: a park mapped as one polygon gets one forest, and a city whose buildings carry no heights
+gets estimated ones.
+
 Some of this is deliberately over-engineered for the data volume. A medallion lake and a dbt
 project for two hundred megabytes is more machinery than the problem needs, which is the point:
 the parts being practised are the ones that only matter at scale. What is not accepted is
@@ -451,21 +483,24 @@ Measured from Cost Explorer by `pitadv cost-report`, not estimated. The figures 
 credits, because the account runs on credits and a net figure would read zero every month. The
 account hosts nothing but this project, so the whole-account figure is the project's figure.
 
-| | September 2026 | October 2026, to the 7th |
+| | September 2026 | October 2026, to the 29th |
 |---|---|---|
-| S3 | $0.46 | $0.20 |
-| Fargate (ECS) | $0.29 | |
-| VPC (public IPv4 for the tasks) | $0.06 | |
-| Bedrock embeddings (Cohere) | | $0.24 |
-| ECR | $0.01 | $0.02 |
-| DynamoDB and Athena | $0.01 | |
-| **Total** | **$0.83** | **$0.46** |
+| S3 | $0.46 | $3.39 |
+| Cost Explorer (the cost report's own queries) | | $0.29 |
+| Bedrock embeddings (Cohere) | | $0.25 |
+| ECR | $0.01 | $0.24 |
+| Fargate (ECS) | $0.29 | $0.22 |
+| VPC (public IPv4 for the tasks) | $0.06 | $0.04 |
+| DynamoDB and Athena | $0.01 | $0.04 |
+| **Total** | **$0.83** | **$4.47** |
 
-September includes refetching the entire lake from upstream after moving accounts, which is the
-most expensive thing the system ever does. October so far is mostly the one-off embedding of the
-corpus into the knowledge base. Both measured months are under a dollar against a ceiling of
-twenty, and both carry one-off work, so neither is a steady state yet; the budgets alarm at eighty
-percent of the ceiling. The only line
+September includes refetching the entire lake from upstream after moving accounts. October is
+the first full month of the system running as designed, with the weekend runs, the race-weekend
+watch and the image built in CI, plus the one-off embedding of the corpus and the first bake of
+every circuit model. Most of October's S3 line is requests rather than storage: about 420,000
+writes and lists for $2.10, against $1.04 of storage. The circuit models and the map and
+elevation data behind them add under 300 MB to the lake. That puts October at under a quarter of
+the twenty dollar ceiling; the budgets alarm at eighty percent of it. The only line
 that can plausibly break that is Bedrock token spend, which is why the answering model is the
 cheapest one that passes the eval thresholds and the full eval suite is a deliberate command
 rather than a per-push job. `pitadv cost-report` exits non-zero above the ceiling, and its
@@ -526,6 +561,12 @@ forecast. Madrid and Sepang joined in 2026. Their geometry and most of their dem
 from the circuit owners, Brembo and Pirelli, but nobody publishes a traction or kerb rating for
 either, so those sit at the middle band rather than at a guess. Sepang's braking band rests on
 Brembo's 2017 figures, the last time Formula 1 raced there.
+
+The circuit model is a stylised picture of the place, not a survey. The lap sits within a few
+metres of the mapped road (between two and nine metres at the median across the calendar), but
+building heights are estimated wherever OpenStreetMap has none, trees are scattered at a fixed
+density rather than mapped one by one, and the track is drawn from one car's lap, so it follows
+that driver's line rather than the edges of the road.
 
 The agent is built and has passed its gate, but in the account it runs in today it cannot
 answer: a new AWS account ships with Bedrock's text-generation quota at zero, and lifting it is a
