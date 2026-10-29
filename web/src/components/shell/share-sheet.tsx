@@ -33,11 +33,11 @@ export function ShareSheet({
         role="dialog"
         aria-label="Share and follow"
         onClick={(event) => event.stopPropagation()}
-        className="glass flex w-full max-w-[720px] flex-col gap-5 rounded-[34px] p-6"
+        className="pane flex w-full max-w-[720px] flex-col gap-5 rounded-[34px] p-6"
         style={{ background: "rgb(24 24 28 / 0.8)" }}
       >
         <div className="flex items-center justify-between gap-4">
-          <div role="tablist" aria-label="Share or follow" className="inset-sm flex gap-1 rounded-full p-1">
+          <div role="tablist" aria-label="Share or follow" className="pane-well flex gap-1 rounded-full p-1">
             {(["share", "follow"] as const).map((name) => (
               <button
                 key={name}
@@ -46,7 +46,7 @@ export function ShareSheet({
                 aria-selected={tab === name}
                 onClick={() => setTab(name)}
                 className={`press min-h-9 rounded-full px-4 text-[13px] font-medium capitalize ${
-                  tab === name ? "pill-on" : "text-ink-3"
+                  tab === name ? "pane-on" : "text-ink-3"
                 }`}
               >
                 {name}
@@ -57,7 +57,7 @@ export function ShareSheet({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="raised-sm press h-10 w-10 rounded-full text-lg text-ink-3"
+            className="pane press h-10 w-10 rounded-full text-lg text-ink-3"
           >
             ×
           </button>
@@ -65,7 +65,7 @@ export function ShareSheet({
 
         {tab === "share" ? (
           <>
-            <div className="inset overflow-hidden rounded-3xl p-2.5">
+            <div className="pane-well overflow-hidden rounded-3xl p-2.5">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/share.png"
@@ -80,14 +80,14 @@ export function ShareSheet({
               <button
                 type="button"
                 onClick={() => void copy("link", origin)}
-                className="raised-sm press min-h-12 rounded-2xl text-[13px] font-medium"
+                className="pane press min-h-12 rounded-2xl text-[13px] font-medium"
               >
                 {copied === "link" ? "Link copied" : "Copy link"}
               </button>
               <a
                 href="/share.png"
                 download={`pit-advisor-${race}.png`}
-                className="raised-sm press flex min-h-12 items-center justify-center rounded-2xl text-[13px] font-medium"
+                className="pane press flex min-h-12 items-center justify-center rounded-2xl text-[13px] font-medium"
               >
                 Save image
               </a>
@@ -95,7 +95,7 @@ export function ShareSheet({
                 href={`https://bsky.app/intent/compose?text=${encodeURIComponent(`${title} ${origin}`)}`}
                 target="_blank"
                 rel="noreferrer"
-                className="pill-cool press flex min-h-12 items-center justify-center rounded-2xl text-[13px] font-semibold"
+                className="pane-on press flex min-h-12 items-center justify-center rounded-2xl text-[13px] font-semibold"
               >
                 Post it
               </a>
@@ -112,14 +112,14 @@ export function ShareSheet({
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <a
                 href="/calendar.ics"
-                className="pill-cool press flex min-h-12 items-center justify-center rounded-2xl text-[13px] font-semibold"
+                className="pane-on press flex min-h-12 items-center justify-center rounded-2xl text-[13px] font-semibold"
               >
                 Add to calendar
               </a>
               <button
                 type="button"
                 onClick={() => void copy("feed", `${origin}/feed.xml`)}
-                className="raised-sm press min-h-12 rounded-2xl text-[13px] font-medium"
+                className="pane press min-h-12 rounded-2xl text-[13px] font-medium"
               >
                 {copied === "feed" ? "Feed address copied" : "Copy RSS feed"}
               </button>

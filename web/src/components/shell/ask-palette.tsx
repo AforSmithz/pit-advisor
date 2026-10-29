@@ -54,11 +54,11 @@ export function AskPalette({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-label="Ask Pit Advisor"
         onClick={(event) => event.stopPropagation()}
-        className="glass flex w-full max-w-[640px] flex-col gap-4 rounded-[30px] p-5"
+        className="pane flex w-full max-w-[640px] flex-col gap-4 rounded-3xl p-5"
         style={{ background: "rgb(24 24 28 / 0.8)" }}
       >
         <form
-          className="inset flex items-center gap-3 rounded-[18px] px-4 py-3.5"
+          className="pane-well flex items-center gap-3 rounded-[18px] px-4 py-3.5"
           onSubmit={(event) => {
             event.preventDefault();
             void submit(question);
@@ -80,13 +80,13 @@ export function AskPalette({ onClose }: { onClose: () => void }) {
             placeholder="Form, pace, the forecast, the regulations, the stewards"
             className="min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-mute"
           />
-          <kbd className="raised-sm figure rounded-md px-2 py-1 text-[11px] text-ink-3">esc</kbd>
+          <kbd className="pane figure rounded-md px-2 py-1 text-[11px] text-ink-3">esc</kbd>
         </form>
 
         {asking && <p className="px-1 text-sm text-ink-3">Asking the tools…</p>}
 
         {failure && (
-          <div className="inset-sm rounded-2xl px-4 py-3 text-sm">
+          <div className="pane-well rounded-2xl px-4 py-3 text-sm">
             <p>{failure.message}</p>
             {failure.resetsAt && (
               <p className="mt-1 text-xs text-mute">
@@ -102,7 +102,7 @@ export function AskPalette({ onClose }: { onClose: () => void }) {
               {answer.calls.map((call, index) => (
                 <span
                   key={`${call.name}-${index}`}
-                  className="inset-sm figure flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px]"
+                  className="pane-well figure flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px]"
                   style={{ color: call.ok ? "#2ee6c5" : "#ff5f6d" }}
                 >
                   <span className="h-1.5 w-1.5 rounded-full" style={{ background: call.ok ? "#2ee6c5" : "#ff5f6d" }} />
@@ -133,7 +133,7 @@ export function AskPalette({ onClose }: { onClose: () => void }) {
                 key={example}
                 type="button"
                 onClick={() => void submit(example)}
-                className="raised-sm press min-h-10 rounded-full px-3.5 text-[12.5px]"
+                className="pane press min-h-10 rounded-full px-3.5 text-[12.5px]"
               >
                 {example}
               </button>

@@ -34,17 +34,8 @@
 
 :root {
   color-scheme: dark;
-  --raised: linear-gradient(145deg, #18181b, #0f0f11);
-  --raised-shadow: -7px -7px 16px rgb(255 255 255 / 0.028), 10px 12px 28px rgb(0 0 0 / 0.8);
-  --raised-sm: linear-gradient(145deg, #1b1b1f, #111113);
-  --raised-sm-shadow: -3px -3px 7px rgb(255 255 255 / 0.035), 4px 5px 10px rgb(0 0 0 / 0.75);
-  --inset-shadow: inset 6px 6px 14px rgb(0 0 0 / 0.75), inset -5px -5px 12px rgb(255 255 255 / 0.028);
-  --inset-sm-shadow: inset 2px 2px 5px rgb(0 0 0 / 0.8), inset -2px -2px 5px rgb(255 255 255 / 0.03);
   --warm: linear-gradient(135deg, #ffb35c, #ff6a5c);
   --cool: linear-gradient(135deg, #2ee6c5, #3a8bff);
-  --slab: #141416;
-  --mosaic: var(--color-signal), var(--color-coral), var(--color-magenta), var(--color-violet);
-  --mosaic-caps: var(--color-gold), var(--color-signal-hi), var(--color-blush), var(--color-orchid), var(--color-signal);
 }
 
 html,
@@ -70,42 +61,6 @@ body {
   scrollbar-width: thin;
 }
 
-.raised {
-  background: var(--raised);
-  box-shadow: var(--raised-shadow);
-}
-
-.raised-sm {
-  background: var(--raised-sm);
-  box-shadow: var(--raised-sm-shadow);
-}
-
-.inset {
-  background: var(--color-well);
-  box-shadow: var(--inset-shadow);
-}
-
-.inset-sm {
-  background: var(--color-well);
-  box-shadow: var(--inset-sm-shadow);
-}
-
-.glass {
-  background: rgb(28 28 34 / 0.45);
-  backdrop-filter: blur(24px) saturate(170%);
-  -webkit-backdrop-filter: blur(24px) saturate(170%);
-  border: 1px solid rgb(255 255 255 / 0.08);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 20px 44px rgb(0 0 0 / 0.45);
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .glass {
-    background: #1a1a1e;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-}
-
 .press {
   transition:
     color 160ms ease,
@@ -116,18 +71,6 @@ body {
 
 .press:active {
   transform: scale(0.97);
-}
-
-.pill-on {
-  color: var(--color-ground);
-  background: var(--warm);
-  box-shadow: 0 0 12px rgb(255 120 80 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.35);
-}
-
-.pill-cool {
-  color: var(--color-ground);
-  background: var(--cool);
-  box-shadow: 0 0 12px rgb(46 200 220 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.35);
 }
 
 .figure {
@@ -215,22 +158,6 @@ body {
   }
 }
 
-/* the cards stay hidden while the slab splits over where they will be */
-html[data-veil] main > :not(header) {
-  visibility: hidden;
-}
-
-/* ignition waits behind the curtain so it plays as each card is revealed */
-html:has([data-curtain]) :is(.draw, .swing, .lit, .grow) {
-  animation-play-state: paused;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-curtain] {
-    display: none;
-  }
-}
-
 /* race ops: neumorphic depth in glass, so the diorama shows through. --lift and --sink run 0 to 1 */
 :root {
   --pane: rgb(24 26 30 / 0.46);
@@ -280,8 +207,12 @@ html:has([data-curtain]) :is(.draw, .swing, .lit, .grow) {
 [data-ops-intro] .pane-well {
   --sink: 0;
 }
-[data-ops-intro] .ops-content {
+[data-ops-intro] :is([data-split] > :not(.pane-well), [data-split] .pane-well > *, .ops-content) {
   opacity: 0;
+}
+/* the ignition waits for the split so it plays as each card is revealed */
+[data-ops-intro] :is(.draw, .swing, .lit, .grow) {
+  animation-play-state: paused;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -292,7 +223,7 @@ html:has([data-curtain]) :is(.draw, .swing, .lit, .grow) {
   [data-ops-intro] .pane-well {
     --sink: 1;
   }
-  [data-ops-intro] .ops-content {
+  [data-ops-intro] :is([data-split] > :not(.pane-well), [data-split] .pane-well > *, .ops-content) {
     opacity: 1;
   }
   [data-ops-title] {
@@ -302,4 +233,29 @@ html:has([data-curtain]) :is(.draw, .swing, .lit, .grow) {
 
 [data-ops-panels] {
   scrollbar-width: none;
+}
+
+/* cards written for a wrapping row sit in one column here, so their row sizing must not stretch them */
+:is([data-ops-panels], [data-ops-strip]) [data-split] {
+  flex: none;
+  width: auto;
+  min-width: 0;
+}
+
+.sheet {
+  background: rgb(18 19 23 / 0.8);
+  animation: sheet 280ms var(--ease-out-strong) both;
+}
+
+@keyframes sheet {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation: none;
+  }
 }

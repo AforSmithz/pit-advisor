@@ -29,7 +29,7 @@ export function TraceDrawer({
         role="dialog"
         aria-label="Where this number comes from"
         onClick={(event) => event.stopPropagation()}
-        className="glass absolute top-0 right-0 bottom-0 flex w-full max-w-[480px] flex-col gap-4 overflow-y-auto rounded-l-[34px] p-7"
+        className="pane absolute top-0 right-0 bottom-0 flex w-full max-w-[480px] flex-col gap-4 overflow-y-auto rounded-l-[34px] p-7"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -47,7 +47,7 @@ export function TraceDrawer({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="raised-sm press h-10 w-10 shrink-0 rounded-full text-lg text-ink-3"
+            className="pane press h-10 w-10 shrink-0 rounded-full text-lg text-ink-3"
           >
             ×
           </button>
@@ -81,7 +81,7 @@ export function TraceDrawer({
           ))}
         </ol>
         {!lineage && (
-          <p className="inset-sm rounded-2xl px-4 py-3 text-xs leading-relaxed text-mute">
+          <p className="pane-well rounded-2xl px-4 py-3 text-xs leading-relaxed text-mute">
             The lineage view has not been emitted, so the trace stops at the view.
           </p>
         )}
@@ -104,7 +104,7 @@ function Step({
   children: React.ReactNode;
 }) {
   return (
-    <li className="inset-sm relative grid grid-cols-[40px_minmax(0,1fr)] gap-2.5 rounded-2xl py-2.5 pr-3">
+    <li className="pane-well relative grid grid-cols-[40px_minmax(0,1fr)] gap-2.5 rounded-2xl py-2.5 pr-3">
       <span
         className="mt-1 h-[13px] w-[13px] justify-self-center rounded-full bg-well"
         style={{ boxShadow: `0 0 0 3px ${color}, 0 0 10px ${color}` }}
