@@ -5,6 +5,7 @@ from importlib.metadata import version as package_version
 
 import boto3.session
 import pytest
+import typer
 from botocore.exceptions import ClientError, NoCredentialsError, ProfileNotFound
 from botocore.stub import Stubber
 from typer.testing import CliRunner
@@ -1064,3 +1065,61 @@ def test_any_other_refusal_still_fails_the_index(reindexing):
     run, now, hour = reindexing
     with pytest.raises(ClientError):
         run(Corpus(now - hour, refuse="no such data source"))
+
+
+@pytest.fixture
+def calendar():
+    import polars as pl
+
+    return pl.DataFrame(
+        {
+            "season": [2025, 2025, 2026, 2026, 2026],
+            "round": [13, 20, 13, 19, 20],
+            "circuit_id": ["spa", "rodriguez", "spa", "rodriguez", "americas"],
+        }
+    )
+
+
+def test_scenery_targets_by_name(calendar):
+    assert cli.scenery_targets(calendar, "monza", None, None, False) == ["monza"]
+
+
+def test_scenery_targets_by_race(calendar):
+    assert cli.scenery_targets(calendar, None, 2026, 19, False) == ["rodriguez"]
+
+
+def test_scenery_targets_every_circuit_of_the_latest_season(calendar):
+    assert cli.scenery_targets(calendar, None, None, None, True) == ["americas", "rodriguez", "spa"]
+
+
+def test_scenery_targets_every_circuit_of_a_named_season(calendar):
+    assert cli.scenery_targets(calendar, None, 2025, None, True) == ["rodriguez", "spa"]
+
+
+def test_scenery_targets_unknown_race(calendar):
+    with pytest.raises(typer.BadParameter):
+        cli.scenery_targets(calendar, None, 2026, 3, False)
+
+
+def test_scenery_targets_needs_something(calendar):
+    with pytest.raises(typer.BadParameter):
+        cli.scenery_targets(calendar, None, None, None, False)
+
+
+def test_scenery_skips_baked_and_keeps_going_past_a_failure(lake, monkeypatch, calendar):
+    LocalObjectStore(lake).put("views/scenery/spa.json", b"{}")
+    monkeypatch.setattr("pitadvisor.quality.checks.read_table", lambda *_: calendar)
+    baked: list[str] = []
+
+    def bake(store, ledger, bucket_for, races, circuit):
+        if circuit == "americas":
+            raise RuntimeError("overpass at capacity")
+        baked.append(circuit)
+        return f"{circuit}  baked"
+
+    monkeypatch.setattr(cli, "_bake_scenery", bake)
+    result = CliRunner().invoke(cli.app, ["scenery", "--all", "--if-missing", "--local"])
+    assert result.exit_code == 1
+    assert baked == ["rodriguez"]
+    assert "spa  already baked" in result.output
+    assert "americas  failed: overpass at capacity" in result.output

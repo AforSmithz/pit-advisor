@@ -7,6 +7,7 @@ from typing import Annotated, Any, cast
 from uuid import uuid4
 
 import numpy as np
+import polars as pl
 import typer
 from boto3.session import Session
 from botocore.exceptions import BotoCoreError, ClientError
@@ -832,26 +833,46 @@ def _event(store: ObjectStore, event: str) -> feature_assemble.EventContext:
     return feature_assemble.event_at(store, season, round_)
 
 
-@app.command(help="Bake one circuit's 3D scene: lap shape, terrain plinth, map features.")
-def scenery(
-    circuit: Annotated[str, typer.Option(help="A circuit_id from the races table.")],
-    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
-) -> None:
+class SceneryError(RuntimeError):
+    pass
+
+
+def scenery_targets(
+    races: pl.DataFrame,
+    circuit: str | None,
+    season: int | None,
+    round_: int | None,
+    every: bool,
+) -> list[str]:
+    if circuit:
+        return [circuit]
+    if every:
+        year = season if season is not None else int(cast(int, races["season"].max()))
+        held = races.filter(pl.col("season") == year)["circuit_id"].unique().sort().to_list()
+        return [str(item) for item in held]
+    if season is not None and round_ is not None:
+        row = races.filter((pl.col("season") == season) & (pl.col("round") == round_))
+        if not row.height:
+            raise typer.BadParameter(f"no race {season} round {round_} in the races table")
+        return [str(row["circuit_id"][0])]
+    raise typer.BadParameter("name a --circuit, a --season and --round, or --all")
+
+
+def _bake_scenery(
+    store: ObjectStore,
+    ledger: Ledger,
+    bucket_for: Callable[[str], Bucket],
+    races: pl.DataFrame,
+    circuit: str,
+) -> str:
     from pitadvisor.ingest import osm, terrain
     from pitadvisor.outputs import scenery as scenery_outputs
     from pitadvisor.outputs import track_shape
     from pitadvisor.outputs.view_contracts import emit_scenery
-    from pitadvisor.quality.checks import read_table
 
-    settings = get_settings()
-    store, ledger, bucket_for = _runtime(local, settings)
-    races = read_table(store, Layer.BRONZE, "races")
-    if races is None:
-        typer.echo("races must be in bronze first", err=True)
-        raise typer.Exit(1)
     held = races.filter(races["circuit_id"] == circuit).sort("season", descending=True).to_dicts()
     if not held:
-        raise typer.BadParameter(f"{circuit} is not in the races table")
+        raise SceneryError(f"{circuit} is not in the races table")
     raw, run_id, now = RawStore(store), _run_id(), datetime.now(UTC)
     client = openf1.OpenF1Client(raw, ledger, RateLimiter(bucket_for("openf1")), run_id)
     profiles = track_fit.load()
@@ -881,8 +902,7 @@ def scenery(
         if miss <= track_shape.LENGTH_TOLERANCE:
             break
     if best is None:
-        typer.echo(f"openf1 has no qualifying lap at {circuit}", err=True)
-        raise typer.Exit(1)
+        raise SceneryError(f"openf1 has no qualifying lap at {circuit}")
     _, session, track = best
     key = EventKey(season=session.season, round=session.round)
     centre = next(row for row in held if row["season"] == session.season)
@@ -927,12 +947,47 @@ def scenery(
         run_id,
     )
     measured = sum(not item.estimated for item in view.buildings)
-    typer.echo(
+    return (
         f"{circuit}  {session.season} r{session.round:02d} qualifying  {track.length_m:,.0f} m  "
         f"aligned median {alignment.median_m:.2f} m p95 {alignment.p95_m:.2f} m  "
-        f"{len(view.buildings)} buildings ({measured} measured)  {len(view.trees) // 3} trees"
+        f"{len(view.buildings)} buildings ({measured} measured)  {len(view.trees) // 3} trees  "
+        f"{emit_scenery(store, view)}"
     )
-    typer.echo(emit_scenery(store, view))
+
+
+@app.command(help="Bake 3D scenes: lap shape, terrain plinth, map features.")
+def scenery(
+    circuit: Annotated[str | None, typer.Option(help="A circuit_id from the races table.")] = None,
+    season: Annotated[int | None, typer.Option(help="With --round, or with --all.")] = None,
+    round_: Annotated[int | None, typer.Option("--round", help="The race to bake for.")] = None,
+    every: Annotated[bool, typer.Option("--all", help="Every circuit in the season.")] = False,
+    if_missing: Annotated[
+        bool, typer.Option("--if-missing", help="Skip circuits already baked.")
+    ] = False,
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+) -> None:
+    from pitadvisor.outputs.view_contracts import scenery_key
+    from pitadvisor.quality.checks import read_table
+
+    settings = get_settings()
+    store, ledger, bucket_for = _runtime(local, settings)
+    races = read_table(store, Layer.BRONZE, "races")
+    if races is None:
+        typer.echo("races must be in bronze first", err=True)
+        raise typer.Exit(1)
+    failed: list[str] = []
+    for target in scenery_targets(races, circuit, season, round_, every):
+        if if_missing and store.exists(scenery_key(target)):
+            typer.echo(f"{target}  already baked")
+            continue
+        # one circuit's overpass outage or missing lap should not stop the rest of a backfill
+        try:
+            typer.echo(_bake_scenery(store, ledger, bucket_for, races, target))
+        except Exception as exc:
+            failed.append(target)
+            typer.echo(f"{target}  failed: {exc}", err=True)
+    if failed:
+        raise typer.Exit(1)
 
 
 @app.command(name="emit-views", help="Write the versioned view artifacts the dashboard reads.")
