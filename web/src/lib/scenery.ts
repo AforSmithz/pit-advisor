@@ -64,3 +64,46 @@ export function framing(points: SceneryView["track"]["points"], aspect: number):
   ];
   return { centre, rest, overhead: [centre[0], distance, centre[2] + 1], distance };
 }
+
+export type Pose = "overview" | "straight" | "overhead" | "corner" | "drift";
+
+export function poseFor(path: string): Pose {
+  if (path === "/") return "overview";
+  if (path.startsWith("/forecast")) return "straight";
+  if (path.startsWith("/circuits")) return "overhead";
+  if (path.startsWith("/stewards")) return "corner";
+  return "drift";
+}
+
+export type Shot = { position: Vec3; target: Vec3 };
+
+function orbit(centre: Vec3, azimuth: number, elevation: number, distance: number): Vec3 {
+  return [
+    centre[0] + Math.sin(azimuth) * Math.cos(elevation) * distance,
+    Math.sin(elevation) * distance,
+    centre[2] + Math.cos(azimuth) * Math.cos(elevation) * distance,
+  ];
+}
+
+// the straight shot sits behind the start line and looks down the first 250 m of the lap
+export function shot(pose: Pose, track: SceneryView["track"], frame: Framing, exaggerate: number): Shot {
+  const { centre, distance } = frame;
+  if (pose === "overview") return { position: frame.rest, target: centre };
+  if (pose === "overhead") return { position: [centre[0], distance * 0.95, centre[2] + 1], target: centre };
+  if (pose === "corner") return { position: orbit(centre, 2.4, 1.0, distance * 0.95), target: centre };
+  if (pose === "drift") return { position: orbit(centre, -0.5, 0.75, distance * 1.05), target: centre };
+  const { points, step_m } = track;
+  const at = (i: number) => {
+    const [x, y, z] = points[i % points.length]!;
+    return world(x, y, z * exaggerate + 12);
+  };
+  const start = at(0);
+  const ahead = at(Math.round(250 / step_m));
+  const dx = ahead[0] - start[0], dz = ahead[2] - start[2];
+  const len = Math.hypot(dx, dz) || 1;
+  const fx = dx / len, fz = dz / len;
+  return {
+    position: [start[0] - fx * 560 - fz * 260, start[1] + 190, start[2] - fz * 560 + fx * 260],
+    target: ahead,
+  };
+}

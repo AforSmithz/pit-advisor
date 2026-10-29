@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { framing, perimeter, ribbon, sectorIndices, world } from "./scenery";
+import { framing, perimeter, poseFor, ribbon, sectorIndices, shot, world } from "./scenery";
 
 describe("world", () => {
   it("puts north at negative z and height on y", () => {
@@ -51,5 +51,40 @@ describe("framing", () => {
 
   it("looks at the middle of the track", () => {
     expect(framing(square, 1.6).centre).toEqual([0, 0, -0]);
+  });
+});
+
+describe("poseFor", () => {
+  it("gives each page its own camera", () => {
+    expect(poseFor("/")).toBe("overview");
+    expect(poseFor("/forecast/")).toBe("straight");
+    expect(poseFor("/circuits/")).toBe("overhead");
+    expect(poseFor("/stewards/")).toBe("corner");
+    expect(poseFor("/paddock/VER/")).toBe("drift");
+    expect(poseFor("/record/")).toBe("drift");
+  });
+});
+
+describe("shot", () => {
+  // a straight run east from the origin, 5 m apart
+  const points = Array.from({ length: 200 }, (_, i) => [i * 5, 0, 0] as [number, number, number]);
+  const track = { length_m: 1000, step_m: 5, sectors_m: [], points };
+  const frame = framing(points, 1.6);
+
+  it("looks down the straight from behind the line", () => {
+    const { position, target } = shot("straight", track, frame, 3);
+    expect(target[0]).toBeCloseTo(250);
+    expect(position[0]).toBeLessThan(0);
+    expect(position[1]).toBeGreaterThan(target[1]);
+  });
+
+  it("keeps the overview where the home page rests", () => {
+    expect(shot("overview", track, frame, 3)).toEqual({ position: frame.rest, target: frame.centre });
+  });
+
+  it("parks the ambient pages further out than the overview", () => {
+    const far = shot("drift", track, frame, 3).position;
+    const dist = (p: number[]) => Math.hypot(p[0]! - frame.centre[0], p[1]!, p[2]! - frame.centre[2]);
+    expect(dist(far)).toBeGreaterThan(dist(frame.rest));
   });
 });
