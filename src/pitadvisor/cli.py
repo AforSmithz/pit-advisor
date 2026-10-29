@@ -24,7 +24,7 @@ from pitadvisor.incidents import lake as incident_lake
 from pitadvisor.incidents.extract import extract as extract_decision
 from pitadvisor.incidents.parse import parse as parse_decision
 from pitadvisor.ingest import docs as doc_corpus
-from pitadvisor.ingest import fia_docs, http, jolpica, openf1
+from pitadvisor.ingest import fia_docs, http, jolpica, multiviewer, openf1
 from pitadvisor.ingest import schedule as weekend_schedule
 from pitadvisor.ingest.fastf1_session import backfill as session_backfill
 from pitadvisor.ingest.fastf1_session import ingest_session, weekend_in_progress
@@ -527,13 +527,16 @@ def backfill(
         list[SessionKind] | None,
         typer.Option("--session", help="Session to pull, repeatable, fastf1 and openf1 only."),
     ] = None,
+    race_control: Annotated[
+        bool, typer.Option("--race-control", help="Race control messages only, openf1 only.")
+    ] = False,
 ) -> None:
     settings = get_settings()
     if source is Source.FASTF1:
         _backfill_sessions(from_, to, local, settings, sessions)
         return
     if source is Source.OPENF1:
-        _backfill_openf1(from_, to, local, settings, sessions)
+        _backfill_openf1(from_, to, local, settings, sessions, race_control)
         return
     if source is not Source.JOLPICA:
         raise typer.BadParameter(f"{source} has no backfill path yet")
@@ -575,7 +578,12 @@ def _backfill_sessions(
 
 
 def _backfill_openf1(
-    from_: int, to: int, local: bool, settings: Settings, sessions: list[SessionKind] | None
+    from_: int,
+    to: int,
+    local: bool,
+    settings: Settings,
+    sessions: list[SessionKind] | None,
+    race_control: bool = False,
 ) -> None:
     from pitadvisor.quality.checks import read_table
 
@@ -589,11 +597,12 @@ def _backfill_openf1(
         RawStore(store), ledger, RateLimiter(bucket_for("openf1")), _run_id()
     )
     kinds = tuple(sessions) if sessions else (SessionKind.RACE,)
+    walk = openf1.race_control_backfill if race_control else openf1.backfill
     for season in range(from_, to + 1):
         typer.echo(f"season {season}")
         held = {int(row["round"]): row["race_date"] for row in calendar if row["season"] == season}
         try:
-            _render_outcomes(openf1.backfill(client, store, season, held, kinds))
+            _render_outcomes(walk(client, store, season, held, kinds))
         except QuotaExhaustedError as exc:
             typer.echo(f"stopped in {season}: {exc}. rerun to resume, raw and bronze are kept")
             raise typer.Exit(0) from exc
@@ -858,6 +867,20 @@ def scenery_targets(
     raise typer.BadParameter("name a --circuit, a --season and --round, or --all")
 
 
+def _turns(
+    raw: RawStore, session: SessionKey, circuit_key: int | None, run_id: str
+) -> list[multiviewer.Corner]:
+    if circuit_key is None:
+        return []
+    key = EventKey(season=session.season, round=session.round)
+    # a scene without turn numbers is still a scene, so a missing map does not fail the bake
+    try:
+        return multiviewer.corners(multiviewer.fetch(raw, key, circuit_key, run_id))
+    except multiviewer.MultiViewerError as exc:
+        typer.echo(f"no corner map: {exc}", err=True)
+        return []
+
+
 def _bake_scenery(
     store: ObjectStore,
     ledger: Ledger,
@@ -877,7 +900,7 @@ def _bake_scenery(
     client = openf1.OpenF1Client(raw, ledger, RateLimiter(bucket_for("openf1")), run_id)
     profiles = track_fit.load()
     reference_m = profiles[circuit].length_km * 1000 if circuit in profiles else None
-    best: tuple[float, SessionKey, track_shape.Track] | None = None
+    best: tuple[float, SessionKey, track_shape.Track, list[int]] | None = None
     for row in held:
         try:
             candidate = openf1.lap_trace(
@@ -887,23 +910,30 @@ def _bake_scenery(
             continue
         if candidate is None:
             continue
-        session, lap, trace = candidate
+        session, lap, trace, circuit_key = candidate
         points, times = track_shape.lap_samples(trace, lap)
         ends = [
             float(lap["duration_sector_1"]),
             float(lap["duration_sector_1"]) + float(lap["duration_sector_2"]),
         ]
-        shaped = track_shape.resample(points, times, ends)
+        # the corner map for the lap's own season, so a reprofiled turn matches the lap shape
+        turns = _turns(raw, session, circuit_key, run_id)
+        shaped = track_shape.resample(
+            points,
+            times,
+            ends,
+            turns=np.array([[turn.x, turn.y] for turn in turns]) if turns else None,
+        )
         # newest first. a hole in the position samples on a curve makes the spline cut the
         # corner, so the first lap within LENGTH_TOLERANCE of circuits.yml wins, else the closest
         miss = abs(shaped.length_m - reference_m) / reference_m if reference_m else 0.0
         if best is None or miss < best[0]:
-            best = (miss, session, shaped)
+            best = (miss, session, shaped, [turn.number for turn in turns])
         if miss <= track_shape.LENGTH_TOLERANCE:
             break
     if best is None:
         raise SceneryError(f"openf1 has no qualifying lap at {circuit}")
-    _, session, track = best
+    _, session, track, numbers = best
     key = EventKey(season=session.season, round=session.round)
     centre = next(row for row in held if row["season"] == session.season)
     reach = float(np.linalg.norm(np.ptp(track.points[:, :2], axis=0))) / 2 + 1000
@@ -951,14 +981,17 @@ def _bake_scenery(
             "Map data © OpenStreetMap contributors",
             terrain.credit(str(centre["country"])),
             "Track geometry from OpenF1",
+            *(["Corner numbers from MultiViewer"] if numbers else []),
         ],
         run_id,
+        numbers,
     )
     measured = sum(not item.estimated for item in view.buildings)
     return (
         f"{circuit}  {session.season} r{session.round:02d} qualifying  {track.length_m:,.0f} m  "
         f"aligned median {alignment.median_m:.2f} m p95 {alignment.p95_m:.2f} m  "
         f"{len(view.buildings)} buildings ({measured} measured)  {len(view.trees) // 3} trees  "
+        f"{len(view.track.turns)} turns  "
         f"{emit_scenery(store, view)}"
     )
 
@@ -1076,6 +1109,8 @@ def _lake_view(store: ObjectStore, name: str, event: str) -> BaseModel:
             results,
             context,
             run_id,
+            race_control=read_table(store, Layer.BRONZE, "race_control"),
+            races=read_table(store, Layer.BRONZE, "races"),
         )
     # a debrief is about the race just run, so 'next' means the latest race day, not the coming one
     if event == "next":
