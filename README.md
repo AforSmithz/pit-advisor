@@ -57,6 +57,14 @@ mapped height or a height estimated from their type, and trees scattered through
 parks. The result is one JSON view per circuit. Every circuit on the 2026 calendar has one, street
 circuits included, and the weekend run bakes any circuit that is missing one.
 
+The corners are numbered on the model. Each turn's official number and position come from the
+same circuit map FastF1 uses, which shares OpenF1's coordinate frame, so a corner is placed on the
+nearest point of the baked lap. The Stewards page uses them: race control names the turn in its
+track-limit deletions and incident notes, so every message since 2023 at the circuit is counted
+against its turn and raised as a mark on the model. Picking a mark, on the track or in the strip
+below it, flies the camera to that corner and lists what happened there, down to the penalty
+race control announced for it.
+
 The lake covers 2021 to the current race of 2026. Every Thursday a state machine checks the
 calendar, and in a race week it refreshes the weather, the sessions, the marts and every view,
 including a short weekend brief. From then until the Tuesday after the race, a small function
@@ -286,13 +294,16 @@ what was actually known then. The regulations corpus is FIA published documents,
 season and cited by title and date wherever the agent quotes them; the same crawl collects the
 stewards' decisions and the car presentation submissions.
 
-The circuit models use three more sources, each landed in `raw/` like the rest. Car positions
+The circuit models use four more sources, each landed in `raw/` like the rest. Car positions
 over the fastest qualifying lap come from OpenF1's location endpoint. The raceway, buildings,
 land use, roads and trees come from [OpenStreetMap](https://www.openstreetmap.org/) through the
 Overpass API, under the ODbL, credited on the page. On a permanent circuit the track is mapped as
 `highway=raceway`; on a street circuit only the pit lane is, and the lap is a `type=circuit`
 relation over ordinary roads, so the bake reads both. Elevation comes from the
 [Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) on the AWS Open Data registry.
+The corner numbers come from the circuit map at [MultiViewer](https://multiviewer.app/), fetched
+once per bake and held in raw; it is unofficial, so a circuit it cannot answer for is baked
+without numbers.
 
 Prediction-market prices come from the public APIs of [Kalshi](https://kalshi.com/) and
 [Polymarket](https://polymarket.com/): for each race, the last traded or mid price at least an
