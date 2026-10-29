@@ -46,8 +46,22 @@ deploy stack email:
       -c alertEmail={{email}} -c pipelineImageTag=$(just image-tag) --require-approval broadening
 
 # the commit the image workflow tagged last: the newest one on main that changed the image
+# ci tags each push with its head commit, which need not be the commit that changed the image
+# inputs when a push carries several. every commit from the newest input change up to main holds
+# the same image, so take the newest of them that ecr has
 image-tag:
-    @git fetch -q origin main && git log -1 --format=%H origin/main -- {{image_inputs}}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git fetch -q origin main
+    changed=$(git log -1 --format=%H origin/main -- {{image_inputs}})
+    for sha in $(git rev-list "$changed"^..origin/main); do
+      if aws ecr describe-images --repository-name pitadvisor-pipeline-{{env_var_or_default("PITADV_ENV", "dev")}} \
+          --image-ids imageTag="$sha" --profile {{AWS_PROFILE}} --region {{AWS_REGION}} > /dev/null 2>&1; then
+        echo "$sha"
+        exit 0
+      fi
+    done
+    echo "$changed"
 
 # the two stacks that run the image, pinned to what ci built for main
 deploy-pipeline:
