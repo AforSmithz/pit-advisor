@@ -34,6 +34,7 @@ class Track(BaseModel):
     points: Array
     length_m: float
     sectors_m: list[float]
+    turns_m: list[float] = []
 
 
 class Alignment(BaseModel):
@@ -67,7 +68,13 @@ def lap_samples(location: list[dict[str, Any]], lap: dict[str, Any]) -> tuple[Ar
     return points[moved], times[moved]
 
 
-def resample(points: Array, times: Array, sector_ends: list[float], step: float = STEP_M) -> Track:
+def resample(
+    points: Array,
+    times: Array,
+    sector_ends: list[float],
+    step: float = STEP_M,
+    turns: Array | None = None,
+) -> Track:
     gates = np.array(
         [[np.interp(end, times, points[:, axis]) for axis in (0, 1)] for end in sector_ends]
     )
@@ -80,12 +87,16 @@ def resample(points: Array, times: Array, sector_ends: list[float], step: float 
         np.linspace(0.0, arc[-1], count, endpoint=False), arc, np.linspace(0.0, 1.0, DENSE)
     )
     shaped = np.array(splev(u, tck)).T
-    sectors = [
-        float(np.argmin(np.linalg.norm(shaped[:, :2] - gate, axis=1)) * step) for gate in gates
-    ]
+
+    def along(at: Array) -> float:
+        return float(np.argmin(np.linalg.norm(shaped[:, :2] - at, axis=1)) * step)
+
+    sectors = [along(gate) for gate in gates]
+    # an apex sits off the racing line, so it is placed at the nearest point of the lap
+    placed = [along(turn) for turn in turns] if turns is not None else []
     shaped[:, :2] -= shaped[:, :2].mean(axis=0)
     shaped[:, 2] -= shaped[:, 2].min()
-    return Track(points=shaped, length_m=float(arc[-1]), sectors_m=sectors)
+    return Track(points=shaped, length_m=float(arc[-1]), sectors_m=sectors, turns_m=placed)
 
 
 def to_local(lat: Array, lon: Array, lat0: float, lon0: float) -> Array:

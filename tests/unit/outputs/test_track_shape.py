@@ -51,6 +51,22 @@ def test_sector_boundaries_land_where_the_lap_was_at_that_time():
     assert track.sectors_m[1] == pytest.approx(half, abs=30)
 
 
+def test_a_turn_off_the_line_lands_on_the_nearest_point_of_the_lap():
+    rows, lap = ellipse()
+    points, times = track_shape.lap_samples(rows, lap)
+    # the far end of the ellipse and its top, each a few metres inside the line like an apex
+    turns = np.array([[-594.0, 0.0], [0.0, 294.0]])
+    track = track_shape.resample(points, times, [20.0, 40.0], turns=turns)
+    assert track.turns_m[0] == pytest.approx(track.length_m / 2, abs=10)
+    assert track.turns_m[1] == pytest.approx(track.length_m / 4, abs=10)
+
+
+def test_a_lap_without_turns_has_none():
+    rows, lap = ellipse()
+    points, times = track_shape.lap_samples(rows, lap)
+    assert track_shape.resample(points, times, [20.0, 40.0]).turns_m == []
+
+
 def test_samples_where_the_car_did_not_move_are_dropped():
     rows, lap = ellipse(samples=50)
     stopped = [rows[0], {**rows[0], "date": rows[1]["date"]}, *rows[1:]]

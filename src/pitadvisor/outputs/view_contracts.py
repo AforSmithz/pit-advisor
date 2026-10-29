@@ -844,11 +844,17 @@ def evidence_from(report: backtest.Report) -> Evidence:
     )
 
 
+class SceneryTurn(BaseModel, frozen=True):
+    number: int
+    at_m: float
+
+
 class SceneryTrack(BaseModel, frozen=True):
     length_m: float
     step_m: float
     sectors_m: list[float]
     points: list[list[float]]
+    turns: list[SceneryTurn] = []
 
 
 class SceneryAlignment(BaseModel, frozen=True):

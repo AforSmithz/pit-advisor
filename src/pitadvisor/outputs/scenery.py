@@ -28,6 +28,7 @@ from pitadvisor.outputs.view_contracts import (
     SceneryPlinth,
     SceneryRoad,
     SceneryTrack,
+    SceneryTurn,
     SceneryView,
 )
 
@@ -351,6 +352,7 @@ def scenery_view(
     terrain: Terrain,
     sources: list[str],
     run_id: str,
+    turn_numbers: list[int] | None = None,
 ) -> SceneryView:
     rng = np.random.default_rng(SEED)
     points = track.points
@@ -370,6 +372,10 @@ def scenery_view(
             step_m=STEP_M,
             sectors_m=track.sectors_m,
             points=[[round(float(value), 2) for value in row] for row in points],
+            turns=[
+                SceneryTurn(number=number, at_m=at)
+                for number, at in zip(turn_numbers or [], track.turns_m, strict=True)
+            ],
         ),
         alignment=SceneryAlignment(
             median_m=round(alignment.median_m, 2), p95_m=round(alignment.p95_m, 2)
