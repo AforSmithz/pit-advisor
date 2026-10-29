@@ -353,6 +353,56 @@ def to_records(
     return records
 
 
+def race_control_records(
+    race_control: list[dict[str, Any]], key: SessionKey, stamp: dict[str, Any]
+) -> list[dict[str, Any]]:
+    ordered = sorted(race_control, key=lambda item: str(item.get("date")))
+    return [
+        {
+            **stamp,
+            "season": key.season,
+            "round": key.round,
+            "session": key.session,
+            "ordinal": ordinal,
+            "at": _at(item.get("date")),
+            "lap": item.get("lap_number"),
+            "category": str(item.get("category") or ""),
+            "flag": item.get("flag"),
+            "scope": item.get("scope"),
+            "sector": item.get("sector"),
+            "driver_number": item.get("driver_number"),
+            "message": str(item.get("message") or ""),
+        }
+        for ordinal, item in enumerate(ordered)
+    ]
+
+
+def write_race_control(
+    store: ObjectStore,
+    key: SessionKey,
+    race_control: list[dict[str, Any]],
+    run_id: str,
+    raw_objects: list[str],
+    requests: int = 0,
+) -> IngestOutcome:
+    stamp = {"run_id": run_id, "ingested_at": datetime.now(UTC)}
+    kept, dropped = contracts.validate(
+        "race_control", contracts.RaceControlRow, race_control_records(race_control, key, stamp)
+    )
+    write_quarantine(store, "race_control", key, run_id, dropped)
+    return IngestOutcome(
+        source=Source.OPENF1,
+        table="race_control",
+        season=key.season,
+        round=key.round,
+        rows=len(kept),
+        quarantined=len(dropped),
+        raw_objects=raw_objects,
+        bronze_objects=[write_bronze(store, "race_control", key, kept)] if kept else [],
+        requests=requests,
+    )
+
+
 class OpenF1Client:
     def __init__(
         self,
@@ -431,6 +481,9 @@ def ingest_session(
         "session_laps", contracts.SessionLapRow, to_records(bundle, key, stamp)
     )
     write_quarantine(store, "session_laps", key, client.run_id, dropped)
+    write_race_control(
+        store, key, bundle["race_control"], client.run_id, [landed[PARTS.index("race_control")]]
+    )
     return IngestOutcome(
         source=Source.OPENF1,
         table="session_laps",
@@ -477,6 +530,65 @@ def backfill(
     return outcomes
 
 
+def race_control_backfill(
+    client: OpenF1Client,
+    store: ObjectStore,
+    season: int,
+    races: dict[int, date],
+    kinds: Iterable[SessionKind],
+    now: datetime | None = None,
+    skip_present: bool = True,
+) -> list[IngestOutcome]:
+    """Race control alone, for the sessions whose laps came from fastf1. A session that already
+    landed its race control through ingest_session is read from raw rather than asked again."""
+    if not races:
+        return []
+    moment = now or datetime.now(UTC)
+    outcomes: list[IngestOutcome] = []
+    for round_, kind, item in scheduled(client.sessions(season), races, kinds):
+        ended = _at(item.get("date_end"))
+        if ended is None or ended > moment:
+            continue
+        key = SessionKey(season=season, round=round_, session=kind)
+        if skip_present and store.exists(bronze_key("race_control", key)):
+            outcomes.append(
+                IngestOutcome(
+                    source=Source.OPENF1,
+                    table="race_control",
+                    season=season,
+                    round=round_,
+                    skipped="already in bronze",
+                )
+            )
+            continue
+        spent = client.requests
+        target = url("race_control", session_key=int(item["session_key"]))
+        messages = json.loads(_held_or_read(client, key, "race_control", target) or b"[]")
+        if not finished(messages):
+            outcomes.append(
+                IngestOutcome(
+                    source=Source.OPENF1,
+                    table="race_control",
+                    season=season,
+                    round=round_,
+                    requests=client.requests - spent,
+                    skipped=f"{kind} not finished upstream",
+                )
+            )
+            continue
+        outcomes.append(
+            write_race_control(
+                store,
+                key,
+                messages,
+                client.run_id,
+                client.raw.versions(Source.OPENF1, key, "race_control")[-1:],
+                client.requests - spent,
+            )
+        )
+    return outcomes
+
+
 def location_url(session_key: int, driver: int, start: datetime, end: datetime) -> str:
     stamp = "%Y-%m-%dT%H:%M:%S.%f"
     return (
@@ -509,8 +621,9 @@ def _held_or_read(client: OpenF1Client, key: SessionKey, name: str, target: str)
 
 def lap_trace(
     client: OpenF1Client, season: int, round_: int, race_date: date, now: datetime
-) -> tuple[SessionKey, dict[str, Any], list[dict[str, Any]]] | None:
-    """The fastest qualifying lap of one event and the car's position samples over it."""
+) -> tuple[SessionKey, dict[str, Any], list[dict[str, Any]], int | None] | None:
+    """The fastest qualifying lap of one event, the car's position samples over it, and the
+    circuit key the corner maps are filed under."""
     for _, _, item in scheduled(
         client.sessions(season), {round_: race_date}, (SessionKind.QUALIFYING,)
     ):
@@ -532,5 +645,6 @@ def lap_trace(
         trace = _held_or_read(
             client, key, f"location-car{driver:02d}", location_url(session_key, driver, start, end)
         )
-        return key, best, json.loads(trace or b"[]")
+        circuit = item.get("circuit_key")
+        return key, best, json.loads(trace or b"[]"), int(circuit) if circuit else None
     return None

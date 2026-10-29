@@ -254,6 +254,21 @@ def rebuild_openf1(
     return outcomes
 
 
+def rebuild_race_control(
+    store: ObjectStore, run_id: str, objects: list[RawObject]
+) -> list[IngestOutcome]:
+    outcomes: list[IngestOutcome] = []
+    for found in sorted(objects, key=lambda item: item.key):
+        if found.session is None or found.name != "race_control":
+            continue
+        messages = _payload(store, found)
+        if not openf1.finished(messages):
+            continue
+        key = SessionKey(season=found.season, round=found.round, session=found.session)
+        outcomes.append(openf1.write_race_control(store, key, messages, run_id, [found.key]))
+    return outcomes
+
+
 def read_document(store: ObjectStore, found: RawObject) -> lake.Reading | None:
     """Parses one stewards' document, falling back to what a model already read for the prose
     ones. A prose document with nothing cached is not read here: rebuild costs no money."""
@@ -348,6 +363,7 @@ def rebuild_bronze(
         *rebuild_weather(store, run_id, by_source.get(Source.OPEN_METEO, []), stamp),
         # fastf1 replays after openf1, so a session both sources hold keeps the fastf1 laps
         *rebuild_openf1(store, run_id, by_source.get(Source.OPENF1, []), stamp),
+        *rebuild_race_control(store, run_id, by_source.get(Source.OPENF1, [])),
         *rebuild_sessions(store, run_id, by_source.get(Source.FASTF1, []), stamp),
         *rebuild_incidents(store, run_id, by_source.get(Source.FIA_DOCS, []), stamp),
     ]

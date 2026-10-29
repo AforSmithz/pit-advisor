@@ -14,6 +14,8 @@ from pitadvisor.ingest.openf1 import (
     ingest_session,
     lap_trace,
     location_url,
+    race_control_backfill,
+    race_control_records,
     scheduled,
     status_during,
     to_records,
@@ -22,11 +24,13 @@ from pitadvisor.ingest.openf1 import (
 )
 from pitadvisor.ingest.raw_store import RawStore
 from pitadvisor.ingest.rebuild import rebuild_bronze
+from pitadvisor.quality import contracts
 from pitadvisor.quality.lineage import raw_count
 from pitadvisor.types import SessionKey, SessionKind, Source
 
 KEY = SessionKey(season=2026, round=18, session=SessionKind.RACE)
 BRONZE = "bronze/table=session_laps/season=2026/round=18/session=race/session_laps.parquet"
+CONTROL = "bronze/table=race_control/season=2026/round=18/session=race/race_control.parquet"
 RACES = {17: date(2026, 10, 11), 18: date(2026, 10, 25)}
 
 
@@ -425,7 +429,10 @@ def test_bronze_is_rebuildable_from_the_openf1_raw(store, pauses):
     before = pl.read_parquet(store.get(BRONZE))
     store.clear("bronze/")
     rebuilt = rebuild_bronze(store, "run-2", source=Source.OPENF1)
-    assert [(o.source, o.round, o.rows) for o in rebuilt] == [(Source.OPENF1, 18, 7)]
+    assert [(o.table, o.round, o.rows) for o in rebuilt] == [
+        ("session_laps", 18, 7),
+        ("race_control", 18, 3),
+    ]
     after = pl.read_parquet(store.get(BRONZE))
     columns = [name for name in before.columns if name not in ("run_id", "ingested_at")]
     assert before.select(columns).equals(after.select(columns))
@@ -544,7 +551,7 @@ def test_a_lap_trace_lands_laps_and_location_then_reads_them_back(store, pauses)
     upstream = LapUpstream()
     client = client_for(store, upstream, pauses)
     after = datetime(2026, 10, 26, tzinfo=UTC)
-    key, lap, trace = lap_trace(client, 2026, 18, RACES[18], after)
+    key, lap, trace, _ = lap_trace(client, 2026, 18, RACES[18], after)
     assert (key.round, key.session, lap["driver_number"], len(trace)) == (18, "qualifying", 81, 1)
     landed = [item.key for item in store.list("raw/source=openf1/season=2026/round=18/")]
     assert any("location-car81-" in name for name in landed)
@@ -555,3 +562,68 @@ def test_a_lap_trace_lands_laps_and_location_then_reads_them_back(store, pauses)
 def test_no_lap_trace_before_the_session_has_ended(store, pauses):
     during = datetime(2026, 10, 24, 21, 30, tzinfo=UTC)
     assert lap_trace(client_for(store, LapUpstream(), pauses), 2026, 18, RACES[18], during) is None
+
+
+def test_race_control_rows_run_in_time_order_and_keep_the_message():
+    shuffled = list(reversed(bundle()["race_control"]))
+    rows = race_control_records(shuffled, KEY, stamped())
+    assert [row["ordinal"] for row in rows] == [0, 1, 2]
+    assert rows[0]["flag"] == "GREEN"
+    assert rows[1]["message"].endswith("TRACK LIMITS AT TURN 2 LAP 2 20:05")
+    assert rows[1]["at"] == datetime(2026, 10, 25, 20, 5, tzinfo=UTC)
+
+
+def test_a_session_ingest_writes_race_control_to_bronze_too(store, pauses):
+    ingest_session(client_for(store, Upstream(), pauses), store, KEY, 11396)
+    assert pl.read_parquet(store.get(CONTROL)).height == 3
+
+
+def test_the_race_control_backfill_asks_once_per_session_then_reads_bronze(store, pauses):
+    upstream = Upstream()
+    now = datetime(2026, 10, 26, tzinfo=UTC)
+    client = client_for(store, upstream, pauses)
+    first = race_control_backfill(client, store, 2026, RACES, (SessionKind.RACE,), now=now)
+    assert [(o.round, o.rows, o.requests) for o in first] == [(17, 3, 1), (18, 3, 1)]
+    assert [o.raw_objects[0].split("/")[-1][:13] for o in first] == ["race_control-"] * 2
+    asked = len(upstream.seen)
+    again = race_control_backfill(client, store, 2026, RACES, (SessionKind.RACE,), now=now)
+    assert [o.skipped for o in again] == ["already in bronze"] * 2
+    assert len(upstream.seen) == asked + 1
+
+
+def test_the_race_control_backfill_reuses_raw_an_ingest_already_landed(store, pauses):
+    ingest_session(client_for(store, Upstream(), pauses), store, KEY, 11396)
+    store.clear("bronze/table=race_control/")
+    upstream = Upstream()
+    now = datetime(2026, 10, 26, tzinfo=UTC)
+    found = race_control_backfill(
+        client_for(store, upstream, pauses), store, 2026, {18: RACES[18]}, (SessionKind.RACE,), now
+    )
+    assert [(o.rows, o.requests) for o in found] == [(3, 0)]
+
+
+def test_unfinished_race_control_writes_nothing(store, pauses):
+    upstream = Upstream(bundle(race_control=bundle()["race_control"][:2]))
+    now = datetime(2026, 10, 26, tzinfo=UTC)
+    found = race_control_backfill(
+        client_for(store, upstream, pauses), store, 2026, {18: RACES[18]}, (SessionKind.RACE,), now
+    )
+    assert found[0].skipped == "race not finished upstream"
+    assert not store.exists(CONTROL)
+
+
+def test_race_control_is_rebuildable_from_raw(store, pauses):
+    ingest_session(client_for(store, Upstream(), pauses), store, KEY, 11396)
+    store.clear("bronze/")
+    rebuilt = rebuild_bronze(store, "run-2", source=Source.OPENF1)
+    assert [(o.table, o.rows) for o in rebuilt] == [("session_laps", 7), ("race_control", 3)]
+    assert raw_count(store, "race_control") == 1
+
+
+def test_a_message_before_the_start_is_lap_zero_and_still_kept():
+    early = [
+        {"date": at("19:50:00"), "lap_number": 0, "category": "Other", "message": "PIT EXIT OPEN"}
+    ]
+    rows = race_control_records(early, KEY, stamped())
+    kept, dropped = contracts.validate("race_control", contracts.RaceControlRow, rows)
+    assert (len(kept), len(dropped)) == (1, 0)
