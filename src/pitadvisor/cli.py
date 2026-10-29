@@ -916,7 +916,15 @@ def _bake_scenery(
             run_id,
         )
     )["elements"]
-    alignment = track_shape.align(track.points[:, :2], scenery_outputs.raceway_lines(raceway))
+    lines = scenery_outputs.raceway_lines(raceway)
+    if not lines:
+        raise SceneryError(f"openstreetmap has no raceway mapped at {circuit}")
+    alignment = track_shape.align(track.points[:, :2], lines)
+    if alignment.median_m > track_shape.ALIGN_LIMIT_M:
+        raise SceneryError(
+            f"the lap sits {alignment.median_m:.1f} m off the mapped raceway at {circuit}, "
+            f"over the {track_shape.ALIGN_LIMIT_M:.0f} m limit"
+        )
     box = scenery_outputs.plinth_box(track.points)
     corners = np.array([[box[0], box[1]], [box[2], box[1]], [box[0], box[3]], [box[2], box[3]]])
     lat, lon = alignment.to_latlon(corners)
