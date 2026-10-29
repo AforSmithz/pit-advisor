@@ -2,6 +2,21 @@ import type { SceneryView } from "./schemas";
 
 export const ELEVATION = "ops:elevation";
 export const SETTLED = "ops:settled";
+// a page hands the scene marks to raise on its turns, and either side can pick one
+export const TURN_LAYER = "ops:turn-layer";
+export const TURN_PICK = "ops:turn-pick";
+
+export type TurnMark = { number: number; count: number; tone: string };
+
+export function turnIndices(track: SceneryView["track"]): Map<number, number> {
+  return new Map(track.turns.map((t) => [t.number, Math.round(t.at_m / track.step_m) % track.points.length]));
+}
+
+// marks are sized by the square root, so one turn with a hundred deletions does not flatten the rest
+export function markHeight(count: number, most: number, tallest: number): number {
+  if (count <= 0 || most <= 0) return 0;
+  return tallest * (0.12 + 0.88 * Math.sqrt(count / most));
+}
 
 export type Vec3 = [number, number, number];
 

@@ -11,7 +11,24 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { sceneryView, type SceneryView } from "@/lib/schemas";
-import { ELEVATION, SETTLED, type Pose, framing, perimeter, poseFor, ribbon, sectorIndices, shot, type Vec3, world } from "@/lib/scenery";
+import {
+  ELEVATION,
+  SETTLED,
+  TURN_LAYER,
+  TURN_PICK,
+  type Pose,
+  type TurnMark,
+  framing,
+  markHeight,
+  perimeter,
+  poseFor,
+  ribbon,
+  sectorIndices,
+  shot,
+  turnIndices,
+  type Vec3,
+  world,
+} from "@/lib/scenery";
 
 // drawn wider and deeper than the real tarmac so the slab still reads from the overview camera
 const HALF = 10;
@@ -89,20 +106,28 @@ function lines(positions: number[], opacity: number): THREE.LineSegments {
   return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity }));
 }
 
-function label(text: string, size: number): THREE.Sprite {
+function token(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim() || "#ececef";
+}
+
+function label(text: string, size: number, color = "#ececef"): THREE.Sprite {
   const c = document.createElement("canvas");
-  c.width = 128;
+  const font = `500 44px ${getComputedStyle(document.body).getPropertyValue("--font-saira-condensed") || "sans-serif"}`;
+  const probe = c.getContext("2d")!;
+  probe.font = font;
+  // wider text gets a wider canvas, and the sprite widens with it so the glyphs keep their size
+  c.width = Math.max(128, Math.ceil(probe.measureText(text).width) + 24);
   c.height = 64;
   const g = c.getContext("2d")!;
-  g.font = `500 44px ${getComputedStyle(document.body).getPropertyValue("--font-saira-condensed") || "sans-serif"}`;
-  g.fillStyle = "#ececef";
+  g.font = font;
+  g.fillStyle = color;
   g.textAlign = "center";
   g.textBaseline = "middle";
-  g.fillText(text, 64, 34);
+  g.fillText(text, c.width / 2, 34);
   const sprite = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }),
   );
-  sprite.scale.set(size, size / 2, 1);
+  sprite.scale.set((size * c.width) / 128, size / 2, 1);
   return sprite;
 }
 
@@ -146,11 +171,60 @@ function buildTrack(view: SceneryView, exaggerate: number): { group: THREE.Group
   const first = label("S1", span * 0.07);
   first.position.copy(lift(at(centre, 0), span * 0.035)).add(new THREE.Vector3(span * 0.03, 0, 0));
   group.add(first);
+  const mute = token("mute");
+  for (const [number, i] of turnIndices(view.track)) {
+    const tag = label(String(number), span * 0.04, mute);
+    tag.position.copy(lift(at(centre, i), span * 0.014));
+    group.add(tag);
+  }
 
   const post = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 120, 16), new THREE.MeshBasicMaterial({ color: 0xff8a4c }));
   post.position.copy(lift(at(centre, 0), 60));
   group.add(post);
   return { group, anchor: lift(at(centre, 0), 120) };
+}
+
+// a thin lit stem per turn, a wide invisible one to click, and the count on top
+function buildMarks(view: SceneryView, marks: TurnMark[], picked: number | null, exaggerate: number): { group: THREE.Group; hits: THREE.Mesh[] } {
+  const group = new THREE.Group();
+  const hits: THREE.Mesh[] = [];
+  const where = turnIndices(view.track);
+  const { centre } = ribbon(view.track.points, HALF, DEPTH, exaggerate);
+  const span = new THREE.Box3().setFromPoints(centre.map((p) => new THREE.Vector3(...p))).getSize(new THREE.Vector3()).length();
+  const tallest = span * 0.12;
+  const most = Math.max(0, ...marks.map((m) => m.count));
+  for (const mark of marks) {
+    const i = where.get(mark.number);
+    const height = markHeight(mark.count, most, tallest);
+    if (i === undefined || height <= 0) continue;
+    const on = picked === null || picked === mark.number;
+    const color = new THREE.Color(token(mark.tone));
+    const base = new THREE.Vector3(...centre[i]!).add(new THREE.Vector3(0, 1, 0));
+    const stem = new THREE.Mesh(
+      new THREE.CylinderGeometry(picked === mark.number ? 7 : 4.5, picked === mark.number ? 7 : 4.5, height, 12),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: on ? 1 : 0.25 }),
+    );
+    stem.position.copy(base).add(new THREE.Vector3(0, height / 2, 0));
+    group.add(stem);
+    const disc = new THREE.Mesh(
+      new THREE.RingGeometry(14, 22, 32).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: on ? 0.8 : 0.2, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    disc.position.copy(base);
+    group.add(disc);
+    const tag = label(`T${mark.number} · ${mark.count}`, span * 0.05, on ? "#ececef" : token("faint"));
+    tag.position.copy(base).add(new THREE.Vector3(0, height + span * 0.018, 0));
+    group.add(tag);
+    const hit = new THREE.Mesh(
+      new THREE.CylinderGeometry(span * 0.018, span * 0.018, height + span * 0.04, 8),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+    );
+    hit.position.copy(base).add(new THREE.Vector3(0, (height + span * 0.04) / 2, 0));
+    hit.userData.turn = mark.number;
+    hits.push(hit);
+    group.add(hit);
+  }
+  return { group, hits };
 }
 
 const buildingMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0 });
@@ -326,6 +400,10 @@ export function Scene({ circuitId, children }: { circuitId: string; children: Re
     let exaggerate = 3;
     let track: THREE.Group | null = null;
     let diorama: THREE.Group | null = null;
+    let layer: THREE.Group | null = null;
+    let hits: THREE.Mesh[] = [];
+    let marks: TurnMark[] = [];
+    let picked: number | null = null;
     let anchor: THREE.Vector3 | null = null;
     let frame = framing([[0, 0, 0], [1000, 1000, 0]], 1);
     let settled = reduce;
@@ -349,6 +427,21 @@ export function Scene({ circuitId, children }: { circuitId: string; children: Re
       });
     };
 
+    const remark = () => {
+      dispose(layer);
+      layer = null;
+      hits = [];
+      if (!view || !marks.length) {
+        dirty = true;
+        return;
+      }
+      const built = buildMarks(view, marks, picked, exaggerate);
+      layer = built.group;
+      hits = built.hits;
+      scene.add(layer);
+      dirty = true;
+    };
+
     const rebuild = () => {
       if (!view || !ground) return;
       dispose(track);
@@ -361,7 +454,7 @@ export function Scene({ circuitId, children }: { circuitId: string; children: Re
       diorama = plinth.group;
       scene.add(diorama);
       floor.position.y = plinth.base - 0.5;
-      dirty = true;
+      remark();
     };
 
     const resize = () => {
@@ -421,6 +514,63 @@ export function Scene({ circuitId, children }: { circuitId: string; children: Re
       if (settled && eased) fly(to, reduce ? 0 : 1.4);
     };
 
+    // a picked turn pulls the camera in along the line it already looks down, so the move reads as a zoom
+    const flyToTurn = (number: number) => {
+      if (!view || !settled || !eased) return;
+      const i = turnIndices(view.track).get(number);
+      if (i === undefined) return;
+      const [x, y, z] = view.track.points[i]!;
+      const target = new THREE.Vector3(...world(x, y, z * exaggerate + DEPTH));
+      const back = camera.position.clone().sub(controls.target).normalize().multiplyScalar(frame.distance * 0.42);
+      const position = target.clone().add(back);
+      position.y = Math.max(position.y, target.y + frame.distance * 0.2);
+      const moved = () => { dirty = true; };
+      controls.autoRotate = false;
+      const duration = reduce ? 0 : 1.1;
+      gsap.to(camera.position, { x: position.x, y: position.y, z: position.z, duration, ease: "power3.inOut", onUpdate: moved, overwrite: true });
+      gsap.to(controls.target, { x: target.x, y: target.y, z: target.z, duration, ease: "power3.inOut", onUpdate: moved, overwrite: true });
+    };
+
+    const onLayer = (e: Event) => {
+      marks = (e as CustomEvent<TurnMark[]>).detail;
+      if (!marks.length && picked !== null) {
+        picked = null;
+        goRef.current(poseRef.current);
+      }
+      remark();
+    };
+    const onPick = (e: Event) => {
+      const next = (e as CustomEvent<number | null>).detail;
+      if (next === picked) return;
+      picked = next;
+      remark();
+      if (next === null) goRef.current(poseRef.current);
+      else flyToTurn(next);
+    };
+
+    const pointer = new THREE.Vector2();
+    const raycaster = new THREE.Raycaster();
+    const hitAt = (e: PointerEvent): number | null => {
+      if (!hits.length) return null;
+      const box = canvas.getBoundingClientRect();
+      pointer.set(((e.clientX - box.left) / box.width) * 2 - 1, -((e.clientY - box.top) / box.height) * 2 + 1);
+      raycaster.setFromCamera(pointer, camera);
+      const found = raycaster.intersectObjects(hits, false)[0];
+      return found ? (found.object.userData.turn as number) : null;
+    };
+    let down: [number, number] | null = null;
+    const onDown = (e: PointerEvent) => { down = [e.clientX, e.clientY]; };
+    const onUp = (e: PointerEvent) => {
+      // a drag that ends over a mark is the orbit control's, not a pick
+      if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return;
+      const turn = hitAt(e);
+      if (turn !== null) dispatchEvent(new CustomEvent(TURN_PICK, { detail: turn === picked ? null : turn }));
+    };
+    const onMove = (e: PointerEvent) => {
+      if (e.buttons) return;
+      canvas.style.cursor = hitAt(e) !== null ? "pointer" : "";
+    };
+
     const onSettled = () => {
       settled = true;
       ease();
@@ -466,6 +616,11 @@ export function Scene({ circuitId, children }: { circuitId: string; children: Re
     addEventListener("resize", onResize);
     addEventListener(SETTLED, onSettled);
     addEventListener(ELEVATION, onElevation);
+    addEventListener(TURN_LAYER, onLayer);
+    addEventListener(TURN_PICK, onPick);
+    canvas.addEventListener("pointerdown", onDown);
+    canvas.addEventListener("pointerup", onUp);
+    canvas.addEventListener("pointermove", onMove);
     if (!reduce || poseRef.current !== "overview") for (const el of [anchorRef.current, leaderRef.current]) el?.style.setProperty("opacity", "0");
     loop();
 
@@ -494,10 +649,16 @@ export function Scene({ circuitId, children }: { circuitId: string; children: Re
       removeEventListener("resize", onResize);
       removeEventListener(SETTLED, onSettled);
       removeEventListener(ELEVATION, onElevation);
+      removeEventListener(TURN_LAYER, onLayer);
+      removeEventListener(TURN_PICK, onPick);
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointerup", onUp);
+      canvas.removeEventListener("pointermove", onMove);
       goRef.current = () => {};
       gsap.killTweensOf([camera.position, controls.target]);
       dispose(track);
       dispose(diorama);
+      dispose(layer);
       ground?.dispose();
       controls.dispose();
       composer.dispose();

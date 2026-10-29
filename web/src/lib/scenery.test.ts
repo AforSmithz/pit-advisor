@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { framing, perimeter, poseFor, ribbon, sectorIndices, shot, world } from "./scenery";
+import { framing, markHeight, perimeter, poseFor, ribbon, sectorIndices, shot, turnIndices, world } from "./scenery";
 
 describe("world", () => {
   it("puts north at negative z and height on y", () => {
@@ -38,7 +38,7 @@ describe("perimeter", () => {
 describe("sectorIndices", () => {
   it("maps arc metres onto the resampled points", () => {
     const points = Array.from({ length: 100 }, () => [0, 0, 0] as [number, number, number]);
-    expect(sectorIndices({ length_m: 500, step_m: 5, sectors_m: [150, 340], points })).toEqual([30, 68]);
+    expect(sectorIndices({ length_m: 500, step_m: 5, sectors_m: [150, 340], points, turns: [] })).toEqual([30, 68]);
   });
 });
 
@@ -68,7 +68,7 @@ describe("poseFor", () => {
 describe("shot", () => {
   // a straight run east from the origin, 5 m apart
   const points = Array.from({ length: 200 }, (_, i) => [i * 5, 0, 0] as [number, number, number]);
-  const track = { length_m: 1000, step_m: 5, sectors_m: [], points };
+  const track = { length_m: 1000, step_m: 5, sectors_m: [], points, turns: [] };
   const frame = framing(points, 1.6);
 
   it("looks past the line towards the middle of the track from high behind it", () => {
@@ -87,5 +87,25 @@ describe("shot", () => {
     const far = shot("drift", track, frame, 3).position;
     const dist = (p: number[]) => Math.hypot(p[0]! - frame.centre[0], p[1]!, p[2]! - frame.centre[2]);
     expect(dist(far)).toBeGreaterThan(dist(frame.rest));
+  });
+});
+
+describe("turnIndices", () => {
+  it("puts each turn on the lap point at its distance, wrapping at the line", () => {
+    const points = Array.from({ length: 100 }, (_, i) => [i, 0, 0] as [number, number, number]);
+    const track = { length_m: 500, step_m: 5, sectors_m: [], points, turns: [{ number: 1, at_m: 52 }, { number: 9, at_m: 499 }] };
+    expect([...turnIndices(track)]).toEqual([[1, 10], [9, 0]]);
+  });
+});
+
+describe("markHeight", () => {
+  it("is nothing for no count and the full height for the most", () => {
+    expect(markHeight(0, 10, 100)).toBe(0);
+    expect(markHeight(10, 10, 100)).toBeCloseTo(100);
+  });
+
+  it("grows with the square root so small counts stay visible", () => {
+    expect(markHeight(1, 100, 100)).toBeCloseTo(20.8);
+    expect(markHeight(25, 100, 100)).toBeGreaterThan(markHeight(1, 100, 100));
   });
 });

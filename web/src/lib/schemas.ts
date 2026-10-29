@@ -393,6 +393,27 @@ export const stewardsView = z
         seconds: z.record(z.string(), z.number().int()),
       }),
     ),
+    turn_seasons: z.array(z.number().int()).default([]),
+    turns: z
+      .array(
+        z.object({
+          number: z.number().int(),
+          track_limits: z.number().int().nonnegative(),
+          off_track: z.number().int().nonnegative(),
+          incidents: z.array(
+            z.object({
+              season: z.number().int(),
+              session: z.string(),
+              lap: z.number().int().nullable(),
+              kind: z.string(),
+              drivers: z.array(z.string()),
+              offence: z.string().nullable(),
+              outcome: z.string(),
+            }),
+          ),
+        }),
+      )
+      .default([]),
   })
   .strict();
 
@@ -600,6 +621,7 @@ export const sceneryView = z
       step_m: z.number().positive(),
       sectors_m: z.array(z.number()),
       points: z.array(z.tuple([z.number(), z.number(), z.number()])).min(3),
+      turns: z.array(z.object({ number: z.number().int(), at_m: z.number() })).default([]),
     }),
     alignment: z.object({ median_m: z.number(), p95_m: z.number() }),
     plinth: z.object({
@@ -647,6 +669,7 @@ export type Snapshot = HistoryView["snapshots"][number];
 export type StewardsView = z.infer<typeof stewardsView>;
 export type Ruling = StewardsView["rulings"][number];
 export type Precedent = StewardsView["precedents"][number];
+export type TurnRecord = StewardsView["turns"][number];
 export type UpgradesView = z.infer<typeof upgradesView>;
 export type DebriefView = z.infer<typeof debriefView>;
 export type LineageView = z.infer<typeof lineageView>;
