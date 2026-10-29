@@ -1,10 +1,15 @@
-cost for 2026-10, 2026-10-01 to 2026-10-07 (estimated, month still open)
-  usage before credits             0.46 USD
-  credits applied                 -0.46 USD
-  tagged project=pit-advisor       0.00 USD, untagged 0.46
+cost for 2026-10, 2026-10-01 to 2026-10-29 (estimated, month still open)
+  usage before credits             4.47 USD
+  credits applied                 -4.47 USD
+  tagged project=pit-advisor       3.66 USD, untagged 0.81
 
-  Cohere Embed 3 Model - English (Amazon Bedrock Edition)    0.2415
-  Amazon Simple Storage Service                              0.1976
-  Amazon EC2 Container Registry (ECR)                        0.0249
+  Amazon Simple Storage Service                              3.3887
+  AWS Cost Explorer                                          0.2900
+  Cohere Embed 3 Model - English (Amazon Bedrock Edition)    0.2516
+  Amazon EC2 Container Registry (ECR)                        0.2382
+  Amazon Elastic Container Service                           0.2227
+  Amazon Virtual Private Cloud                               0.0435
+  Amazon Athena                                              0.0318
+  Amazon DynamoDB                                            0.0057
 
 under the 20 USD ceiling
