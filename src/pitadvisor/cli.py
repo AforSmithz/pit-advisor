@@ -911,7 +911,7 @@ def _bake_scenery(
         osm.fetch(
             raw,
             key,
-            f"raceway-{circuit}",
+            f"circuit-{circuit}",
             osm.raceway_query(float(centre["latitude"]), float(centre["longitude"]), reach),
             run_id,
         )

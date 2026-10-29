@@ -180,6 +180,25 @@ def test_raceway_lines_skip_karting_and_single_nodes():
     assert len(scenery.raceway_lines(elements)) == 1
 
 
+def test_raceway_lines_read_the_streets_of_a_circuit_relation():
+    street = {"type": "way", "geometry": nodes([[0, 0], [10, 0], [10, 10]])}
+    elements = [
+        {
+            "type": "relation",
+            "tags": {"type": "circuit", "name": "Las Vegas Strip Circuit"},
+            "members": [street, street, {"type": "node", "lat": 0.0, "lon": 0.0}],
+        },
+        {
+            "type": "relation",
+            "tags": {"type": "circuit", "sport": "cycling"},
+            "members": [street],
+        },
+    ]
+    lines = scenery.raceway_lines(elements)
+    assert len(lines) == 2
+    assert lines[0].shape == (3, 2)
+
+
 @pytest.mark.parametrize("element", [{"type": "node"}, {"type": "relation", "members": []}])
 def test_shapes_without_geometry_give_no_rings(element):
     assert scenery.rings(element, scenery.track_frame(ALIGNMENT)) == []

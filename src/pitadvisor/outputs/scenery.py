@@ -106,12 +106,22 @@ def track_frame(alignment: Alignment) -> ToTrack:
 
 
 def raceway_lines(elements: list[dict[str, Any]]) -> list[Array]:
+    shapes: list[list[dict[str, Any]]] = []
+    for element in elements:
+        if element.get("tags", {}).get("sport", "motor") != "motor":
+            continue
+        if element.get("type") == "way":
+            shapes.append(element.get("geometry", []))
+        elif element.get("type") == "relation":
+            shapes += [
+                member.get("geometry", [])
+                for member in element.get("members", [])
+                if member.get("type") == "way"
+            ]
     return [
-        np.array([[float(node["lat"]), float(node["lon"])] for node in element["geometry"]])
-        for element in elements
-        if element.get("type") == "way"
-        and element.get("tags", {}).get("sport", "motor") == "motor"
-        and len(element.get("geometry", [])) > 1
+        np.array([[float(node["lat"]), float(node["lon"])] for node in shape])
+        for shape in shapes
+        if len(shape) > 1
     ]
 
 
