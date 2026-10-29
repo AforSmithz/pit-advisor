@@ -1,5 +1,6 @@
 import { Frame } from "@/components/ops/frame";
 import { Explorer } from "@/components/stewards/explorer";
+import { TurnDetail, TurnStrip } from "@/components/stewards/turns";
 import { PageHead } from "@/components/tile";
 import { loadForecast, loadStewards } from "@/lib/load";
 import { teamColor } from "@/lib/teams";
@@ -55,7 +56,9 @@ export default async function Stewards() {
           </dl>
         </PageHead>
       }
+      strip={view.turns.length > 0 ? <TurnStrip turns={view.turns} seasons={view.turn_seasons} /> : undefined}
     >
+      <TurnDetail turns={view.turns} />
       <Explorer rulings={view.rulings} precedents={view.precedents} team={team} since={view.from_season} />
     </Frame>
   );
