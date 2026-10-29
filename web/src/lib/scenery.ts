@@ -85,7 +85,7 @@ function orbit(centre: Vec3, azimuth: number, elevation: number, distance: numbe
   ];
 }
 
-// the straight shot sits behind the start line and looks down the first 250 m of the lap
+// the straight shot sits high behind the start line, looking past it to the middle of the track so the whole lap is in frame
 export function shot(pose: Pose, track: SceneryView["track"], frame: Framing, exaggerate: number): Shot {
   const { centre, distance } = frame;
   if (pose === "overview") return { position: frame.rest, target: centre };
@@ -102,8 +102,9 @@ export function shot(pose: Pose, track: SceneryView["track"], frame: Framing, ex
   const dx = ahead[0] - start[0], dz = ahead[2] - start[2];
   const len = Math.hypot(dx, dz) || 1;
   const fx = dx / len, fz = dz / len;
+  const back = distance * 0.8, side = distance * 0.22;
   return {
-    position: [start[0] - fx * 560 - fz * 260, start[1] + 190, start[2] - fz * 560 + fx * 260],
-    target: ahead,
+    position: [start[0] - fx * back - fz * side, start[1] + distance * 0.75, start[2] - fz * back + fx * side],
+    target: [start[0] * 0.3 + centre[0] * 0.7, start[1], start[2] * 0.3 + centre[2] * 0.7],
   };
 }

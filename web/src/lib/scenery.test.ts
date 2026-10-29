@@ -71,11 +71,12 @@ describe("shot", () => {
   const track = { length_m: 1000, step_m: 5, sectors_m: [], points };
   const frame = framing(points, 1.6);
 
-  it("looks down the straight from behind the line", () => {
+  it("looks past the line towards the middle of the track from high behind it", () => {
     const { position, target } = shot("straight", track, frame, 3);
-    expect(target[0]).toBeCloseTo(250);
-    expect(position[0]).toBeLessThan(0);
-    expect(position[1]).toBeGreaterThan(target[1]);
+    expect(target[0]).toBeGreaterThan(0);
+    expect(target[0]).toBeLessThan(frame.centre[0]);
+    expect(position[0]).toBeLessThan(-frame.distance * 0.4);
+    expect(position[1]).toBeGreaterThan(frame.distance * 0.4);
   });
 
   it("keeps the overview where the home page rests", () => {
