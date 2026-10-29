@@ -162,14 +162,14 @@ body {
 :root {
   --pane: rgb(24 26 30 / 0.46);
   --pane-solid: #1a1c20;
-  --pane-blur: blur(22px) saturate(140%);
 }
 
 .pane {
   --lift: 1;
   background: var(--pane);
-  backdrop-filter: var(--pane-blur);
-  -webkit-backdrop-filter: var(--pane-blur);
+  /* spelled out and unprefixed last: the minifier otherwise keeps only the -webkit- line, which chrome ignores */
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / calc(0.13 * var(--lift))),
     inset 0 -1px 0 rgb(0 0 0 / calc(0.35 * var(--lift))),
@@ -194,8 +194,8 @@ body {
 @media (prefers-reduced-transparency: reduce) {
   .pane {
     background: var(--pane-solid);
-    backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 
