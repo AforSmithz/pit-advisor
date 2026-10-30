@@ -16,7 +16,7 @@ from pydantic import BaseModel, ValidationError
 from pitadvisor.agent import evals as agent_evals
 from pitadvisor.agent import kb as agent_kb
 from pitadvisor.agent import tools as agent_tools
-from pitadvisor.agent.runtime import agent_for
+from pitadvisor.agent.runtime import agent_for, model_client
 from pitadvisor.config import Settings, boto_session, get_settings
 from pitadvisor.features import assemble as feature_assemble
 from pitadvisor.features import track_fit
@@ -717,7 +717,7 @@ def jev_magnitudes(
 
 @app.command(
     name="incidents-extract",
-    help="Read the stewards' documents that have no field block. Costs Bedrock tokens.",
+    help="Read the stewards' documents that have no field block. Costs model tokens.",
 )
 def incidents_extract(
     limit: Annotated[int | None, typer.Option(help="Stop after this many documents.")] = None,
@@ -727,8 +727,7 @@ def incidents_extract(
 ) -> None:
     settings = get_settings()
     store = LocalObjectStore(LOCAL_ROOT) if local else object_store(settings)
-    session = cast(Any, boto_session(settings))
-    bedrock = session.client("bedrock-runtime", region_name=settings.aws_region)
+    client, model_id = model_client(settings)
 
     wanted = [
         found
@@ -749,7 +748,7 @@ def incidents_extract(
     tokens_in = tokens_out = failed = 0
     for found in todo:
         text = doc_corpus.pdf_text(store.get(found.key))
-        result = extract_decision(bedrock, settings.bedrock_model, text)
+        result = extract_decision(client, model_id, text)
         tokens_in += result.input_tokens
         tokens_out += result.output_tokens
         kind = incident_lake.kind_of(found.key) or "decision"
