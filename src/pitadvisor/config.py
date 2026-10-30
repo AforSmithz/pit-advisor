@@ -37,7 +37,6 @@ class Settings(BaseSettings):
     guardrail_id: str = ""
     guardrail_version: str = "DRAFT"
     # what the published dashboard may spend in a day, in questions
-    ask_daily_limit: int = 20
     # jev reads the declared car updates (U3). empty means replay landed responses only
     typesafe_api_key: str = ""
     # the race-weekend watch starts these and tells github to publish once the views are out
