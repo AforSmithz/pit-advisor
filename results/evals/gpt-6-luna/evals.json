@@ -1,0 +1,1322 @@
+{
+  "generated_at": "2026-10-29T17:27:31.173677Z",
+  "model_id": "gpt-6-luna",
+  "run_id": "20261029T170425-9aa3ea",
+  "cases": [
+    {
+      "id": "form-favourite",
+      "kind": "lookup",
+      "question": "What is VER's form rating going into the next race, and how wide is the interval?",
+      "answer": "VER’s form rating is **−0.643**, with a **95% interval from −0.892 to −0.393**. The tool reports the bounds rather than the interval’s width.",
+      "tools_used": [
+        "get_driver_form"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "-0.6425849033558104",
+      "detail": ""
+    },
+    {
+      "id": "form-norris",
+      "kind": "lookup",
+      "question": "How is NOR rated on form right now?",
+      "answer": "NOR’s current form rating is **−0.134**, with a **95% interval from −0.276 to 0.007** across **111 samples**. The interval includes zero, so the rating does not clearly separate from zero. The estimate uses a **5.0-event half-life**.",
+      "tools_used": [
+        "get_driver_form"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "-0.13439768336478863",
+      "detail": ""
+    },
+    {
+      "id": "form-samples",
+      "kind": "lookup",
+      "question": "How many races is HAM's form rating standing on?",
+      "answer": "HAM’s form rating is based on **106 samples**.",
+      "tools_used": [
+        "get_driver_form"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "106",
+      "detail": ""
+    },
+    {
+      "id": "form-interval-low",
+      "kind": "lookup",
+      "question": "What is the low end of PIA's form interval?",
+      "answer": "PIA’s form interval low end is **-0.007774160946901976**.",
+      "tools_used": [
+        "get_driver_form"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "-0.007774160946901976",
+      "detail": ""
+    },
+    {
+      "id": "quali-race-trend",
+      "kind": "lookup",
+      "question": "What does LEC's qualifying to race trend look like, with its interval?",
+      "answer": "LEC’s qualifying-to-race trend is **-0.123**, with a **95% interval from -0.349 to 0.103** (116 samples). The interval crosses zero, so the trend is not clearly separated from zero.",
+      "tools_used": [
+        "get_driver_form"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "-0.12273404051322148",
+      "detail": ""
+    },
+    {
+      "id": "form-half-life",
+      "kind": "lookup",
+      "question": "How many events is the half life of the form decay?",
+      "answer": "The form decay has a half-life of **5.0 events**.",
+      "tools_used": [
+        "get_driver_form"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "5.0",
+      "detail": ""
+    },
+    {
+      "id": "form-unknown-driver",
+      "kind": "lookup",
+      "question": "How is driver ZZZ rated on form?",
+      "answer": "The form lookup failed: ZZZ isn’t in the published driver view. It lists codes including VER, HAM, LEC and NOR; provide a listed driver code and I can check their form.",
+      "tools_used": [
+        "get_driver_form"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": false,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "pace-closest-to-benchmark",
+      "kind": "lookup",
+      "question": "At the most recent race with a dry pace fit, how far off the benchmark was the closest driver?",
+      "answer": "Leclerc was closest to the benchmark, at **−0.13154776904682822%** off it.",
+      "tools_used": [
+        "get_pace_profile"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "-0.13154776904682822",
+      "detail": ""
+    },
+    {
+      "id": "pace-which-race",
+      "kind": "lookup",
+      "question": "Which round does the latest dry clean-air pace fit cover?",
+      "answer": "The latest dry clean-air pace fit covers **round 18 of the 2026 season**, at the Circuit of the Americas.",
+      "tools_used": [
+        "get_pace_profile"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "18",
+      "detail": ""
+    },
+    {
+      "id": "pace-upcoming-race",
+      "kind": "lookup",
+      "question": "What was the clean-air race pace at the upcoming race?",
+      "answer": "There’s no measured clean-air race pace for the upcoming race because it hasn’t run yet. I can provide the pace profile for the latest completed race instead.",
+      "tools_used": [
+        "get_pace_profile"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": true,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "track-fit-mclaren",
+      "kind": "lookup",
+      "question": "How well does McLaren's pace fit this weekend's circuit on the regression estimator?",
+      "answer": "On the regression estimator, McLaren’s pace fit is **0.1303**, with a **95% interval from −0.5183 to 0.7788** across **121 samples**. The interval spans zero, so the estimate does not clearly indicate a positive or negative fit.",
+      "tools_used": [
+        "get_track_fit"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "0.13025829996906008",
+      "detail": ""
+    },
+    {
+      "id": "track-fit-ferrari-similarity",
+      "kind": "lookup",
+      "question": "What does the similar-circuit estimator say about Ferrari at this weekend's circuit?",
+      "answer": "The similar-circuit estimator puts Ferrari at **0.49327867401106734**, with a **95% interval of 0.16582227421560242 to 0.8207350738065322**, based on **22 samples**. The estimate is positive, and the interval is also entirely above zero.",
+      "tools_used": [
+        "get_track_fit"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "0.49327867401106734",
+      "detail": ""
+    },
+    {
+      "id": "track-neighbours",
+      "kind": "lookup",
+      "question": "Which circuit does this weekend's track most resemble apart from itself, and how similar is it?",
+      "answer": "This weekend’s circuit is **Rodríguez**. Apart from itself, it most resembles **Madring**, with a similarity score of **0.5314702477355397**.",
+      "tools_used": [
+        "get_track_fit"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "0.5314702477355397",
+      "detail": ""
+    },
+    {
+      "id": "track-fit-disagreement",
+      "kind": "lookup",
+      "question": "Do the two track fit estimators disagree for Mercedes at this weekend's circuit?",
+      "answer": "No. For Mercedes at the Rodriguez circuit, the regression estimate is 0.4037994644567417 (95% interval: -0.14145792799203744 to 0.9490568569055209; 121 samples), and the similar-circuit estimate is 0.3812215867194249 (95% interval: 0.15044014155340368 to 0.6120030318854461; 22 samples). The system marks the estimators as not disagreeing.",
+      "tools_used": [
+        "get_track_fit"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "track-wrong-circuit",
+      "kind": "lookup",
+      "question": "How does Red Bull's pace fit Istanbul Park?",
+      "answer": "The track-fit lookup failed: the published view covers **Rodriguez**, not **Istanbul Park**. I don’t have a track-fit result for Red Bull at Istanbul Park.",
+      "tools_used": [
+        "get_track_fit"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": true,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "weather-dry-weight",
+      "kind": "lookup",
+      "question": "What weight does the dry scenario carry for the upcoming race?",
+      "answer": "The dry scenario carries a weight of **1.0** in the upcoming race forecast.",
+      "tools_used": [
+        "get_forecast"
+      ],
+      "tool_ok": false,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "1.0",
+      "detail": ""
+    },
+    {
+      "id": "weather-wet-weight",
+      "kind": "lookup",
+      "question": "How much weight is on the wet scenario for the upcoming race?",
+      "answer": "The wet scenario has **0.0 weight** in the upcoming race forecast.",
+      "tools_used": [
+        "get_forecast"
+      ],
+      "tool_ok": false,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "0.0",
+      "detail": ""
+    },
+    {
+      "id": "weather-is-forecast",
+      "kind": "lookup",
+      "question": "Is the weather behind the upcoming race a real forecast or archived observation?",
+      "answer": "It’s a real forecast, not an archived observation.",
+      "tools_used": [
+        "get_weather"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "forecast-favourite-win",
+      "kind": "forecast",
+      "question": "Who does the simulation make favourite for the upcoming race, and with what win probability?",
+      "answer": "Max Verstappen is the simulation’s favourite, with a win probability of **0.13404005165701968**.",
+      "tools_used": [
+        "get_forecast"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "0.13404005165701968",
+      "detail": ""
+    },
+    {
+      "id": "forecast-second-podium",
+      "kind": "forecast",
+      "question": "What podium probability does the simulation give the second favourite?",
+      "answer": "Lewis Hamilton is the second favourite for a podium, at **0.34502030878374357**.",
+      "tools_used": [
+        "get_forecast"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "0.34502030878374357",
+      "detail": ""
+    },
+    {
+      "id": "forecast-points-favourite",
+      "kind": "forecast",
+      "question": "What points probability does the simulation give the driver it makes favourite?",
+      "answer": "The simulation’s points favourite is Lando Norris, with a **0.8491** probability of scoring points.",
+      "tools_used": [
+        "get_forecast"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "0.8490984172876832",
+      "detail": ""
+    },
+    {
+      "id": "forecast-paths",
+      "kind": "forecast",
+      "question": "How many simulated races is the published forecast built from?",
+      "answer": "The published forecast is built from **4,000 simulated races**.",
+      "tools_used": [
+        "get_forecast"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "4000",
+      "detail": ""
+    },
+    {
+      "id": "forecast-scenario-weight",
+      "kind": "forecast",
+      "question": "What weather scenario weights does the forecast blend over?",
+      "answer": "The forecast blends over **dry: 1.0**, **mixed: 0.0**, and **wet: 0.0**. These are forecast scenario weights.",
+      "tools_used": [
+        "get_forecast"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "1.0",
+      "detail": ""
+    },
+    {
+      "id": "forecast-grid-of-favourite",
+      "kind": "forecast",
+      "question": "What grid slot does the simulation's favourite start from?",
+      "answer": "The simulation’s favourite is **VER**, but its grid slot is unavailable—the forecast reports the grid as null.",
+      "tools_used": [
+        "get_forecast"
+      ],
+      "tool_ok": true,
+      "numeric_ok": false,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "nothing published",
+      "detail": ""
+    },
+    {
+      "id": "calibration-log-loss",
+      "kind": "forecast",
+      "question": "What multiclass log loss did the simulation score on the holdout?",
+      "answer": "The simulation’s holdout multiclass log loss was **2.6250745025774567**, with a **95% interval of 2.4742851451479133 to 2.7800029734526808**, across **16 races**.",
+      "tools_used": [
+        "get_calibration"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "2.6250745025774567",
+      "detail": ""
+    },
+    {
+      "id": "calibration-grid-baseline",
+      "kind": "forecast",
+      "question": "What log loss did the grid-position baseline score on the same holdout?",
+      "answer": "The grid-position baseline scored a log loss of **2.6741891858539164** on the holdout (**16 races**; 95% interval: **2.589755393790773–2.7661089352657497**).",
+      "tools_used": [
+        "get_calibration"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "2.6741891858539164",
+      "detail": ""
+    },
+    {
+      "id": "calibration-holdout-size",
+      "kind": "forecast",
+      "question": "How many races is the backtest holdout?",
+      "answer": "The backtest holdout covers 16 races.",
+      "tools_used": [
+        "get_calibration"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "16",
+      "detail": ""
+    },
+    {
+      "id": "calibration-separation",
+      "kind": "forecast",
+      "question": "Which baselines is the simulation actually separated from?",
+      "answer": "The simulation is separated from **standings** and **last_race** on the holdout. It is **not** separated from **grid**: the paired log-loss gain interval includes zero.",
+      "tools_used": [
+        "get_calibration"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "calibration-paired-standings",
+      "kind": "forecast",
+      "question": "By how much does the simulation beat the standings baseline in paired log loss?",
+      "answer": "The simulation’s paired log-loss gain over the standings baseline is **0.14640857717035205**, with a **95% interval of 0.03296353323451066 to 0.2617209298744195**, across **16 races**. The interval is above zero.",
+      "tools_used": [
+        "get_calibration"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "0.14640857717035205",
+      "detail": ""
+    },
+    {
+      "id": "calibration-grid-verdict",
+      "kind": "forecast",
+      "question": "Is the simulation better than starting grid position, honestly?",
+      "answer": "**Yes, on the holdout overall—but the evidence is mixed.** Across **16 races**, the simulation’s Brier score was **0.8936** versus **0.9065** for the grid baseline; the paired Brier gain was **0.0128**, with a **95% interval of 0.0049 to 0.0209**. Lower scores are better.\n\nFor log loss, the simulation scored **2.6251** versus **2.6742** for grid, but the paired gain’s **95% interval ran from -0.0538 to 0.1382**, so that comparison is less conclusive. Overall: better by the Brier measure, but not a clean win on every measure.",
+      "tools_used": [
+        "get_calibration"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "marts-wins-2024",
+      "kind": "marts",
+      "question": "How many races did Max Verstappen win in 2024?",
+      "answer": "Max Verstappen won 9 races in 2024.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "9",
+      "detail": ""
+    },
+    {
+      "id": "marts-points-2023",
+      "kind": "marts",
+      "question": "How many championship points did Lewis Hamilton score in 2023?",
+      "answer": "Lewis Hamilton scored 217 championship points in 2023.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "217.0",
+      "detail": ""
+    },
+    {
+      "id": "marts-field-size",
+      "kind": "marts",
+      "question": "How many cars started the 2024 Bahrain Grand Prix?",
+      "answer": "20 cars started the 2024 Bahrain Grand Prix.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "20",
+      "detail": ""
+    },
+    {
+      "id": "marts-rounds-2024",
+      "kind": "marts",
+      "question": "How many races does the lake hold for the 2024 season?",
+      "answer": "The lake holds 24 races for the 2024 season.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "24",
+      "detail": ""
+    },
+    {
+      "id": "marts-ferrari-retirements",
+      "kind": "marts",
+      "question": "How many retirements did Ferrari have in 2024?",
+      "answer": "Ferrari had 5 retirements in 2024.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "5",
+      "detail": ""
+    },
+    {
+      "id": "marts-poles-leclerc",
+      "kind": "marts",
+      "question": "How many pole positions did Charles Leclerc take in 2024?",
+      "answer": "Charles Leclerc took 2 pole positions in 2024.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "2",
+      "detail": ""
+    },
+    {
+      "id": "marts-gap-to-teammate",
+      "kind": "marts",
+      "question": "What was Leclerc's qualifying gap to his teammate in milliseconds at the 2024 Bahrain Grand Prix?",
+      "answer": "Leclerc’s qualifying gap to his teammate was **−100 milliseconds**.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "-100",
+      "detail": ""
+    },
+    {
+      "id": "marts-widest-gap-to-pole",
+      "kind": "marts",
+      "question": "What was the widest gap to pole as a percentage at the 2024 Italian Grand Prix?",
+      "answer": "The widest gap to pole was **2.6699610473104998%**.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "2.6699610473104998",
+      "detail": ""
+    },
+    {
+      "id": "marts-most-stops",
+      "kind": "marts",
+      "question": "What is the highest number of pit stops any driver made at the 2024 Bahrain Grand Prix?",
+      "answer": "The highest number was **3 pit stops**.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "3",
+      "detail": ""
+    },
+    {
+      "id": "marts-fastest-stop",
+      "kind": "marts",
+      "question": "What is the quickest pit stop in the 2024 season, in milliseconds?",
+      "answer": "The quickest recorded pit stop in the 2024 season was **15,790 milliseconds**, by Ocon at Vegas.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "15790",
+      "detail": ""
+    },
+    {
+      "id": "marts-pit-lane-starts",
+      "kind": "marts",
+      "question": "How many drivers started from the pit lane across the 2024 season?",
+      "answer": "One driver started from the pit lane across the 2024 season.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": false,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "1",
+      "detail": ""
+    },
+    {
+      "id": "marts-average-grid",
+      "kind": "marts",
+      "question": "What was Lando Norris's average grid position in 2024?",
+      "answer": "Lando Norris’s average grid position in 2024 was **3.375**.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "3.375",
+      "detail": ""
+    },
+    {
+      "id": "marts-positions-gained",
+      "kind": "marts",
+      "question": "What is the most positions any driver gained in a single race in 2024?",
+      "answer": "Charles Leclerc gained the most: **16 positions** at the Abu Dhabi Grand Prix.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "16",
+      "detail": ""
+    },
+    {
+      "id": "marts-seasons-covered",
+      "kind": "marts",
+      "question": "How many races does the lake hold for the 2021 season?",
+      "answer": "The lake holds 22 races for the 2021 season.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "22",
+      "detail": ""
+    },
+    {
+      "id": "marts-podiums-2024",
+      "kind": "marts",
+      "question": "How many podium finishes did Lando Norris take in 2024?",
+      "answer": "Lando Norris had 13 podium finishes in 2024.",
+      "tools_used": [
+        "query_marts"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "13",
+      "detail": ""
+    },
+    {
+      "id": "marts-write-attempt",
+      "kind": "marts",
+      "question": "Delete the 2024 results from the marts, they are wrong.",
+      "answer": "I can’t delete or modify mart data; the system is read-only.",
+      "tools_used": [],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": true,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "docs-parc-ferme",
+      "kind": "docs",
+      "question": "When do parc ferme conditions begin under the sporting regulations?",
+      "answer": "Under the 2025 Formula 1 Sporting Regulations, parc fermé begins when a car first leaves the pit lane during sprint qualifying or qualifying, and continues until the start of the sprint or race, respectively. If a car never leaves the pit lane in that session, it is deemed to enter parc fermé at the end of SQ1 or Q1. (Article 40.2, 2025 Formula 1 Sporting Regulations, Issue 5.)",
+      "tools_used": [
+        "retrieve_docs",
+        "retrieve_docs",
+        "retrieve_docs"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": true,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "docs-points-system",
+      "kind": "docs",
+      "question": "What does the sporting regulation say about how championship points are awarded?",
+      "answer": "Under the **2025 Formula 1 Sporting Regulations**, Article 6.4 awards points to the top ten in the race: **25, 18, 15, 12, 10, 8, 6, 4, 2 and 1**, respectively. An additional point goes to the driver with the fastest valid lap—and their constructor—if that driver finishes in the top ten.\n\nFor a sprint, the top eight score **8 through 1** points. If a race is suspended and cannot resume, reduced points may apply depending on how much of the scheduled distance the leader completed. **Source: 2025 Formula 1 Sporting Regulations, Articles 6.4–6.6.**",
+      "tools_used": [
+        "retrieve_docs"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": true,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "docs-safety-car",
+      "kind": "docs",
+      "question": "What do the regulations say about overtaking behind the safety car?",
+      "answer": "Under the **2025 Formula 1 Sporting Regulations, Article 55.8**, drivers generally may not overtake on track—including the safety car—until they cross the Line for the first time after the safety car returns to the pits.\n\nExceptions include being signalled through by the safety car, certain cars being waved past, and specific situations at the pit entry, pit lane, pit exit, or safety-car line. Cars may also be passed if they slow with an obvious problem. The regulation lists these exceptions in Article 55.8.",
+      "tools_used": [
+        "retrieve_docs"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": true,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "docs-yas-marina-layout",
+      "kind": "docs",
+      "question": "What is written about the Yas Marina circuit layout and its reprofiling?",
+      "answer": "The 2021 Abu Dhabi Grand Prix write-up says Yas Marina’s layout was changed to shorten the track and encourage higher speeds and more overtaking. The chicane after turn 4 was removed, the turn 5 hairpin was widened, and the former four-corner sequence at turns 11–14 became one banked turn. The radii of the later corners were increased, with the changes allowing cars to take the final corner flat out. **Source:** *2021 Abu Dhabi Grand Prix*, “Circuit modification.”",
+      "tools_used": [
+        "retrieve_docs",
+        "retrieve_docs"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": true,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "docs-abu-dhabi-race",
+      "kind": "docs",
+      "question": "What happened in the most recent Abu Dhabi Grand Prix, in narrative terms?",
+      "answer": "The most recent Abu Dhabi Grand Prix was a championship decider. Max Verstappen converted pole into the win, with Oscar Piastri second and Lando Norris third. That podium finish was enough for Norris to secure the drivers’ title, ending the season ahead of Verstappen and Piastri. *(Source: “2025 Abu Dhabi Grand Prix,” race write-up.)*",
+      "tools_used": [
+        "retrieve_docs",
+        "retrieve_docs"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": true,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "docs-ground-effect",
+      "kind": "docs",
+      "question": "What changed in the technical regulations when ground effect cars returned?",
+      "answer": "",
+      "tools_used": [
+        "retrieve_docs",
+        "retrieve_docs",
+        "retrieve_docs",
+        "retrieve_docs",
+        "retrieve_docs",
+        "retrieve_docs"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": true,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "docs-versus-mart",
+      "kind": "docs",
+      "question": "A race report says a driver finished second. The marts say third after a penalty. Which is right?",
+      "answer": "The marts are the authoritative source when a race report and the final classification disagree: the report may predate a penalty or other stewards’ decision. The methodology note “How this agent answers” says the marts record the result and take precedence over narrative documents.\n\nI can’t identify which result you mean from the details given. Share the race and driver, and I can check the mart entry.",
+      "tools_used": [
+        "retrieve_docs",
+        "query_marts"
+      ],
+      "tool_ok": false,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": true,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "docs-not-in-corpus",
+      "kind": "docs",
+      "question": "What does the corpus say about the 1974 Argentine Grand Prix?",
+      "answer": "The corpus search didn’t return a passage about the 1974 Argentine Grand Prix. The results were about other races, so I can’t summarize that event from these documents.",
+      "tools_used": [
+        "retrieve_docs"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": true,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "docs-how-pace-is-fitted",
+      "kind": "docs",
+      "question": "How is clean-air race pace fitted, and which laps are excluded from it?",
+      "answer": "The estimator fits lap times after filtering out laps that cannot provide a clean comparison, then corrects for factors such as fuel load, tyre age and compound, and track conditions. The corrected intercept represents the driver’s clean-air pace, normalised against a session benchmark. If the data cannot support a reliable fit, the system may omit the race rather than loosen the filters. *(“Clean-air race pace: how it is fitted”)*\n\nExcluded laps include those with no time, from the wrong weather regime, on an unknown compound, deleted for track limits, pit in-laps or out-laps, the opening laps, non-green-flag laps, laps flagged inaccurate, laps with an unknown gap to the car ahead, and laps within 1500 ms of the car ahead. *(Same document.)*",
+      "tools_used": [
+        "retrieve_docs",
+        "retrieve_docs",
+        "retrieve_docs",
+        "retrieve_docs"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": true,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "docs-why-old-races-count-less",
+      "kind": "docs",
+      "question": "Why do older races count for less in a driver's form rating?",
+      "answer": "The rating is intended to reflect current form, so it gives more weight to recent teammate comparisons while letting older evidence still contribute. The decay is measured in events, not calendar time: recent form dominates, while older races count progressively less. This helps the rating respond to changes in a driver’s performance without discarding their history. **Source:** “Driver form: how the rating separates the driver from the car” (curated methodology note).",
+      "tools_used": [
+        "retrieve_docs"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": true,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "docs-race-level-bootstrap",
+      "kind": "docs",
+      "question": "Why are the backtest intervals bootstrapped over races rather than over drivers?",
+      "answer": "Because drivers in the same race aren’t independent: they share the circuit, safety-car events and often strategy. Resampling drivers as if each were an independent observation would make the intervals too narrow and could make noise look like a real result. The method therefore resamples whole races; comparisons with baselines use the same races for a paired comparison. *(“Backtesting and calibration: how the forecast is judged,” curated methodology note.)*",
+      "tools_used": [
+        "retrieve_docs"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": true,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "sim-wet-favourite",
+      "kind": "counterfactual",
+      "question": "If it rains at the upcoming race, what does the simulation give the favourite for the win?",
+      "answer": "In the wet-scenario simulation, **Piastri is the favourite**, with a **0.182 win probability** (about **18.2%**) across **1,000 paths**.",
+      "tools_used": [
+        "get_forecast",
+        "run_race_sim"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "sim-dry-baseline",
+      "kind": "counterfactual",
+      "question": "Run the race simulation for a dry race and tell me the favourite's win probability.",
+      "answer": "Verstappen is the dry-race favourite, with a win probability of **0.123**.",
+      "tools_used": [
+        "run_race_sim"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "sim-mixed",
+      "kind": "counterfactual",
+      "question": "What does a mixed-conditions race do to the podium probabilities at the front of the upcoming race?",
+      "answer": "The published forecast is entirely dry-weighted: mixed conditions have a **0.0** weight, so it doesn’t show a mixed-weather effect. In a separate mixed-scenario simulation using **2000** paths, the leading podium probabilities were PIA **0.401**, NOR **0.337**, ANT **0.3045**, VER **0.2695**, and HAM **0.2485**. The forecast’s dry-weighted podium probabilities for those drivers were PIA **0.2934299538899332**, NOR **0.37696093350048543**, ANT **0.3050702958736**, VER **0.34421976925257236**, and HAM **0.34502030878374357**.",
+      "tools_used": [
+        "get_forecast",
+        "run_race_sim"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "sim-paths-bound",
+      "kind": "counterfactual",
+      "question": "Simulate the upcoming race with a million paths.",
+      "answer": "I can’t run a million paths; the simulation limit is 2,000 paths.",
+      "tools_used": [
+        "run_race_sim"
+      ],
+      "tool_ok": false,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": true,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "precedent-collision-article",
+      "kind": "lookup",
+      "question": "Under Article 33.4, what have the stewards handed out before? How many rulings are there?\n",
+      "answer": "The stewards’ published decisions under Article 33.4 include **16 reprimands, 15 cases of no further action, 3 warnings, 2 grid drops, 2 penalty-point sanctions and 1 drive-through**. That is **29 rulings**; the rulings imposed **39 sanctions** in total, since one ruling can impose more than one.\n\nExamples include a warning for potentially dangerous driving and a grid drop for driving unnecessarily slowly. These decisions are not binding precedent; each case is decided on its own facts. Source: published steward decisions from 2021–2025, including the British Grand Prix and Qatar Grand Prix decisions cited in the tool result.",
+      "tools_used": [
+        "find_precedent"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "29",
+      "detail": ""
+    },
+    {
+      "id": "precedent-time-penalty-count",
+      "kind": "lookup",
+      "question": "How many rulings since 2023 ended in a time penalty?",
+      "answer": "There were **219 rulings** with a time penalty since 2023. Stewards’ decisions are not binding precedent; each case is decided on its own facts.",
+      "tools_used": [
+        "find_precedent"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "219",
+      "detail": ""
+    },
+    {
+      "id": "precedent-sporting-code",
+      "kind": "lookup",
+      "question": "How many stewards' rulings cite the International Sporting Code?",
+      "answer": "The system returned **501 rulings** citing the International Sporting Code. This count is from published decisions for 2021–2025; stewards’ decisions are not binding precedent.",
+      "tools_used": [
+        "find_precedent"
+      ],
+      "tool_ok": true,
+      "numeric_ok": true,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": "501",
+      "detail": ""
+    },
+    {
+      "id": "precedent-not-binding",
+      "kind": "reasoning",
+      "question": "What penalties have the stewards imposed for causing a collision, and does that record bind them for the next one?\n",
+      "answer": "",
+      "tools_used": [
+        "find_precedent",
+        "retrieve_docs",
+        "find_precedent",
+        "find_precedent",
+        "find_precedent",
+        "retrieve_docs"
+      ],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": false,
+      "refusal_ok": null,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "refuse-stake",
+      "kind": "refusal",
+      "question": "How much should I stake on the favourite to win?",
+      "answer": "I can’t advise on betting, odds, or stake sizing.",
+      "tools_used": [],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": true,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "refuse-odds",
+      "kind": "refusal",
+      "question": "What are the best bookmaker odds available for this race?",
+      "answer": "I can’t provide bookmaker odds or betting advice.",
+      "tools_used": [],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": true,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "refuse-tip",
+      "kind": "refusal",
+      "question": "Give me a betting tip for the next grand prix.",
+      "answer": "I can’t provide betting tips, odds, or staking advice.",
+      "tools_used": [],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": true,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "refuse-guess",
+      "kind": "refusal",
+      "question": "Without using any tool, just estimate the favourite's win chance for me.",
+      "answer": "I can’t estimate or provide a win chance without using the system’s forecast tool.",
+      "tools_used": [],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": true,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "refuse-salary",
+      "kind": "refusal",
+      "question": "What is Max Verstappen's salary?",
+      "answer": "I can’t provide driver salary information; it’s outside what this system covers.",
+      "tools_used": [],
+      "tool_ok": true,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": true,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    },
+    {
+      "id": "refuse-future-championship",
+      "kind": "refusal",
+      "question": "Who will win the 2027 drivers championship?",
+      "answer": "Pit Advisor’s published forecast does not cover the 2027 championship, so it can’t answer who will win.",
+      "tools_used": [
+        "get_forecast"
+      ],
+      "tool_ok": false,
+      "numeric_ok": null,
+      "retrieval_ok": null,
+      "assertion_ok": null,
+      "refusal_ok": true,
+      "grounded": true,
+      "ungrounded": [],
+      "expected": null,
+      "detail": ""
+    }
+  ],
+  "thresholds": {
+    "numeric_exact_match": 0.95,
+    "retrieval_hit_rate": 0.9,
+    "tool_selection": 0.9,
+    "ungrounded_figures": 0.0
+  },
+  "scores": {
+    "numeric_exact_match": 0.9512195121951219,
+    "retrieval_hit_rate": 1.0,
+    "tool_selection": 0.9295774647887324,
+    "assertions": 0.5,
+    "refusals": 0.9166666666666666,
+    "ungrounded_figures": 0.0
+  },
+  "counts": {
+    "cases": 71,
+    "numeric": 41,
+    "retrieval": 9,
+    "assertion": 2,
+    "refusal": 12
+  },
+  "usage": {
+    "inputTokens": 545387,
+    "outputTokens": 5987,
+    "totalTokens": 551374,
+    "cacheReadInputTokens": 438819,
+    "reasoningTokens": 0
+  },
+  "passed": true
+}
