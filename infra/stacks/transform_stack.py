@@ -114,7 +114,9 @@ SETTLE_MARKETS = "pitadv markets"
 # it is missing, the light machine's scenery mode bakes the whole calendar in one go
 BAKE_SCENERY = "pitadv scenery --season $SEASON --round $ROUND --if-missing"
 BACKFILL_SCENERY = "pitadv scenery --all --season $SEASON --if-missing"
-SETTLE_CORPUS = "pitadv docs-sync --index"
+# no --index while bedrock embeddings are capped at zero: the knowledge base cannot embed, and
+# retrieve_docs reads docs/ straight from s3 (DECISIONS 2026-10-30). add it back when they open
+SETTLE_CORPUS = "pitadv docs-sync"
 PUBLIC_SUBNET = (
     "The task runs in a public subnet with a public IP and no inbound rules. The alternative "
     "is a NAT Gateway at roughly $32/month, which is more than the whole budget for everything "
