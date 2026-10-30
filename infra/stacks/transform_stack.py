@@ -127,6 +127,8 @@ LIGHT_STEPS = {
 SETTLE_MARKETS = "pitadv markets"
 # the 3d scene for the dashboard, once per circuit: the weekend run bakes this week's circuit if
 # it is missing, the light machine's scenery mode bakes the whole calendar in one go
+# every step is its own task, so the manifest dbt build wrote is gone by the time lineage runs
+CHECK_LINEAGE = "dbt parse --project-dir transform --target athena_task && pitadv lineage --check"
 BAKE_SCENERY = "pitadv scenery --season $SEASON --round $ROUND --if-missing"
 BACKFILL_SCENERY = "pitadv scenery --all --season $SEASON --if-missing"
 # no --index while bedrock embeddings are capped at zero: the knowledge base cannot embed, and
@@ -445,7 +447,7 @@ class TransformStack(Stack):
                     "DbtBuild", "dbt build --project-dir transform --target athena_task --fail-fast"
                 )
             )
-            .next(self._step("CheckLineage", "pitadv lineage --check"))
+            .next(self._step("CheckLineage", CHECK_LINEAGE))
             .next(scenery)
             .next(emit)
             .next(self._publish("PublishWeekend"))

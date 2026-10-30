@@ -673,6 +673,13 @@ def test_the_stewards_prose_is_read_before_the_rebuild(transform_template: Templ
         assert "|| echo" in definition[extract : extract + 200]
 
 
+def test_lineage_parses_the_project_in_its_own_task(transform_template: Template) -> None:
+    weekend = weekend_definition(transform_template)
+    check = weekend.index("pitadv lineage --check")
+    assert weekend.index("dbt parse --project-dir transform --target athena_task") < check
+    assert weekend.index("dbt build --project-dir transform") < check
+
+
 def test_the_light_steps_leave_a_stale_brief_alone(transform_template: Template) -> None:
     light = machine_definition(transform_template, f"pitadvisor-light-{ENV_NAME}")
     assert light.count("--keep-stale-brief") == 2
