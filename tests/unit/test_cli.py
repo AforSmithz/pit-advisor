@@ -945,6 +945,14 @@ def test_emit_views_knows_the_brief(lake):
     assert "emit weekend_view, forecast_view, track_view before the brief" in plain(result.stderr)
 
 
+def test_a_stale_brief_can_be_left_alone(lake):
+    result = CliRunner().invoke(
+        cli.app, ["emit-views", "--views", "brief", "--keep-stale-brief", "--local"]
+    )
+    assert result.exit_code == 0
+    assert "before the brief" in plain(result.stderr)
+
+
 def test_backtest_until_scores_only_the_dev_window(lake, seed_lake, tmp_path):
     seeded_local(lake, seed_lake)
     result = CliRunner().invoke(

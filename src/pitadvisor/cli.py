@@ -1037,6 +1037,13 @@ def emit_views(
     paths: Annotated[int, typer.Option(help="Simulated races behind the forecast view.")] = 4000,
     seed: Annotated[int, typer.Option(help="Seed, so the view reproduces.")] = 11,
     results: Annotated[Path, typer.Option(help="Where backtest.json lives.")] = RESULTS,
+    keep_stale_brief: Annotated[
+        bool,
+        typer.Option(
+            "--keep-stale-brief",
+            help="Leave the brief as it is when the views describe different races.",
+        ),
+    ] = False,
     local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
 ) -> None:
     settings = get_settings()
@@ -1077,7 +1084,8 @@ def emit_views(
             typer.echo(emit(store, brief_outputs.from_store(store, _run_id())))
         except brief_outputs.StaleViewsError as exc:
             typer.echo(str(exc), err=True)
-            raise typer.Exit(1) from exc
+            if not keep_stale_brief:
+                raise typer.Exit(1) from exc
 
 
 def _lake_view(store: ObjectStore, name: str, event: str) -> BaseModel:
