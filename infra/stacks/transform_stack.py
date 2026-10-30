@@ -34,6 +34,9 @@ from aws_cdk import (
     aws_logs as logs,
 )
 from aws_cdk import (
+    aws_ssm as ssm,
+)
+from aws_cdk import (
     aws_stepfunctions as sfn,
 )
 from aws_cdk import (
@@ -79,8 +82,9 @@ NO_CONTAINER_INSIGHTS = (
 )
 
 PLAIN_ENVIRONMENT = (
-    "The task environment holds the bucket name, the region and the season being processed. "
-    "There is no secret in it: the pipeline authenticates with its task role."
+    "The task environment holds the bucket name, the region, the season being processed and the "
+    "model endpoint's address. The one secret, the endpoint key, is injected from a SecureString "
+    "parameter through the task's secrets, so it never appears in the task definition."
 )
 
 PUBLISH_INVOKE = (
@@ -92,19 +96,30 @@ CORPUS_LISTING = (
     "because the transform stack has no reference to the agent stack; the ingestion actions "
     "that follow are scoped to knowledge bases in this account."
 )
+# the stewards write some decisions as prose, and those wait in raw until a model has read them.
+# a model that is down should not hold back the grid drops the parser already has, so a failed
+# read leaves the documents for the next run and the rebuild carries on without them
+EXTRACT_STEWARDS = (
+    "{ pitadv incidents-extract --season $SEASON"
+    " || echo 'extraction failed, the documents wait for the next run' >&2; }"
+)
+REBUILD_STEWARDS = f"{EXTRACT_STEWARDS} && pitadv rebuild --source fia_docs --season $SEASON"
 # the weekend watch, every 15 minutes, starts a run once a session's data is upstream
 WATCH_RATE_MINUTES = 15
 LIGHT_STEPS = {
     # a new stewards' document can move the grid, so the forecast is emitted again behind it
     "stewards": (
         "pitadv ingest --source fia_docs --season $SEASON"
-        " && pitadv rebuild --source fia_docs --season $SEASON"
+        f" && {REBUILD_STEWARDS}"
         " && pitadv car-updates --season $SEASON"
         " && pitadv emit-views --views forecast,sprint,history,stewards,upgrades,debrief,brief"
+        " --keep-stale-brief"
     ),
+    # between weekends the forecast has moved to the next race and the weekend view has not,
+    # and the brief cannot be built from the two. it stays as it was rather than failing the run
     "snapshot": (
         "pitadv ingest --source open_meteo --season $SEASON --round $ROUND"
-        " && pitadv emit-views --views weekend,forecast,sprint,history,brief"
+        " && pitadv emit-views --views weekend,forecast,sprint,history,brief --keep-stale-brief"
     ),
 }
 # monday: market prices for the race just run, then wikipedia's write-up into the corpus. two
@@ -347,6 +362,19 @@ class TransformStack(Stack):
                 "PITADV_ATHENA_STAGING": f"s3://{results_bucket_name}/athena/",
                 "PITADV_SILVER_DIR": f"s3://{bucket_name}/silver/",
                 "PITADV_GOLD_DIR": f"s3://{bucket_name}/gold/",
+                # bedrock text is capped at zero on this account, the stewards' prose is read on
+                # azure foundry instead (DECISIONS 2026-10-29)
+                "PITADV_MODEL_PROVIDER": "openai",
+                "PITADV_OPENAI_BASE_URL": self.node.try_get_context("foundryBaseUrl") or "",
+                "PITADV_OPENAI_MODEL": self.node.try_get_context("foundryModel") or "gpt-6-luna",
+                "PITADV_OPENAI_REASONING_EFFORT": "none",
+            },
+            secrets={
+                "PITADV_OPENAI_API_KEY": ecs.Secret.from_ssm_parameter(
+                    ssm.StringParameter.from_secure_string_parameter_attributes(
+                        self, "FoundryKey", parameter_name=f"/pitadvisor/{env_name}/foundry-key"
+                    )
+                )
             },
         )
         Validations.of(self.task_definition).acknowledge(
@@ -395,9 +423,7 @@ class TransformStack(Stack):
             # the stewards' documents for the season: grid drops for saturday night's grid and
             # each team's declared car updates. the crawl skips anything already landed
             .next(self._step("IngestStewards", "pitadv ingest --source fia_docs --season $SEASON"))
-            .next(
-                self._step("RebuildStewards", "pitadv rebuild --source fia_docs --season $SEASON")
-            )
+            .next(self._step("RebuildStewards", REBUILD_STEWARDS))
             .next(self._step("CarUpdates", "pitadv car-updates --season $SEASON"))
             .next(
                 self._run(

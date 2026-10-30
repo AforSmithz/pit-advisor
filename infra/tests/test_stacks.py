@@ -662,6 +662,34 @@ def test_the_light_machine_knows_three_modes(transform_template: Template) -> No
     assert "UnknownMode" in light
 
 
+def test_the_stewards_prose_is_read_before_the_rebuild(transform_template: Template) -> None:
+    for definition in (
+        weekend_definition(transform_template),
+        machine_definition(transform_template, f"pitadvisor-light-{ENV_NAME}"),
+    ):
+        extract = definition.index("pitadv incidents-extract --season $SEASON")
+        assert extract < definition.index("pitadv rebuild --source fia_docs --season $SEASON")
+        # a model that is down leaves the documents for the next run, it does not stop the step
+        assert "|| echo" in definition[extract : extract + 200]
+
+
+def test_the_light_steps_leave_a_stale_brief_alone(transform_template: Template) -> None:
+    light = machine_definition(transform_template, f"pitadvisor-light-{ENV_NAME}")
+    assert light.count("--keep-stale-brief") == 2
+    assert "--keep-stale-brief" not in weekend_definition(transform_template)
+
+
+def test_the_model_key_comes_from_ssm_not_the_environment(transform_template: Template) -> None:
+    _, task = only(transform_template, "AWS::ECS::TaskDefinition")
+    container = task["Properties"]["ContainerDefinitions"][0]
+    names = {item["Name"] for item in container["Environment"]}
+    assert "PITADV_OPENAI_API_KEY" not in names
+    assert {"PITADV_MODEL_PROVIDER", "PITADV_OPENAI_MODEL"} <= names
+    (secret,) = container["Secrets"]
+    assert secret["Name"] == "PITADV_OPENAI_API_KEY"
+    assert "parameter/pitadvisor/" in json.dumps(secret["ValueFrom"])
+
+
 def test_the_schedule_can_be_paused_from_context() -> None:
     app = cdk.App(context={"env": ENV_NAME, "enableSchedule": "false"})
     stack = TransformStack(

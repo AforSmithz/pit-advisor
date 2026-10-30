@@ -10,6 +10,8 @@
     ],
     "@aws-cdk/aws-iam:minimizePolicies": true,
     "@aws-cdk/aws-s3:createDefaultLoggingPolicy": true,
+    "foundryBaseUrl": "https://pitadvisor-dev-t3ccga3ntfjkw.openai.azure.com/openai/v1",
+    "foundryModel": "gpt-6-luna",
     "githubRepo": "AforSmithz/pit-advisor"
   }
 }
