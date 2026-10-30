@@ -2,7 +2,6 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { LineageView } from "@/lib/schemas";
-import { AskPalette } from "./ask-palette";
 import { ShareSheet } from "./share-sheet";
 import { TraceDrawer } from "./trace-drawer";
 
@@ -16,7 +15,7 @@ export type TraceTarget = {
   field: string;
 };
 
-type Overlay = { kind: "ask" } | { kind: "share"; tab?: "share" | "follow" } | TraceTarget;
+type Overlay = { kind: "share"; tab?: "share" | "follow" } | TraceTarget;
 
 type Context = {
   open: (overlay: Overlay) => void;
@@ -46,10 +45,6 @@ export function Overlays({
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setCurrent((now) => (now?.kind === "ask" ? null : { kind: "ask" }));
-      }
       if (event.key === "Escape") setCurrent(null);
     }
     window.addEventListener("keydown", onKey);
@@ -59,7 +54,6 @@ export function Overlays({
   return (
     <OverlayContext.Provider value={context}>
       {children}
-      {current?.kind === "ask" && <AskPalette onClose={close} />}
       {current?.kind === "share" && (
         <ShareSheet onClose={close} initial={current.tab ?? "share"} {...share} />
       )}
