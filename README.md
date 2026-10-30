@@ -4,8 +4,9 @@ Pit Advisor is a race-weekend research tool for Formula 1. It replaces the scatt
 of checking five sites before a Grand Prix with one dashboard: recent driver form normalized
 against teammates, the gap between a car's Saturday pace and its Sunday pace, how well a team
 historically fits a circuit of this type, the weather scenarios for each session, reliability
-risk, and a finishing-position forecast with intervals. An agent sits on top of the same data
-and answers questions about it, including questions about the regulations, with citations.
+risk, and a finishing-position forecast with intervals. A language model works on the same data
+in the background, reading the stewards' decisions that plain parsing cannot, under the same rule
+as everything else: it never produces a number of its own.
 
 It is also the reason the repository exists. It is a working example of the parts of a data
 platform that usually get skipped in a portfolio project: source contracts, quality gates,
@@ -43,8 +44,9 @@ Next.js dashboard renders the views. The home page is Race Ops: the next circuit
 interactive 3D model, with the verdict, the favourite, the contenders and the predicted order
 floating over it in glass panels. Race week in full, the paddock, circuits, the stewards and the
 track record are their own pages on the same scene: the model stays loaded, the camera moves to a
-view that suits each page, and the panels keep to a column beside the track. A Bedrock agent answers questions over the same
-views, the marts and a regulations and race-report corpus, with citations.
+view that suits each page, and the panels keep to a column beside the track. There is no chat
+box. An earlier version had one, and it went because a static dashboard that only renders
+validated views is easier to trust than one with a live model endpoint behind a text field.
 
 The circuit model is built by the pipeline, not drawn by hand and not fetched by the browser. The
 shape of the track is the fastest qualifying lap's car positions from OpenF1, resampled every five
@@ -112,6 +114,15 @@ the two cases it missed are written up in `results/evals/` rather than tuned awa
 failed on a single case each, always the same shape: the model subtracts one tool result from
 another and states the difference, which is a figure no tool returned. The check withholds that
 answer every time, which is the gate doing its job rather than a gate worth lowering.
+
+The agent's model sits behind a provider setting, and the same gate was run again in October
+with gpt-6-luna on Azure AI Foundry while Bedrock text generation was unavailable on this
+account. It passed at 95.1% numeric exact match, 100% retrieval, 93.0% tool selection and zero
+ungrounded figures, for about two cents a run. That run also showed the golden set had been
+written against one weekend's views: cases picked values by list position and named a circuit
+that had stopped being the published one. They now pick by rank or by key, and a value the live
+view holds as null, such as the grid before qualifying, is scored as a question the agent should
+decline.
 
 The forecast clears its own bar, though more narrowly on the newest races. The first holdout was
 the last sixty races run, from the 2024 Chinese Grand Prix to the sixteenth round of 2026. There
@@ -221,6 +232,7 @@ Glue Data Catalog        table metadata
 Athena                   SQL, byte-scan capped workgroup
 DynamoDB                 request ledger, run state
 Bedrock                  Knowledge Base on S3 Vectors, agent runtime, Guardrails
+Azure AI Foundry         gpt-6-luna for the batch jobs while Bedrock text is capped
 CloudFront + S3          static Next.js dashboard reading views/*.json
 CloudWatch + Budgets     logs, a latency dashboard, run alarms by email, the spend ceiling
 Cost Explorer            measured spend, read by pitadv cost-report
@@ -580,10 +592,14 @@ building heights are estimated wherever OpenStreetMap has none, trees are scatte
 density rather than mapped one by one, and the track is drawn from one car's lap, so it follows
 that driver's line rather than the edges of the road.
 
-The agent is built and has passed its gate, but in the account it runs in today it cannot
-answer: a new AWS account ships with Bedrock's text-generation quota at zero, and lifting it is a
-sales conversation rather than a quota request. Embeddings work, so the knowledge base is
-indexed and ready. Until the quota opens, the weekend brief is assembled deterministically from
-the views; an agent-written brief is the intended version. None of that timing data is
+Bedrock is not usable in the account this runs in today. A new AWS account ships with its
+text-generation quota at zero, lifting it is a sales conversation rather than a quota request,
+and the embedding quota has since gone to zero as well. The model calls therefore go to Azure AI
+Foundry through the provider setting, which puts a second cloud and an API key into a system
+that is otherwise AWS-only. With no embeddings the knowledge base cannot be searched, so
+`retrieve_docs` scores passages from the same documents in S3 by rare-word overlap; it found
+every passage the golden set asks for, but it is not semantic search and a paraphrase can miss.
+The weekend brief is still assembled deterministically from the views; an agent-written brief
+is the intended version. None of that timing data is
 redistributed here: the repository contains code, infrastructure, tests, and small result
 artifacts only.
