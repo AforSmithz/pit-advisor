@@ -68,39 +68,39 @@ cases:
     refuse: true
 
   - id: track-fit-mclaren
-    question: How well does McLaren's pace fit Yas Marina on the regression estimator?
+    question: How well does McLaren's pace fit this weekend's circuit on the regression estimator?
     kind: lookup
     expect_tools: [get_track_fit]
     numeric:
       tool: get_track_fit
-      arguments: {circuit_id: yas_marina, constructor_id: mclaren}
+      arguments: {constructor_id: mclaren}
       path: teams.0.regression.value
 
   - id: track-fit-ferrari-similarity
-    question: What does the similar-circuit estimator say about Ferrari at Yas Marina?
+    question: What does the similar-circuit estimator say about Ferrari at this weekend's circuit?
     kind: lookup
     expect_tools: [get_track_fit]
     numeric:
       tool: get_track_fit
-      arguments: {circuit_id: yas_marina, constructor_id: ferrari}
+      arguments: {constructor_id: ferrari}
       path: teams.0.similarity.value
 
   - id: track-neighbours
-    question: Which circuit does Yas Marina most resemble apart from itself, and how similar is it?
+    question: Which circuit does this weekend's track most resemble apart from itself, and how similar is it?
     kind: lookup
     expect_tools: [get_track_fit]
     numeric:
       tool: get_track_fit
-      arguments: {circuit_id: yas_marina}
-      path: neighbours.1.similarity
+      arguments: {}
+      path: neighbours.by:similarity.1.similarity
 
   - id: track-fit-disagreement
-    question: Do the two track fit estimators disagree for Mercedes at Yas Marina?
+    question: Do the two track fit estimators disagree for Mercedes at this weekend's circuit?
     kind: lookup
     expect_tools: [get_track_fit]
 
   - id: track-wrong-circuit
-    question: How does Red Bull's pace fit Interlagos?
+    question: How does Red Bull's pace fit Istanbul Park?
     kind: lookup
     expect_tools: [get_track_fit]
     refuse: true
@@ -126,19 +126,19 @@ cases:
     question: Who does the simulation make favourite for the upcoming race, and with what win probability?
     kind: forecast
     expect_tools: [get_forecast]
-    numeric: {tool: get_forecast, arguments: {market: win}, path: drivers.0.win}
+    numeric: {tool: get_forecast, arguments: {market: win}, path: drivers.by:win.0.win}
 
   - id: forecast-second-podium
     question: What podium probability does the simulation give the second favourite?
     kind: forecast
     expect_tools: [get_forecast]
-    numeric: {tool: get_forecast, arguments: {market: podium}, path: drivers.1.podium}
+    numeric: {tool: get_forecast, arguments: {market: podium}, path: drivers.by:podium.1.podium}
 
   - id: forecast-points-favourite
     question: What points probability does the simulation give the driver it makes favourite?
     kind: forecast
     expect_tools: [get_forecast]
-    numeric: {tool: get_forecast, arguments: {market: points}, path: drivers.0.points}
+    numeric: {tool: get_forecast, arguments: {market: points}, path: drivers.by:points.0.points}
 
   - id: forecast-paths
     question: How many simulated races is the published forecast built from?
@@ -156,19 +156,19 @@ cases:
     question: What grid slot does the simulation's favourite start from?
     kind: forecast
     expect_tools: [get_forecast]
-    numeric: {tool: get_forecast, arguments: {market: win}, path: drivers.0.grid}
+    numeric: {tool: get_forecast, arguments: {market: win}, path: drivers.by:win.0.grid}
 
   - id: calibration-log-loss
     question: What multiclass log loss did the simulation score on the holdout?
     kind: forecast
     expect_tools: [get_calibration]
-    numeric: {tool: get_calibration, arguments: {}, path: scored.0.log_loss.value}
+    numeric: {tool: get_calibration, arguments: {}, path: scored.name=simulation.log_loss.value}
 
   - id: calibration-grid-baseline
     question: What log loss did the grid-position baseline score on the same holdout?
     kind: forecast
     expect_tools: [get_calibration]
-    numeric: {tool: get_calibration, arguments: {}, path: scored.1.log_loss.value}
+    numeric: {tool: get_calibration, arguments: {}, path: scored.name=grid.log_loss.value}
 
   - id: calibration-holdout-size
     question: How many races is the backtest holdout?

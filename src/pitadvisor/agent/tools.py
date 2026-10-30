@@ -164,7 +164,10 @@ class PaceProfile(BaseModel, frozen=True):
 
 
 class TrackFit(BaseModel, frozen=True):
-    circuit_id: str = Field(description="Circuit id as the lake spells it, for example monza.")
+    circuit_id: str = Field(
+        default="next",
+        description="Circuit id as the lake spells it, for example monza, or 'next'.",
+    )
     constructor_id: str | None = Field(default=None, description="One team only, optional.")
 
 
@@ -291,7 +294,7 @@ class Toolbox:
 
     def get_track_fit(self, request: TrackFit) -> ToolResult:
         view = self._view("track_view", TrackView)
-        if view.profile.circuit_id != request.circuit_id:
+        if request.circuit_id not in ("next", view.profile.circuit_id):
             raise ToolError(
                 f"the published track view covers {view.profile.circuit_id}, not "
                 f"{request.circuit_id}"
@@ -302,7 +305,7 @@ class Toolbox:
             if request.constructor_id is None or team.constructor_id == request.constructor_id
         ]
         if not teams:
-            raise ToolError(f"no team {request.constructor_id} at {request.circuit_id}")
+            raise ToolError(f"no team {request.constructor_id} at {view.profile.circuit_id}")
         return self._result(
             "get_track_fit",
             {

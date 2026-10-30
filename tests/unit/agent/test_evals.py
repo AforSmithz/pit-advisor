@@ -99,6 +99,53 @@ def test_a_ground_truth_that_cannot_be_resolved_is_a_suite_error(box):
         )
 
 
+def held_forecast(monkeypatch, payload):
+    held = tools.ToolResult(tool="get_forecast", ok=True, payload=payload)
+    monkeypatch.setattr(evals.tools, "invoke", lambda *_: held)
+
+
+def test_a_null_in_the_live_view_wants_an_answer_that_says_so(box, monkeypatch):
+    held_forecast(monkeypatch, {"drivers": [{"grid": None}]})
+    case = Case(id="c", question="q", numeric=Truth(tool="get_forecast", path="drivers.0.grid"))
+    assert not evals.score(case, answer("He starts from pole, slot 1."), box).numeric_ok
+    scored = evals.score(case, answer("The grid is not available yet."), box)
+    assert scored.numeric_ok
+    assert scored.expected == "nothing published"
+
+
+def test_a_case_picks_by_rank_not_by_position(box, monkeypatch):
+    held_forecast(
+        monkeypatch,
+        {"drivers": [{"code": "AAA", "win": 0.11}, {"code": "BBB", "win": 0.13}, {"win": None}]},
+    )
+    assert evals.expected_value(box, Truth(tool="get_forecast", path="drivers.by:win.0.code")) == (
+        "BBB"
+    )
+    assert evals.expected_value(box, Truth(tool="get_forecast", path="drivers.by:win.1.win")) == (
+        0.11
+    )
+
+
+def test_a_case_picks_a_row_by_key(box, monkeypatch):
+    held_forecast(
+        monkeypatch, {"scored": [{"name": "simulation", "v": 1}, {"name": "grid", "v": 2}]}
+    )
+    assert evals.expected_value(box, Truth(tool="get_forecast", path="scored.name=grid.v")) == 2
+
+
+def test_a_path_that_leads_nowhere_is_a_suite_error(box, monkeypatch):
+    held_forecast(monkeypatch, {"scored": [{"name": "simulation"}]})
+    with pytest.raises(SuiteError, match="nothing at"):
+        evals.expected_value(box, Truth(tool="get_forecast", path="scored.name=grid.v"))
+
+
+def test_thousands_grouped_with_a_narrow_space_still_match(box):
+    case = Case(id="c", question="q", numeric=Truth(tool="get_calibration", path="holdout"))
+    assert evals._quoted("built from 4\u202f000 paths", 4000)
+    assert not evals._quoted("lap 4 000", 4000)
+    assert evals.score(case, answer("The holdout is 3 races."), box).numeric_ok
+
+
 def test_a_numeric_answer_matches_however_the_model_rendered_it(box):
     case = Case(id="c", question="q", numeric=Truth(tool="get_calibration", path="holdout"))
     assert evals.score(case, answer("The holdout is 3 races."), box).numeric_ok

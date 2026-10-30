@@ -3,13 +3,13 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, cast
 
 import yaml
 from pydantic import BaseModel, Field
 
 from pitadvisor.agent import tools
-from pitadvisor.agent.runtime import DASHES, Agent, Answer
+from pitadvisor.agent.runtime import DASHES, GROUPED, Agent, Answer
 from pitadvisor.agent.tools import Toolbox
 
 REPORT: Final = "evals.json"
@@ -128,7 +128,7 @@ def _loosens(name: str, value: float) -> bool:
     return value < GATE[name] if name != "ungrounded_figures" else value > GATE[name]
 
 
-def expected_value(box: Toolbox, truth: Truth) -> float | str:
+def expected_value(box: Toolbox, truth: Truth) -> float | str | None:
     if truth.sql is not None:
         result = tools.invoke(box, "query_marts", {"sql": truth.sql})
         if not result.ok:
@@ -142,13 +142,28 @@ def expected_value(box: Toolbox, truth: Truth) -> float | str:
     result = tools.invoke(box, truth.tool, truth.arguments)
     if not result.ok:
         raise SuiteError(f"the ground-truth tool failed: {result.detail}")
-    return _at(result.payload, truth.path)
+    return cast(float | str | None, _at(result.payload, truth.path))
 
 
 def _at(payload: Any, path: str) -> Any:
-    node = payload
+    # the views do not promise an order, so a case picks by rank ("by:win") or by key
+    # ("name=grid") rather than by position
+    node: Any = payload
     for part in path.split("."):
-        node = node[int(part)] if part.isdigit() else node[part]
+        try:
+            if part.startswith("by:"):
+                field = part[3:]
+                items = cast(list[dict[str, Any]], node)
+                ranked = [item for item in items if item.get(field) is not None]
+                node = sorted(ranked, key=lambda item: item[field], reverse=True)
+            elif "=" in part:
+                field, wanted = part.split("=", 1)
+                items = cast(list[dict[str, Any]], node)
+                node = next(item for item in items if str(item.get(field)) == wanted)
+            else:
+                node = node[int(part)] if part.isdigit() else node[part]
+        except (KeyError, IndexError, StopIteration, TypeError, AttributeError) as exc:
+            raise SuiteError(f"the ground truth has nothing at {path}") from exc
     return node
 
 
@@ -156,7 +171,7 @@ def _quoted(answer: str, value: float | str) -> bool:
     if isinstance(value, str):
         return value.lower() in answer.lower()
     # markdown emphasis sits between the sign and the digits often enough to matter
-    plain = answer.translate(DASHES).replace("*", "").replace("_", "")
+    plain = GROUPED.sub("", answer.translate(DASHES)).replace("*", "").replace("_", "")
     found = {
         match.replace(",", "").lstrip("+")
         for match in re.findall(r"[-+]?\d[\d,]*(?:\.\d+)?", plain)
@@ -173,8 +188,14 @@ def score(case: Case, answer: Answer, box: Toolbox) -> CaseScore:
     if case.numeric is not None:
         try:
             value = expected_value(box, case.numeric)
-            expected = str(value)
-            numeric_ok = _quoted(answer.text, value)
+            if value is None:
+                # a null in a live view is the system saying it does not know yet, the grid
+                # before qualifying. the right answer says that rather than finding a number
+                expected = "nothing published"
+                numeric_ok = _declined(answer)
+            else:
+                expected = str(value)
+                numeric_ok = _quoted(answer.text, value)
         except SuiteError as exc:
             numeric_ok = False
             detail = str(exc)

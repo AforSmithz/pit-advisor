@@ -94,6 +94,15 @@ def test_track_fit_carries_both_estimators_and_whether_they_disagree(box, views)
     assert {"regression", "similarity", "estimators_disagree"} <= set(result.payload["teams"][0])
 
 
+def test_track_fit_without_a_circuit_means_this_weekends(box, views):
+    circuit = tools.TrackView.model_validate_json(
+        views.get("views/track_view.json").decode()
+    ).profile.circuit_id
+    result = invoke(box, "get_track_fit", {})
+    assert result.ok
+    assert result.payload["circuit_id"] == circuit
+
+
 def test_the_wrong_circuit_is_refused(box):
     result = invoke(box, "get_track_fit", {"circuit_id": "interlagos"})
     assert not result.ok
