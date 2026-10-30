@@ -197,8 +197,15 @@ def test_text_that_only_looks_numeric_is_not_an_invented_figure(box, text):
 def test_a_minus_the_model_typed_as_a_dash_is_still_a_minus():
     call = ToolCall(name="get_driver_form", arguments={}, ok=True)
     result = tools.ToolResult(tool="get_driver_form", ok=True, payload={"trend": -0.008})
-    minus = "\u2212"
-    assert ungrounded(f"the trend is {minus}0.008", "how is he", [call], [result]) == []
+    for minus in ("\u2212", "\u2011"):
+        assert ungrounded(f"the trend is {minus}0.008", "how is he", [call], [result]) == []
+
+
+def test_thousands_grouped_with_a_narrow_space_are_one_figure():
+    call = ToolCall(name="get_forecast", arguments={}, ok=True)
+    result = tools.ToolResult(tool="get_forecast", ok=True, payload={"paths": 4000})
+    assert ungrounded("built from 4\u202f000 paths", "how many", [call], [result]) == []
+    assert ungrounded("built from 4 000 paths", "how many", [call], [result]) != []
 
 
 def test_a_figure_quoted_without_its_sign_is_not_an_invention():

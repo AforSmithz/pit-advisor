@@ -6,6 +6,7 @@ from botocore.config import Config
 from pydantic import BaseModel
 
 from pitadvisor.agent import prompts, tools
+from pitadvisor.agent.chat import ChatCompletions
 from pitadvisor.agent.tools import Toolbox, ToolResult
 from pitadvisor.config import Settings, boto_session
 
@@ -14,8 +15,12 @@ MAX_ITERATIONS: Final = 6
 MAX_TOKENS: Final = 1024
 FIGURE = re.compile(r"[-+]?\d[\d,]*(?:\.\d+)?")
 # the model writes a minus as U+2212 about half the time, which is not the character the
-# regex above is looking for, and a figure whose sign went missing looks invented
-DASHES = str.maketrans({"\u2212": "-", "\u2013": "-", "\u2014": "-"})
+# regex above is looking for, and a figure whose sign went missing looks invented. gpt-oss
+# uses the non-breaking hyphen U+2011 instead
+DASHES = str.maketrans({"\u2212": "-", "\u2013": "-", "\u2014": "-", "\u2010": "-", "\u2011": "-"})
+# gpt-oss groups thousands with a narrow no-break space, "4 000", which otherwise reads as two
+# figures. ordinary spaces are left alone, "lap 5 100 ms" is not five thousand one hundred
+GROUPED = re.compile(r"(?<=\d)[\u00a0\u2009\u202f](?=\d{3}(?!\d))")
 # a year or a round number in the question is the asker's, not a figure the model invented
 SAFE = re.compile(r"\b(19|20)\d{2}s?\b")
 MONTHS = "January|February|March|April|May|June|July|August|September|October|November|December"
@@ -202,7 +207,8 @@ def ungrounded(
     text: str, question: str, calls: list[ToolCall], results: list[ToolResult]
 ) -> list[str]:
     allowed = grounding_set(question, calls, results)
-    scanned = tools.RANGE.sub(" ", NOT_A_FIGURE.sub(" ", text.translate(DASHES)))
+    plain = GROUPED.sub("", text.translate(DASHES))
+    scanned = tools.RANGE.sub(" ", NOT_A_FIGURE.sub(" ", plain))
     years = {match.group(0).rstrip("s") for match in SAFE.finditer(scanned)}
     loose: list[str] = []
     for raw in FIGURE.findall(scanned):
@@ -221,20 +227,42 @@ def _normalised(raw: str) -> str:
     return cleaned
 
 
-def agent_for(settings: Settings, box: Toolbox, strict: bool = True) -> Agent:
+def model_client(settings: Settings) -> tuple[Any, str]:
+    if settings.model_provider == "openai":
+        missing = [
+            name
+            for name in ("openai_base_url", "openai_api_key", "openai_model")
+            if not getattr(settings, name)
+        ]
+        if missing:
+            raise ValueError(f"model_provider is openai but {', '.join(missing)} is not set")
+        client = ChatCompletions(
+            settings.openai_base_url,
+            settings.openai_api_key,
+            settings.openai_reasoning_effort,
+        )
+        return client, settings.openai_model
+    if settings.model_provider != "bedrock":
+        raise ValueError(f"unknown model_provider {settings.model_provider}")
     session = cast(Any, boto_session(settings))
+    client = session.client(
+        "bedrock-runtime",
+        region_name=settings.aws_region,
+        # adaptive, because a run of the golden set is a burst against a per-minute quota
+        # and the default standard mode gives up after four tries
+        config=Config(retries={"max_attempts": 8, "mode": "adaptive"}),
+    )
+    return client, settings.bedrock_model
+
+
+def agent_for(settings: Settings, box: Toolbox, strict: bool = True) -> Agent:
+    client, model_id = model_client(settings)
+    # the guardrail is a bedrock feature, other providers get their own content filter
+    guarded = settings.model_provider == "bedrock" and settings.guardrail_id
     return Agent(
-        client=session.client(
-            "bedrock-runtime",
-            region_name=settings.aws_region,
-            # adaptive, because a run of the golden set is a burst against a per-minute quota
-            # and the default standard mode gives up after four tries
-            config=Config(retries={"max_attempts": 8, "mode": "adaptive"}),
-        ),
+        client=client,
         toolbox=box,
-        model_id=settings.bedrock_model,
-        guardrail=(
-            (settings.guardrail_id, settings.guardrail_version) if settings.guardrail_id else None
-        ),
+        model_id=model_id,
+        guardrail=(settings.guardrail_id, settings.guardrail_version) if guarded else None,
         strict=strict,
     )
