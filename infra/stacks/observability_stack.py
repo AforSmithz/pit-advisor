@@ -248,7 +248,6 @@ class ObservabilityStack(Stack):
             "light": f"pitadvisor-light-{env_name}",
         }
         functions = {
-            "ask": f"pitadvisor-ask-{env_name}",
             "race sim": f"pitadvisor-race-sim-{env_name}",
             "watch": f"pitadvisor-watch-{env_name}",
         }

@@ -881,7 +881,8 @@ def test_the_views_grant_is_read_only(data_template: Template) -> None:
 def agent_role_policies(template: Template) -> list[Resource]:
     return [
         statement
-        for policy in template.find_resources("AWS::IAM::Policy").values()
+        for kind in ("AWS::IAM::Policy", "AWS::IAM::ManagedPolicy")
+        for policy in template.find_resources(kind).values()
         for statement in policy["Properties"]["PolicyDocument"]["Statement"]
     ]
 
@@ -971,9 +972,9 @@ def test_the_denied_topic_does_not_swallow_the_forecast(agent_template: Template
     assert topic["OutputEnabled"] is True
 
 
-def test_both_functions_run_on_arm_with_an_explicit_timeout(agent_template: Template) -> None:
+def test_the_sim_function_runs_on_arm_with_an_explicit_timeout(agent_template: Template) -> None:
     functions = agent_template.find_resources("AWS::Lambda::Function")
-    assert len(functions) == 2
+    assert len(functions) == 1
     for function in functions.values():
         assert function["Properties"]["Architectures"] == ["arm64"]
         assert function["Properties"]["Timeout"] > 0
@@ -985,11 +986,6 @@ def test_every_agent_log_group_expires(agent_template: Template) -> None:
     assert groups
     for group in groups.values():
         assert group["Properties"]["RetentionInDays"] == 14
-
-
-def test_the_ask_url_is_not_open_to_the_internet(agent_template: Template) -> None:
-    url = sole(agent_template, "AWS::Lambda::Url")["Properties"]
-    assert url["AuthType"] == "AWS_IAM"
 
 
 def test_the_model_grant_carries_no_wildcard(agent_template: Template) -> None:
@@ -1044,71 +1040,33 @@ def test_the_agent_reads_the_lake_through_the_policy_the_data_stack_wrote(
     assert f"pitadvisor-agent-lake-{ENV_NAME}" in attached
 
 
-def test_the_ask_function_knows_which_knowledge_base_and_guardrail_to_use(
-    agent_template: Template,
-) -> None:
+def test_the_sim_function_names_no_profile(agent_template: Template) -> None:
     _, function = only(
-        agent_template, "AWS::Lambda::Function", FunctionName=f"pitadvisor-ask-{ENV_NAME}"
+        agent_template, "AWS::Lambda::Function", FunctionName=f"pitadvisor-race-sim-{ENV_NAME}"
     )
     environment = function["Properties"]["Environment"]["Variables"]
-    assert "PITADV_KNOWLEDGE_BASE_ID" in environment
-    assert "PITADV_GUARDRAIL_ID" in environment
     # no ~/.aws in the image, so a named profile is a ProfileNotFound at the first call
     assert environment["PITADV_AWS_PROFILE"] == ""
 
 
 def test_the_agent_stack_is_tagged_as_its_own_component(agent_template: Template) -> None:
     _, function = only(
-        agent_template, "AWS::Lambda::Function", FunctionName=f"pitadvisor-ask-{ENV_NAME}"
+        agent_template, "AWS::Lambda::Function", FunctionName=f"pitadvisor-race-sim-{ENV_NAME}"
     )
     tags = {tag["Key"]: tag["Value"] for tag in function["Properties"].get("Tags", [])}
     assert tags.get("component") == "agent"
 
 
-def test_the_ask_function_carries_its_daily_cap(agent_template: Template) -> None:
-    functions = agent_template.find_resources("AWS::Lambda::Function")
-    ask = next(
-        body
-        for body in functions.values()
-        if str(body["Properties"].get("FunctionName", "")).startswith("pitadvisor-ask")
-    )
-    assert ask["Properties"]["Environment"]["Variables"]["PITADV_ASK_DAILY_LIMIT"] == "20"
-    # the account denies lambda:PutFunctionConcurrency at the organisation level, so the daily
-    # counter is the only cap and nothing here should claim a second one
-    assert "ReservedConcurrentExecutions" not in ask["Properties"]
+def test_nothing_in_the_agent_stack_answers_the_public(agent_template: Template) -> None:
+    # ask left the dashboard, the model only runs in the background now
+    assert not agent_template.find_resources("AWS::Lambda::Url")
+    assert "pitadvisor-ask" not in json.dumps(agent_template.to_json())
 
 
-def test_the_ask_function_url_is_never_public(agent_template: Template) -> None:
-    urls = agent_template.find_resources("AWS::Lambda::Url")
-    assert len(urls) == 1
-    assert next(iter(urls.values()))["Properties"]["AuthType"] == "AWS_IAM"
-
-
-def test_the_dashboard_signs_its_way_to_the_agent() -> None:
-    app = cdk.App(context={"env": ENV_NAME})
-    aws_env = cdk.Environment(account=ACCOUNT, region=REGION)
-    agent = AgentStack(app, AGENT_STACK, env_name=ENV_NAME, env=aws_env)
-    web = WebStack(app, WEB_STACK, env_name=ENV_NAME, ask_url=agent.url, env=aws_env)
-    template = Template.from_stack(web)
-    distribution = sole(template, "AWS::CloudFront::Distribution")
-    behaviors = distribution["Properties"]["DistributionConfig"]["CacheBehaviors"]
-    ask = next(b for b in behaviors if b["PathPattern"] == "/api/ask")
-    # an answer is never the same twice, and a cached one would also hide the daily counter
-    assert ask["CachePolicyId"] == "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-    assert "OriginAccessControlId" in str(distribution["Properties"]["DistributionConfig"])
-    permissions = template.find_resources("AWS::Lambda::Permission").values()
-    granted = {
-        body["Properties"]["Action"]
-        for body in permissions
-        if body["Properties"]["Principal"] == "cloudfront.amazonaws.com"
-    }
-    # the url grant alone is refused with a 403 once the request is signed
-    assert granted == {"lambda:InvokeFunctionUrl", "lambda:InvokeFunction"}
-
-
-def test_the_dashboard_has_no_agent_route_when_it_is_not_given_one(web_template: Template) -> None:
+def test_the_dashboard_has_no_agent_route(web_template: Template) -> None:
     distribution = sole(web_template, "AWS::CloudFront::Distribution")
     assert "CacheBehaviors" not in distribution["Properties"]["DistributionConfig"]
+    assert not web_template.find_resources("AWS::Lambda::Permission")
 
 
 def dashboard_body(template: Template) -> str:
@@ -1121,7 +1079,6 @@ def test_the_dashboard_watches_every_moving_part(observability_template: Templat
     for name in (
         f"pitadvisor-weekend-{ENV_NAME}",
         f"pitadvisor-backfill-{ENV_NAME}",
-        f"pitadvisor-ask-{ENV_NAME}",
         f"pitadvisor-race-sim-{ENV_NAME}",
         "global.anthropic.claude-haiku-4-5-20251001-v1:0",
         "cohere.embed-english-v3",

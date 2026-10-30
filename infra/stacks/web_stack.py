@@ -19,9 +19,6 @@ from aws_cdk import (
     aws_iam as iam,
 )
 from aws_cdk import (
-    aws_lambda as lambda_,
-)
-from aws_cdk import (
     aws_s3 as s3,
 )
 from constructs import Construct
@@ -90,7 +87,6 @@ class WebStack(Stack):
         construct_id: str,
         *,
         env_name: str,
-        ask_url: lambda_.IFunctionUrl | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -169,25 +165,6 @@ class WebStack(Stack):
                     )
                 ],
             ),
-            # the ask function keeps its IAM auth and cloudfront signs each request with an
-            # origin access control, so the browser never holds a credential and the function
-            # url stays unusable on its own. nothing is cached: every question is a new answer
-            additional_behaviors=(
-                {
-                    "/api/ask": cloudfront.BehaviorOptions(
-                        origin=origins.FunctionUrlOrigin.with_origin_access_control(ask_url),
-                        viewer_protocol_policy=(cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS),
-                        allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
-                        cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
-                        origin_request_policy=(
-                            cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER
-                        ),
-                        response_headers_policy=headers,
-                    )
-                }
-                if ask_url is not None
-                else {}
-            ),
             error_responses=[
                 cloudfront.ErrorResponse(
                     http_status=403,
@@ -203,19 +180,6 @@ class WebStack(Stack):
                 ),
             ],
         )
-
-        if ask_url is not None:
-            # FunctionUrlOrigin grants cloudfront lambda:InvokeFunctionUrl only. a signed request
-            # through an origin access control also needs lambda:InvokeFunction, and without it
-            # lambda answers 403, which the error mapping below then serves as the 404 page
-            lambda_.CfnPermission(
-                self,
-                "AskInvokeFromCloudFront",
-                action="lambda:InvokeFunction",
-                function_name=ask_url.function_arn,
-                principal="cloudfront.amazonaws.com",
-                source_arn=self.distribution.distribution_arn,
-            )
 
         Validations.of(self.bucket).acknowledge(
             Acknowledgment(id="AwsSolutions-S1", reason=NO_ACCESS_LOGS)
