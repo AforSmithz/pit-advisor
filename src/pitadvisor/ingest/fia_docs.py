@@ -32,7 +32,8 @@ WANTED_KINDS: Final = frozenset(
     }
 )
 
-# fia.com and jolpica disagree about three race names, and 2023 shouts one of them
+# fia.com and jolpica disagree about three race names, and 2023 shouts one of them. jolpica
+# went back to brazilian for 2026, so both sides of a lookup go through this
 EVENT_ALIASES: Final = {
     "brazilian grand prix": "sao paulo grand prix",
     "mexican grand prix": "mexico city grand prix",
@@ -86,7 +87,7 @@ def canonical(event: str) -> str:
 
 
 def round_of(event: str, rounds: dict[str, int]) -> int | None:
-    return {fold(name): number for name, number in rounds.items()}.get(canonical(event))
+    return {canonical(name): number for name, number in rounds.items()}.get(canonical(event))
 
 
 def _clean(label: str) -> str:

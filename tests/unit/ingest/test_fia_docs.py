@@ -84,6 +84,11 @@ def test_an_fia_event_name_resolves_to_a_jolpica_round(event, expected):
     assert fia_docs.round_of(event, ROUNDS[2023]) == expected
 
 
+@pytest.mark.parametrize("event", ["São Paulo Grand Prix", "Brazilian Grand Prix"])
+def test_a_calendar_that_says_brazilian_still_finds_the_event(event):
+    assert fia_docs.round_of(event, {"Brazilian Grand Prix": 20}) == 20
+
+
 def test_a_reissued_decision_does_not_overwrite_the_original():
     page = link("/a/x.pdf", "Decision - Car 4 - Impeding Published on 08.10.23 20:00 CET") + link(
         "/a/y.pdf", "Decision - Car 4 - Impeding (corrected) Published on 08.10.23 21:30 CET"
