@@ -245,12 +245,20 @@ def check_references(connection: duckdb.DuckDBPyConnection, present: set[str]) -
         if child not in present or parent not in present:
             continue
         on = " and ".join(f"p.{column} = c.{column}" for column in (*scope, "driver_id"))
+        # the result lands on sunday, so a driver's first weekend of the season has nothing to
+        # resolve against until then
+        raced = (
+            ""
+            if "round" in scope
+            else f"and exists (select 1 from {parent} r"
+            " where r.season = c.season and r.round = c.round)"
+        )
         missing = int(
             _scalar(
                 connection,
                 f"""
                 select count(*) from {child} c
-                where not exists (select 1 from {parent} p where {on})
+                where not exists (select 1 from {parent} p where {on}) {raced}
                 """,
             )
             or 0

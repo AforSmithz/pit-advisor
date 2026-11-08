@@ -125,6 +125,14 @@ def test_a_qualifying_driver_who_raced_nowhere_that_season_still_fails(store):
     assert outcome_for(found, "referential", "qualifying").status is Status.FAIL
 
 
+def test_a_debut_passes_until_the_race_has_a_result(store):
+    write_bronze(store, "results", KEY, [result("norris")])
+    next_round = EventKey(season=2024, round=6)
+    write_bronze(store, "qualifying", next_round, [qualified("a_debutant", round=6)])
+    found = report(store, Layer.BRONZE, now=NOW)
+    assert outcome_for(found, "referential", "qualifying").status is Status.OK
+
+
 def test_a_withdrawal_is_counted_as_a_diagnostic(store):
     write_bronze(store, "results", KEY, [result("norris")])
     write_bronze(store, "results", EventKey(season=2024, round=6), [result("stroll", round=6)])
