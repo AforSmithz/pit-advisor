@@ -680,6 +680,16 @@ def test_lineage_parses_the_project_in_its_own_task(transform_template: Template
     assert weekend.index("dbt build --project-dir transform") < check
 
 
+def test_the_snapshot_refetches_blank_qualifying_before_it_forecasts(
+    transform_template: Template,
+) -> None:
+    light = machine_definition(transform_template, f"pitadvisor-light-{ENV_NAME}")
+    refetch = light.index("pitadv qualifying-times --season $SEASON --round $ROUND")
+    assert refetch < light.index("--views weekend,forecast,sprint,history,brief")
+    # jolpica being down leaves the snapshot running on what it holds
+    assert "|| echo" in light[refetch : refetch + 140]
+
+
 def test_the_light_steps_leave_a_stale_brief_alone(transform_template: Template) -> None:
     light = machine_definition(transform_template, f"pitadvisor-light-{ENV_NAME}")
     assert light.count("--keep-stale-brief") == 2

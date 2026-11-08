@@ -106,6 +106,11 @@ EXTRACT_STEWARDS = (
 REBUILD_STEWARDS = f"{EXTRACT_STEWARDS} && pitadv rebuild --source fia_docs --season $SEASON"
 # the weekend watch, every 15 minutes, starts a run once a session's data is upstream
 WATCH_RATE_MINUTES = 15
+# the saturday run can land the order before jolpica has the times, and the pace anchor needs them
+REFETCH_QUALIFYING = (
+    "{ pitadv qualifying-times --season $SEASON --round $ROUND"
+    " || echo 'qualifying times not refreshed, the forecast uses what is held' >&2; }"
+)
 LIGHT_STEPS = {
     # a new stewards' document can move the grid, so the forecast is emitted again behind it
     "stewards": (
@@ -118,7 +123,7 @@ LIGHT_STEPS = {
     # between weekends the forecast has moved to the next race and the weekend view has not,
     # and the brief cannot be built from the two. it stays as it was rather than failing the run
     "snapshot": (
-        "pitadv ingest --source open_meteo --season $SEASON --round $ROUND"
+        f"{REFETCH_QUALIFYING} && pitadv ingest --source open_meteo --season $SEASON --round $ROUND"
         " && pitadv emit-views --views weekend,forecast,sprint,history,brief --keep-stale-brief"
     ),
 }
