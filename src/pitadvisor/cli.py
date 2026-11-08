@@ -1386,6 +1386,25 @@ def _variant(pairs: list[str]) -> forecast_model.Variant:
         raise typer.BadParameter(str(exc)) from exc
 
 
+@app.command(
+    "qualifying-times", help="Fetch a round's qualifying again if what is held has no lap times."
+)
+def qualifying_times(
+    season: Annotated[int, typer.Option(help="Championship year.")],
+    round_: Annotated[int, typer.Option("--round", help="The round to check.")],
+    local: Annotated[bool, typer.Option("--local", help="Local filesystem, no AWS.")] = False,
+) -> None:
+    store, ledger, bucket_for = _runtime(local, get_settings())
+    key = EventKey(season=season, round=round_)
+    if not jolpica.untimed(store, key):
+        typer.echo(f"{season}:{round_} needs no refetch")
+        return
+    client = jolpica.JolpicaClient(
+        RawStore(store), ledger, RateLimiter(bucket_for("jolpica")), _run_id()
+    )
+    _render_outcomes(jolpica.ingest_event(client, store, key, ("qualifying",), skip_present=False))
+
+
 @app.command(help="Pair a candidate variant against the model as it ships, on the same draws.")
 def compare(
     label: Annotated[str, typer.Option(help="Names the report, compare-<label>.json.")],

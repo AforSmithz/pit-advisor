@@ -19,6 +19,7 @@ from pitadvisor.ingest.jolpica import (
     parse_sprint,
     plan,
     sprint_rounds,
+    untimed,
 )
 from pitadvisor.ingest.raw_store import RawStore
 from pitadvisor.types import EventKey, Source
@@ -145,6 +146,31 @@ def test_a_304_with_nothing_in_raw_refetches(store, raw, ledger, fetch_factory):
 def test_a_second_304_on_the_refetch_is_an_error(store, raw, ledger, fetch_factory):
     with pytest.raises(RawMissingError):
         ingest_event(client(raw, ledger, fetch_factory(status=304)), store, KEY, ["results"])
+
+
+def blank_times(payload):
+    body = json.loads(json.dumps(payload("jolpica/qualifying.json")))
+    for race in body["MRData"]["RaceTable"]["Races"]:
+        for row in race["QualifyingResults"]:
+            for segment in ("Q1", "Q2", "Q3"):
+                if segment in row:
+                    row[segment] = ""
+    return body
+
+
+def test_an_order_with_no_times_counts_as_untimed(store, raw, ledger, payload, fetch_factory):
+    fetch = fetch_factory(bodies={"/qualifying.json": blank_times(payload)})
+    ingest_event(client(raw, ledger, fetch), store, KEY, ["qualifying"])
+    assert untimed(store, KEY)
+
+
+def test_a_timed_session_is_not_untimed(store, raw, ledger, fetch):
+    ingest_event(client(raw, ledger, fetch), store, KEY, ["qualifying"])
+    assert not untimed(store, KEY)
+
+
+def test_a_round_with_no_qualifying_yet_is_not_untimed(store):
+    assert not untimed(store, KEY)
 
 
 def test_skip_present_costs_no_request(store, raw, ledger, fetch):

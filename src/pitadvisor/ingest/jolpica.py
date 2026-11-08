@@ -339,6 +339,20 @@ def ingest_event(
     return outcomes
 
 
+def untimed(store: ObjectStore, key: EventKey) -> bool:
+    # jolpica can publish the order hours before it publishes the times
+    held = read_table(store, Layer.BRONZE, "qualifying")
+    if held is None:
+        return False
+    event = held.filter((pl.col("season") == key.season) & (pl.col("round") == key.round))
+    return (
+        event.height > 0
+        and not event.select(
+            pl.any_horizontal(pl.col("q1_millis", "q2_millis", "q3_millis").is_not_null()).any()
+        ).item()
+    )
+
+
 def has_sprint(store: ObjectStore, key: EventKey) -> bool:
     schedule = read_table(store, Layer.BRONZE, "races")
     # 2021's schedule dates the sprint but gives it no start time, so the date is what counts

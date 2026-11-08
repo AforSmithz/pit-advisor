@@ -945,6 +945,24 @@ def test_emit_views_knows_the_brief(lake):
     assert "emit weekend_view, forecast_view, track_view before the brief" in plain(result.stderr)
 
 
+def test_qualifying_times_spends_nothing_when_there_is_nothing_to_fix(lake, offline):
+    result = CliRunner().invoke(
+        cli.app, ["qualifying-times", "--season", "2024", "--round", "5", "--local"]
+    )
+    assert result.exit_code == 0
+    assert "needs no refetch" in result.stdout
+    assert not offline.calls
+
+
+def test_qualifying_times_refetches_a_round_with_blank_times(lake, offline, monkeypatch):
+    monkeypatch.setattr(cli.jolpica, "untimed", lambda *_: True)
+    result = CliRunner().invoke(
+        cli.app, ["qualifying-times", "--season", "2024", "--round", "5", "--local"]
+    )
+    assert result.exit_code == 0, result.stdout
+    assert any("/qualifying.json" in url for url in offline.calls)
+
+
 def test_a_stale_brief_can_be_left_alone(lake):
     result = CliRunner().invoke(
         cli.app, ["emit-views", "--views", "brief", "--keep-stale-brief", "--local"]
