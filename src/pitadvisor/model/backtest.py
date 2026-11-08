@@ -82,6 +82,11 @@ STAGES = ("race", "pre_quali")
 SPRINT_BEFORE_QUALI_FROM = 2024
 
 
+# places lost between qualifying and the grid before it counts as a penalty, not a reshuffle
+# from someone else's. three, because one dropped car only moves the cars behind it up by one
+PENALTY_DROP = 3
+
+
 class NoForecastError(RuntimeError):
     def __init__(self, detail: str) -> None:
         super().__init__(detail)
@@ -99,6 +104,8 @@ class Variant(BaseModel, frozen=True):
     upgrade_signal: bool = True
     # before main qualifying on a sprint weekend, sprint qualifying anchors race pace
     sprint_quali_anchor: bool = True
+    # the grid baseline reads a car dropped by a penalty where its pace ranks it
+    penalty_pace_slot: bool = True
 
 
 TYPES: dict[str, type[pl.DataType]] = {
@@ -764,6 +771,8 @@ class Forecast(BaseModel, frozen=True):
     # true before qualifying, when every path sampled its own grid
     grid_sampled: bool = False
     pool: pooling.Pool | None = None
+    # 1 is the quickest car on the dry rating
+    pace_rank: dict[str, int] = {}
 
 
 def seats_for(
@@ -1209,6 +1218,7 @@ def forecast(
         raise NoForecastError("every scenario carries zero weight")
     blended = race.blend(outcomes, mix, "blended")
     reference = built[next(iter(built))]
+    ordered = sorted(built.get("dry", reference).drivers, key=lambda item: item.pace_millis)
     return Forecast(
         season=context.season,
         round=context.round,
@@ -1223,7 +1233,20 @@ def forecast(
         scenarios=outcomes,
         assumptions=_assumptions(reference, race_day_sd(pane, as_of)),
         grid_sampled=not reference.grid_known,
+        pace_rank={item.driver_code: place for place, item in enumerate(ordered, start=1)},
     )
+
+
+def baseline_slots(
+    codes: list[str], slots: list[int], qualified: dict[str, int], pace_rank: dict[str, int]
+) -> list[int]:
+    """Where the grid baseline reads each car from. A penalty moves a car without slowing it, and
+    a driver already going to the back has no reason to push on saturday, so neither the grid
+    nor the qualifying order says how quick that car is."""
+    return [
+        pace_rank.get(code, slot) if slot - qualified.get(code, slot) >= PENALTY_DROP else slot
+        for code, slot in zip(codes, slots, strict=True)
+    ]
 
 
 def pooled(
@@ -1247,7 +1270,13 @@ def pooled(
             known=pane.entries,
             width=width,
         )
-        grid = fitted.lookups["grid"].predict([slots[code] for code in codes], width)
+        read = baseline_slots(
+            codes,
+            [slots[code] for code in codes],
+            pane.qualified.get((context.season, context.round), {}),
+            predicted.pace_rank,
+        )
+        grid = fitted.lookups["grid"].predict(list[int | None](read), width)
         chosen = with_grid
 
     def apply(outcome: race.Outcome) -> race.Outcome:
@@ -1627,6 +1656,14 @@ def _walk(
         keep = [seen[code] for code in codes]
         sim = renormalised(predicted.outcome.probabilities()[keep], starters, width)
         fitted = baselines.fit(entries, context.race_date, known=pane.entries, width=field.width)
+        if variant.penalty_pace_slot and not early:
+            read = baseline_slots(
+                field.driver_code,
+                field.grid,
+                pane.qualified.get((context.season, context.round), {}),
+                predicted.pace_rank,
+            )
+            field = field.model_copy(update={"grid": read})
         guessed = {
             name: renormalised(values[rows], starters, width)
             for name, values in fitted.predict(field).items()

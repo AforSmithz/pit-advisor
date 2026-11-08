@@ -306,6 +306,82 @@ def test_the_warmup_feeds_the_pool_but_is_never_scored(pane):
     assert {"pool_sim_power", "pool_grid_power"} <= names
 
 
+def test_a_penalised_car_is_read_at_its_pace():
+    read = backtest.baseline_slots(
+        ["AAA", "BBB", "CCC"],
+        [1, 2, 19],
+        {"AAA": 1, "BBB": 2, "CCC": 4},
+        {"AAA": 3, "BBB": 2, "CCC": 1},
+    )
+    assert read == [1, 2, 1]
+
+
+def test_a_small_reshuffle_is_not_a_penalty():
+    read = backtest.baseline_slots(["AAA"], [6], {"AAA": 4}, {"AAA": 1})
+    assert read == [6]
+
+
+def test_a_car_with_no_qualifying_keeps_its_slot():
+    assert backtest.baseline_slots(["AAA"], [19], {}, {"AAA": 1}) == [19]
+
+
+def test_every_car_gets_a_pace_rank(pane, store):
+    context = event_at(store, 2024, 2)
+    raw = backtest.forecast(
+        pane, context, context.race_date, np.random.default_rng(SEED), paths=100
+    )
+    assert sorted(raw.pace_rank.values()) == list(range(1, len(raw.outcome.driver_code) + 1))
+    assert set(raw.pace_rank) == set(raw.outcome.driver_code)
+
+
+def everyone_dropped(pane):
+    return dataclasses.replace(
+        pane,
+        qualified={
+            key: {
+                code: max(slot - 3, 0)
+                for code, slot in zip(item.driver_code, item.grid, strict=True)
+            }
+            for key, item in pane.entries.items()
+        },
+    )
+
+
+def flipped(predicted):
+    # the seeded lake's quickest cars are also its front row, which would hide the re-read
+    last = len(predicted.pace_rank) + 1
+    return predicted.model_copy(
+        update={"pace_rank": {code: last - rank for code, rank in predicted.pace_rank.items()}}
+    )
+
+
+def test_the_live_forecast_reads_a_penalised_car_at_its_pace(pane, store):
+    context = event_at(store, 2024, 2)
+    raw = backtest.forecast(
+        pane, context, context.race_date, np.random.default_rng(SEED), paths=100
+    )
+    sharp = pool.Pool(sim_power=1.0, grid_power=0.5, races=10)
+    flat = pool.Pool(sim_power=1.0, grid_power=0.0, races=10)
+    raw = flipped(raw)
+    plain = backtest.pooled(pane, raw, context, sharp, flat)
+    moved = backtest.pooled(everyone_dropped(pane), raw, context, sharp, flat)
+    assert not np.allclose(plain.outcome.position, moved.outcome.position)
+
+
+def test_the_walk_only_rereads_the_grid_when_the_variant_says_so(pane, monkeypatch):
+    original = backtest.forecast
+    monkeypatch.setattr(backtest, "forecast", lambda *a, **k: flipped(original(*a, **k)))
+    dropped = everyone_dropped(pane)
+    walks = {
+        flag: backtest._walk(
+            dropped, 2024, 2, SEED, 100, 2, None, backtest.Variant(penalty_pace_slot=flag)
+        )
+        for flag in (True, False)
+    }
+    assert not np.allclose(walks[True].stacked("grid"), walks[False].stacked("grid"))
+    assert np.allclose(walks[True].stacked(backtest.RAW), walks[False].stacked(backtest.RAW))
+
+
 def test_a_pooled_forecast_still_hands_out_every_place_once(pane, store):
     context = event_at(store, 2024, 2)
     raw = backtest.forecast(
