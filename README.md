@@ -129,15 +129,21 @@ the last sixty races run, from the 2024 Chinese Grand Prix to the sixteenth roun
 the published forecast's multiclass log loss was 2.546 [2.474, 2.617], against 2.608 for grid
 position alone, 2.726 for championship standings and 2.825 for last race's result, and the gain
 over the grid, resampled at the race level, was +0.062 [+0.018, +0.106]. A second round of
-changes was then chosen on 2024 and 2025 (below), which spends those races, so the clean check
-is the sixteen races of 2026, on which nothing was ever chosen, scored once at the end. On
-those the forecast scores 2.625 [2.474, 2.780] against 2.674 for the grid, 2.772 for standings
-and 2.892 for last race's result. It is separated from standings and last race, and its gain
-over the grid, +0.049 [-0.054, +0.138], is the same size as before but too wide on sixteen races
-to call; on the Brier score the gain over the grid is separated, +0.013 [+0.005, +0.021].
+changes was then chosen on 2024 and 2025 (below), which spends those races, so the cleanest check
+is 2026. Its first sixteen rounds were scored once in October, at 2.625 [2.474, 2.780] against
+2.674 for the grid, a gain of +0.049 [-0.054, +0.138] that was too wide to call. One change has
+shipped since: a car dropped by a grid penalty is now read at its pace rank when the grid term is
+pooled in. It was chosen on the development window and confirmed on the last sixty races
+(+0.008 [+0.002, +0.013]), and those include most of 2026, so the season is no longer untouched.
+Re-run over the nineteen rounds of 2026 so far, the forecast scores 2.578 [2.445, 2.724] against
+2.670 for the grid, 2.751 for standings and 2.865 for last race's result. It is separated from all
+three, but from the grid only just: +0.092 [+0.001, +0.178], and +0.017 [+0.009, +0.025] on the
+Brier score. On the original sixteen rounds the forecast moved from 2.625 to 2.603, and not all of
+that is the penalty change, because the raw simulation, which the change cannot touch, moved
+as well, from 2.624 to 2.617.
 Kalshi priced eleven of those races an hour before the start. On who wins, the forecast's
-binary log loss was 0.064 against the market's 0.079, a gain of +0.015 [-0.003, +0.032]; on
-the podium the market was better, 0.171 against 0.191. Two markets, eleven races: a draw, not a
+binary log loss was 0.064 against the market's 0.079, a gain of +0.015 [-0.001, +0.033]; on
+the podium the market was better, 0.171 against 0.186. Two markets, eleven races: a draw, not a
 result. The same forecast is also scored the way the
 published F1 work scores it, as three events summed out of the place distribution: a win, a
 podium and a points finish, each with a binary log loss, a Brier score and the Brier's split into
