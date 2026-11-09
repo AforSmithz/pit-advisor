@@ -378,8 +378,23 @@ def test_the_walk_only_rereads_the_grid_when_the_variant_says_so(pane, monkeypat
         )
         for flag in (True, False)
     }
-    assert not np.allclose(walks[True].stacked("grid"), walks[False].stacked("grid"))
+    assert not np.allclose(
+        walks[True].stacked(backtest.MODEL), walks[False].stacked(backtest.MODEL)
+    )
     assert np.allclose(walks[True].stacked(backtest.RAW), walks[False].stacked(backtest.RAW))
+
+
+def test_the_scored_grid_baseline_stays_the_plain_starting_order(pane, monkeypatch):
+    original = backtest.forecast
+    monkeypatch.setattr(backtest, "forecast", lambda *a, **k: flipped(original(*a, **k)))
+    dropped = everyone_dropped(pane)
+    walks = {
+        flag: backtest._walk(
+            dropped, 2024, 2, SEED, 100, 2, None, backtest.Variant(penalty_pace_slot=flag)
+        )
+        for flag in (True, False)
+    }
+    assert np.allclose(walks[True].stacked("grid"), walks[False].stacked("grid"))
 
 
 def test_a_pooled_forecast_still_hands_out_every_place_once(pane, store):

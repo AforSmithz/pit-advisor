@@ -1656,6 +1656,12 @@ def _walk(
         keep = [seen[code] for code in codes]
         sim = renormalised(predicted.outcome.probabilities()[keep], starters, width)
         fitted = baselines.fit(entries, context.race_date, known=pane.entries, width=field.width)
+        guessed = {
+            name: renormalised(values[rows], starters, width)
+            for name, values in fitted.predict(field).items()
+        }
+        # the pool's read only, the scored grid baseline stays the plain starting order
+        blend = guessed["grid"]
         if variant.penalty_pace_slot and not early:
             read = baseline_slots(
                 field.driver_code,
@@ -1663,21 +1669,16 @@ def _walk(
                 pane.qualified.get((context.season, context.round), {}),
                 predicted.pace_rank,
             )
-            field = field.model_copy(update={"grid": read})
-        guessed = {
-            name: renormalised(values[rows], starters, width)
-            for name, values in fitted.predict(field).items()
-        }
+            reread = fitted.lookups["grid"].predict(list[int | None](read), field.width)
+            blend = renormalised(reread[rows], starters, width)
         actual = np.array([finished[code] for code in codes]) - 1
-        scored = pooling.Scored(sim=sim, grid=guessed["grid"], actual=actual, starters=starters)
+        scored = pooling.Scored(sim=sim, grid=blend, actual=actual, starters=starters)
         if index < first_scored:
             walk.history.append(scored)
             continue
 
         pool = pooling.fit(walk.history, with_grid=not early)
-        walk.grids[MODEL].append(
-            pooling.combine(sim, None if early else guessed["grid"], starters, pool)
-        )
+        walk.grids[MODEL].append(pooling.combine(sim, None if early else blend, starters, pool))
         walk.grids[RAW].append(sim)
         for name in features:
             walk.grids[name].append(guessed[name])
